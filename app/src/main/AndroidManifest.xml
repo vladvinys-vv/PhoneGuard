@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ============================== -->
+    <!-- CORE PERMISSIONS -->
+    <!-- ============================== -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- ============================== -->
+    <!-- SIM SWAP PERMISSIONS -->
+    <!-- ============================== -->
+    <!-- Needed to detect SIM state changes -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Needed to resolve address at moment of SIM change -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Needed for backup SMS notification -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+
+    <!-- ============================== -->
+    <!-- ANTI-THEFT PERMISSIONS -->
+    <!-- ============================== -->
+    <!-- SMS for commands and SIM change alerts -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- Location tracking -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Camera for failed attempts -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Microphone for audio recording -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- External storage for saving photos/recording -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <!-- Device Admin for protection against uninstall -->
+    <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
+    <!-- System Alert Window for Overlay -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- ============================== -->
+    <!-- CALL BLOCKER PERMISSIONS -->
+    <!-- ============================== -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+
+    <!-- ============================== -->
+    <!-- PRIVACY SCANNER PERMISSIONS -->
+    <!-- ============================== -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND"
+        android:maxSdkVersion="33" />
+
+    <!-- ============================== -->
+    <!-- FIREWALL / VPN PERMISSIONS -->
+    <!-- ============================== -->
+    <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
+    <uses-permission android:name="android.permission.MANAGE_NETWORK_POLICY"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- ============================== -->
+    <!-- BATTERY OPTIMIZATION EXCLUSION -->
+    <!-- ============================== -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <application
+        android:name=".PhoneGuardApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PhoneGuard"
+        android:requestLegacyExternalStorage="true">
+
+        <!-- Main Activity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.PhoneGuard">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Device Admin Receiver -->
+        <receiver
+            android:name=".antitheft.DeviceAdminReceiverImpl"
+            android:exported="true"
+            android:description="@string/device_admin_description"
+            android:label="@string/device_admin_label"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_policies" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- SIM Change Receiver -->
+        <receiver
+            android:name=".antitheft.SimChangeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- SMS Command Receiver -->
+        <receiver
+            android:name=".antitheft.SmsCommandReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Call Blocker Service -->
+        <service
+            android:name=".callblocker.CallScreeningServiceImpl"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE"
+            android:foregroundServiceType="shortService">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <!-- Stealth Camera Service for Anti-Theft -->
+        <service
+            android:name=".antitheft.StealthCameraService"
+            android:foregroundServiceType="camera"
+            android:exported="false" />
+
+        <!-- VPN Firewall Service -->
+        <service
+            android:name=".firewall.PhoneGuardVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
+        <!-- New Package Receiver -->
+        <receiver
+            android:name=".spywarecheck.PackageAddedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
+        <!-- SIM Swap Confirmation -->
+        <activity
+            android:name=".simswap.SimSwapConfirmationActivity"
+            android:exported="true"
+            android:theme="@style/Theme.PhoneGuard"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+            </intent-filter>
+        </activity>
+
+        <!-- SIM Swap Receiver -->
+        <receiver
+            android:name=".simswap.SimSwapReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PhoneGuard</string>
+    
+    <!-- Common -->
+    <string name="loading">Загрузка…</string>
+    <string name="save">Сохранить</string>
+    <string name="cancel">Отмена</string>
+    <string name="confirm">Подтвердить</string>
+    <string name="delete">Удалить</string>
+    <string name="edit">Редактировать</string>
+    <string name="back">Назад</string>
+    <string name="next">Далее</string>
+    <string name="skip">Пропустить</string>
+    <string name="enable">Включить</string>
+    <string name="disable">Отключить</string>
+    <string name="ok">ОК</string>
+    <string name="yes">Да</string>
+    <string name="no">Нет</string>
+    
+    <!-- Dashboard -->
+    <string name="dashboard">Панель управления</string>
+    <string name="security_score">Оценка безопасности</string>
+    <string name="excellent">Отлично</string>
+    <string name="good">Хорошо</string>
+    <string name="fair">Удовлетворительно</string>
+    <string name="poor">Плохо</string>
+    <string name="critical">Критично</string>
+    <string name="anti_theft_score">Антивор</string>
+    <string name="call_blocker_score">Блокировщик звонков/SMS</string>
+    <string name="privacy_score">Конфиденциальность</string>
+    <string name="spyware_score">Обнаружение шпионского ПО</string>
+    
+    <!-- Anti-Theft -->
+    <string name="anti_theft">Антивор</string>
+    <string name="anti_theft_setup">Настройка антивора</string>
+    <string name="pin_code">PIN-код</string>
+    <string name="enter_pin">Введите PIN</string>
+    <string name="confirm_pin">Подтвердите PIN</string>
+    <string name="pin_mismatch">PIN не совпадает</string>
+    <string name="pin_too_short">PIN должен быть не менее 4 символов</string>
+    <string name="pin_set">PIN установлен</string>
+    <string name="pin_not_set">PIN не установлен</string>
+    <string name="set_pin">Установить PIN</string>
+    <string name="backup_number">Резервный номер</string>
+    <string name="enter_backup_number">Введите резервный номер телефона</string>
+    <string name="backup_number_hint">+7 999 123 4567</string>
+    <string name="sim_lock">SIM-блокировка</string>
+    <string name="sim_lock_enabled">Обнаружение смены SIM включено</string>
+    <string name="sim_lock_disabled">Обнаружение смены SIM отключено</string>
+    <string name="device_admin">Администратор устройства</string>
+    <string name="device_admin_title">Администратор устройства</string>
+    <string name="device_admin_description">Защищает PhoneGuard от удаления и позволяет удалённую блокировку</string>
+    <string name="device_admin_label">PhoneGuard Admin</string>
+    <string name="enable_device_admin">Включить администратора устройства</string>
+    <string name="remote_commands">Удалённые команды</string>
+    <string name="remote_alarm">Удалённый сигнал</string>
+    <string name="remote_alarm_description">Запустить громкий сигнал через SMS</string>
+    <string name="command_lock">#LOCK</string>
+    <string name="command_alarm">#ALARM</string>
+    <string name="command_location">#LOCATION</string>
+    <string name="command_wipe">#WIPE</string>
+    <string name="command_lock_desc">Заблокировать устройство</string>
+    <string name="command_alarm_desc">Запустить громкий сигнал</string>
+    <string name="command_location_desc">Получить местоположение устройства</string>
+    <string name="command_wipe_desc">Удалить все данные</string>
+    <string name="failed_attempts_photo">Фото при неудачных попытках</string>
+    <string name="photo_on_failed_attempts_enabled">Делать фото при 3 неудачных попытках</string>
+    <string name="protection_features">Защитные функции</string>
+    <string name="how_it_works">Как это работает</string>
+    <string name="sms_commands_description">Отправьте эти SMS-команды на ваш резервный номер, чтобы управлять устройством удалённо</string>
+    
+    <!-- Call & SMS Blocker -->
+    <string name="call_sms_blocker">Блокировщик звонков &amp; SMS</string>
+    <string name="blacklist">Чёрный список</string>
+    <string name="whitelist">Белый список</string>
+    <string name="blocked_log">Журнал блокировок</string>
+    <string name="add_number">Добавить номер</string>
+    <string name="phone_number">Номер телефона</string>
+    <string name="name">Имя</string>
+    <string name="block_unknown">Блокировать неизвестные номера</string>
+    <string name="block_hidden">Блокировать скрытые номера</string>
+    <string name="block_international">Блокировать международные</string>
+    <string name="spam_database">База спама</string>
+    <string name="import_csv">Импорт CSV</string>
+    <string name="export_csv">Экспорт CSV</string>
+    <string name="blocked_call">Заблокированный звонок</string>
+    <string name="blocked_sms">Заблокированная SMS</string>
+    <string name="call_screening_role">Роль проверки звонков</string>
+    <string name="enable_call_screening">Включить проверку звонков</string>
+    <string name="empty_blacklist">Чёрный список пуст. Добавьте номера для блокировки</string>
+    <string name="empty_whitelist">Белый список пуст. Добавьте номера для разрешения</string>
+    <string name="empty_log">Пока нет заблокированных звонков или SMS</string>
+    <string name="block_rules">Правила блокировки</string>
+    <string name="reason_blacklist">В чёрном списке</string>
+    <string name="reason_unknown">Неизвестный номер</string>
+    <string name="reason_hidden">Скрытый номер</string>
+    <string name="reason_international">Международный номер</string>
+    <string name="delete_number">Удалить номер</string>
+    
+    <!-- Privacy Scanner -->
+    <string name="privacy_scanner">Сканер конфиденциальности</string>
+    <string name="apps_with_permissions">Приложения с разрешениями</string>
+    <string name="camera">Камера</string>
+    <string name="microphone">Микрофон</string>
+    <string name="location">Местоположение</string>
+    <string name="contacts">Контакты</string>
+    <string name="storage">Хранилище</string>
+    <string name="sms">SMS</string>
+    <string name="phone">Телефон</string>
+    <string name="excessive_permissions">Избыточные разрешения</string>
+    <string name="permission_timeline">История использования разрешений</string>
+    <string name="open_app_settings">Открыть настройки приложения</string>
+    <string name="revoke_permission">Отозвать разрешение</string>
+    <string name="package_usage_stats">Статистика использования</string>
+    <string name="grant_package_usage">Предоставить доступ к статистике</string>
+    
+    <!-- Spyware Check -->
+    <string name="spyware_check">Проверка на шпионское ПО</string>
+    <string name="suspicious_apps">Подозрительные приложения</string>
+    <string name="hidden_icon">Скрытая иконка</string>
+    <string name="recently_installed">Недавно установлено</string>
+    <string name="device_admin_apps">Приложения-администраторы</string>
+    <string name="accessibility_services">Сервисы доступности</string>
+    <string name="sideloaded_apps">Приложения не из Google Play</string>
+    <string name="scan_now">Сканировать сейчас</string>
+    <string name="last_scan">Последнее сканирование</string>
+    <string name="risk_level">Уровень риска</string>
+    <string name="low_risk">Низкий</string>
+    <string name="medium_risk">Средний</string>
+    <string name="high_risk">Высокий</string>
+    <string name="critical_risk">Критический</string>
+    
+    <!-- Settings -->
+    <string name="settings">Настройки</string>
+    <string name="language">Язык</string>
+    <string name="english">Английский</string>
+    <string name="german">Немецкий</string>
+    <string name="russian">Русский</string>
+    <string name="export_logs">Экспорт логов</string>
+    <string name="about">О приложении</string>
+    <string name="version">Версия</string>
+    <string name="privacy_policy">Политика конфиденциальности</string>
+    <string name="terms_of_service">Условия использования</string>
+    <string name="restore_purchase">Восстановить покупку</string>
+    <string name="upgrade_to_pro">Обновить до Pro</string>
+    
+    <!-- Premium -->
+    <string name="pro_features">Pro-функции</string>
+    <string name="anti_theft_pro">Антивор (Pro)</string>
+    <string name="sim_detection_pro">Обнаружение смены SIM (Pro)</string>
+    <string name="photo_failed_attempts_pro">Фото при неудачных попытках (Pro)</string>
+    <string name="advanced_spyware_scanner_pro">Расширенный сканер шпионского ПО (Pro)</string>
+    <string name="unlock_pro">Разблокировать Pro</string>
+    <string name="one_time_purchase">Единоразовая покупка</string>
+    <string name="no_subscription">Без подписки</string>
+    
+</resources>

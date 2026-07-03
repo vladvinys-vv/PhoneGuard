@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.phoneguard.app-debug-79:/xml_device_admin_policies.xml.flat",
+        "source": "com.phoneguard.app-main-81:/xml/device_admin_policies.xml"
+    },
+    {
+        "merged": "com.phoneguard.app-debug-79:/xml_backup_rules.xml.flat",
+        "source": "com.phoneguard.app-main-81:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.phoneguard.app-debug-79:/xml_data_extraction_rules.xml.flat",
+        "source": "com.phoneguard.app-main-81:/xml/data_extraction_rules.xml"
+    }
+]

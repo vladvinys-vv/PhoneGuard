@@ -1,0 +1,35 @@
+package com.phoneguard.data.local
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.Query
+import androidx.room.Upsert
+import com.phoneguard.model.FirewallLog
+import com.phoneguard.model.FirewallRule
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface FirewallDao {
+    @Query("SELECT * FROM firewall_rules ORDER BY appName ASC")
+    fun getAllRules(): Flow<List<FirewallRule>>
+
+    @Query("SELECT * FROM firewall_rules WHERE packageName = :packageName LIMIT 1")
+    suspend fun getRuleForPackage(packageName: String): FirewallRule?
+
+    @Upsert
+    suspend fun upsertRule(rule: FirewallRule)
+
+    @Delete
+    suspend fun deleteRule(rule: FirewallRule)
+
+    // Logs
+    @Query("SELECT * FROM firewall_logs ORDER BY timestamp DESC LIMIT 500")
+    fun getAllLogs(): Flow<List<FirewallLog>>
+
+    @Insert
+    suspend fun insertLog(log: FirewallLog)
+
+    @Query("DELETE FROM firewall_logs")
+    suspend fun clearLogs()
+}

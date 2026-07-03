@@ -1,0 +1,111 @@
+package com.phoneguard.ui.screens.antitheft
+
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.phoneguard.antitheft.DeviceAdminReceiverImpl
+import com.phoneguard.data.preferences.PreferencesManager
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class AntiTheftUiState(
+    val hasPin: Boolean = false,
+    val backupNumber: String = "",
+    val isDeviceAdminEnabled: Boolean = false,
+    val isSimLockEnabled: Boolean = false,
+    val isPhotoEnabled: Boolean = false,
+    val isRemoteAlarmEnabled: Boolean = false,
+    val isPro: Boolean = false,
+    val isLoading: Boolean = false
+)
+
+@HiltViewModel
+class AntiTheftViewModel @Inject constructor(
+    private val preferencesManager: PreferencesManager,
+    @ApplicationContext private val context: Context
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(AntiTheftUiState())
+    val uiState: StateFlow<AntiTheftUiState> = _uiState.asStateFlow()
+
+    init {
+        loadState()
+        checkDeviceAdminStatus()
+    }
+
+    private fun loadState() {
+        viewModelScope.launch {
+            combine(
+                preferencesManager.hasPinSet,
+                preferencesManager.backupNumber,
+                preferencesManager.isSimLockEnabled,
+                preferencesManager.isPhotoOnFailedAttemptsEnabled,
+                preferencesManager.isRemoteAlarmEnabled,
+                preferencesManager.isPro
+            ) { hasPin, backupNumber, simLock, photoEnabled, remoteAlarm, isPro ->
+                _uiState.update { state ->
+                    state.copy(
+                        hasPin = hasPin,
+                        backupNumber = backupNumber ?: "",
+                        isSimLockEnabled = simLock,
+                        isPhotoEnabled = photoEnabled,
+                        isRemoteAlarmEnabled = remoteAlarm,
+                        isPro = isPro
+                    )
+                }
+            }.collect()
+        }
+    }
+
+    fun checkDeviceAdminStatus() {
+        val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val componentName = DeviceAdminReceiverImpl.getComponentName(context)
+        val isActive = devicePolicyManager.isAdminActive(componentName)
+        _uiState.update { it.copy(isDeviceAdminEnabled = isActive) }
+    }
+
+    fun setPin(pin: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            preferencesManager.savePinCode(pin)
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun setBackupNumber(number: String) {
+        viewModelScope.launch {
+            preferencesManager.saveBackupNumber(number)
+        }
+    }
+
+    fun toggleSimLock(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setSimLockEnabled(enabled)
+        }
+    }
+
+    fun togglePhotoOnFailedAttempts(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setPhotoOnFailedAttemptsEnabled(enabled)
+        }
+    }
+
+    fun toggleRemoteAlarm(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setRemoteAlarmEnabled(enabled)
+        }
+    }
+
+    fun validatePhoneNumber(number: String): Boolean {
+        return number.isNotBlank() && android.util.Patterns.PHONE.matcher(number).matches()
+    }
+
+    fun validatePin(pin: String): Boolean {
+        return pin.length >= 4 && pin.all { it.isDigit() }
+    }
+}
