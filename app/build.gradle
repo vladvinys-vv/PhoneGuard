@@ -104,6 +104,8 @@ dependencies {
     implementation "androidx.room:room-runtime:$rootProject.ext.room_version"
     implementation "androidx.room:room-ktx:$rootProject.ext.room_version"
     kapt "androidx.room:room-compiler:$rootProject.ext.room_version"
+    implementation "net.zetetic:android-database-sqlcipher:4.5.4"
+    kapt "net.zetetic:android-database-sqlcipher-javadoc:4.5.4"
     // Force newer kotlinx-metadata-jvm for Room kapt compatibility with Kotlin 2.1
     kapt "org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.7.0"
     

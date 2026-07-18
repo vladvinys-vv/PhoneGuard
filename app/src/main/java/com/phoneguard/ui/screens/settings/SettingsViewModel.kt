@@ -20,4 +20,10 @@ class SettingsViewModel @Inject constructor(
             preferencesManager.setDarkTheme(enabled)
         }
     }
+
+    fun setLanguage(lang: String) {
+        viewModelScope.launch {
+            preferencesManager.setLanguage(lang)
+        }
+    }
 }

@@ -165,6 +165,14 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[KEY_DARK_THEME] = enabled }
     }
 
+    // Language
+    private val KEY_LANGUAGE = stringPreferencesKey("app_language")
+    val language: Flow<String> = context.dataStore.data.map { it[KEY_LANGUAGE] ?: "ru" }
+
+    suspend fun setLanguage(lang: String) {
+        context.dataStore.edit { it[KEY_LANGUAGE] = lang }
+    }
+
     // Onboarding
     val isFirstLaunch: Flow<Boolean> = context.dataStore.data.map { it[KEY_FIRST_LAUNCH] ?: true }
 

@@ -4,6 +4,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.Manifest
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,6 +48,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.antitheft.DeviceAdminReceiverImpl
@@ -60,6 +64,16 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
     val context = LocalContext.current
     var pinInput by remember { mutableStateOf("") }
     var backupNumberInput by remember { mutableStateOf(uiState.backupNumber) }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            ShoulderSurferService.start(context)
+        } else {
+            snackbarHostState.showSnackbar("Требуется разрешение на камеру для защиты от подглядывания")
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.uiState.collectLatest { state ->
@@ -214,7 +228,15 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
                 onCheckedChange = { enabled ->
                     viewModel.toggleShoulderSurfer(enabled)
                     if (enabled) {
-                        ShoulderSurferService.start(context)
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.CAMERA
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) {
+                            ShoulderSurferService.start(context)
+                        } else {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
                     } else {
                         ShoulderSurferService.stop(context)
                     }

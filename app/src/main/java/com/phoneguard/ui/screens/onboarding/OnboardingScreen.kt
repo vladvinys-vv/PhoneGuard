@@ -16,10 +16,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 
 @Composable
-fun OnboardingScreen(onGetStarted: () -> Unit) {
+fun OnboardingScreen(
+    viewModel: OnboardingViewModel = hiltViewModel(),
+    onCompleted: () -> Unit = {}
+) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -39,7 +43,10 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(32.dp))
             Button(
-                onClick = onGetStarted,
+                onClick = {
+                    viewModel.completeOnboarding()
+                    onCompleted()
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.onboarding_get_started))

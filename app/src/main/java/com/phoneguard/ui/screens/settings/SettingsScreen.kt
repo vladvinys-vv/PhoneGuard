@@ -3,6 +3,7 @@ package com.phoneguard.ui.screens.settings
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,13 +46,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.data.preferences.PreferencesManager
-import com.phoneguard.ui.screens.dashboard.DashboardViewModel
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: DashboardViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -78,7 +77,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.Default.Language, contentDescription = null)
                         Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
-                    LanguageSelector()
+                    LanguageSelector(settingsViewModel = settingsViewModel)
                 }
             }
 
@@ -151,17 +150,7 @@ fun SettingsScreen(
             // Export Logs
             Button(
                 onClick = {
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                        val file = com.phoneguard.util.LogExporter.exportLogs(
-                            context = context,
-                            blockedLogs = emptyList(),
-                            firewallLogs = emptyList(),
-                            scanHistory = emptyList()
-                        )
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            // TODO: show toast or snackbar with result
-                        }
-                    }
+                    Toast.makeText(context, "Экспорт логов: функция в разработке", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -199,7 +188,7 @@ private fun SettingsLinkCard(
 }
 
 @Composable
-private fun LanguageSelector() {
+private fun LanguageSelector(settingsViewModel: SettingsViewModel) {
     val context = LocalContext.current
     val languages = listOf("Русский" to "ru", "English" to "en")
     var selectedLanguage by remember { mutableStateOf("Русский") }
@@ -227,6 +216,7 @@ private fun LanguageSelector() {
                     onClick = {
                         selectedLanguage = name
                         expanded = false
+                        settingsViewModel.setLanguage(code)
                         setLocale(code, context)
                     }
                 )

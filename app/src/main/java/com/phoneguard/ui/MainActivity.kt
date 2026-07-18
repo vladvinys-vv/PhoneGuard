@@ -14,7 +14,6 @@ import com.phoneguard.ui.navigation.PhoneGuardNavHost
 import com.phoneguard.ui.screens.onboarding.OnboardingScreen
 import com.phoneguard.ui.theme.PhoneGuardTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -30,8 +29,8 @@ class MainActivity : ComponentActivity() {
             PhoneGuardTheme(darkTheme = isDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     if (isFirstLaunch) {
-                        OnboardingScreen(onGetStarted = {
-                            runBlocking { preferencesManager.setFirstLaunchDone() }
+                        OnboardingScreen(onCompleted = {
+                            // State will update automatically via isFirstLaunch collectAsState
                         })
                     } else {
                         PhoneGuardNavHost()

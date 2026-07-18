@@ -165,6 +165,9 @@ class ShoulderSurferService : LifecycleService() {
                 )
 
                 Log.d(TAG, "Camera bound for shoulder surfer detection, interval=${adaptiveIntervalMs}ms")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "Camera permission denied, stopping service", e)
+                stopSelf()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start camera", e)
             }
