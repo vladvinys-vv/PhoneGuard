@@ -35,6 +35,12 @@ class PreferencesManager(private val context: Context) {
 
         // Shoulder Surfer
         private val KEY_SHOULDER_SURFER_ENABLED = booleanPreferencesKey("shoulder_surfer_enabled")
+
+        // Theme
+        private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
+
+        // Onboarding
+        private val KEY_FIRST_LAUNCH = booleanPreferencesKey("first_launch")
     }
 
     // PIN Hash
@@ -150,5 +156,19 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setShoulderSurferEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SHOULDER_SURFER_ENABLED] = enabled }
+    }
+
+    // Theme
+    val isDarkTheme: Flow<Boolean> = context.dataStore.data.map { it[KEY_DARK_THEME] ?: false }
+
+    suspend fun setDarkTheme(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_DARK_THEME] = enabled }
+    }
+
+    // Onboarding
+    val isFirstLaunch: Flow<Boolean> = context.dataStore.data.map { it[KEY_FIRST_LAUNCH] ?: true }
+
+    suspend fun setFirstLaunchDone() {
+        context.dataStore.edit { it[KEY_FIRST_LAUNCH] = false }
     }
 }

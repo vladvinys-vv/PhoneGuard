@@ -124,7 +124,7 @@ fun PhoneGuardNavHost(
                     SpywareCheckScreen(viewModel = hiltViewModel())
                 }
                 composable(Screen.Settings.route) {
-                    SettingsScreen(viewModel = hiltViewModel())
+                    SettingsScreen(settingsViewModel = hiltViewModel())
                 }
                 composable(Screen.Firewall.route) {
                     FirewallScreen()

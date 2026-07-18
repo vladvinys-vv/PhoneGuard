@@ -1,7 +1,7 @@
 package com.phoneguard.ui.screens.settings
 
+import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Policy
+import androidx.compose.material.icons.filled.Brightness3
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,6 +27,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
@@ -42,13 +44,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
+import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: DashboardViewModel = hiltViewModel()
+    viewModel: DashboardViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -75,6 +79,39 @@ fun SettingsScreen(
                         Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     LanguageSelector()
+                }
+            }
+
+            // Dark Theme Toggle
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Brightness3, contentDescription = null)
+                        Column {
+                            Text(text = stringResource(R.string.dark_theme), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                            Text(text = stringResource(R.string.dark_theme_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    val isDarkTheme by settingsViewModel.isDarkTheme.collectAsState()
+                    Switch(
+                        checked = isDarkTheme,
+                        onCheckedChange = { checked ->
+                            settingsViewModel.setDarkTheme(checked)
+                            (context as? android.app.Activity)?.recreate()
+                        }
+                    )
                 }
             }
 
@@ -113,7 +150,19 @@ fun SettingsScreen(
 
             // Export Logs
             Button(
-                onClick = { /* TODO: implement export */ },
+                onClick = {
+                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val file = com.phoneguard.util.LogExporter.exportLogs(
+                            context = context,
+                            blockedLogs = emptyList(),
+                            firewallLogs = emptyList(),
+                            scanHistory = emptyList()
+                        )
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            // TODO: show toast or snackbar with result
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.export_logs))

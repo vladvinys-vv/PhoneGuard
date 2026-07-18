@@ -71,6 +71,8 @@
     <string name="shoulder_surfer_notification_title">Обнаружен подглядывающий!</string>
     <string name="shoulder_surfer_notification_text">Кто-то смотрит на ваш экран. Нажмите, чтобы закрыть экран.</string>
     <string name="protection_features">Защитные функции</string>
+    <string name="dark_theme">Тёмная тема</string>
+    <string name="dark_theme_description">Включить тёмную тему для приложения</string>
     <string name="how_it_works">Как это работает</string>
     <string name="sms_commands_description">Отправьте эти SMS-команды на ваш резервный номер, чтобы управлять устройством удалённо</string>
     
@@ -228,5 +230,10 @@
     <string name="sim_swap_timer">Автоблокировка через</string>
     <string name="sim_swap_sms_sent">Уведомление отправлено на резервный номер</string>
     <string name="sim_swap_sms_failed">Не удалось подготовить SMS</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Добро пожаловать в PhoneGuard</string>
+    <string name="onboarding_description">Ваш личный ассистент безопасности. Активируйте защиту, чтобы начать.</string>
+    <string name="onboarding_get_started">Начать</string>
 
 </resources>
