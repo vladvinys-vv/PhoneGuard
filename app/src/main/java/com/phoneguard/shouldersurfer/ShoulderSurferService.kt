@@ -57,6 +57,8 @@ class ShoulderSurferService : LifecycleService() {
         private const val TAG = "ShoulderSurfer"
         private const val CHANNEL_ID = "shoulder_surfer_channel"
         private const val NOTIFICATION_ID = 1002
+        private const val ALERT_CHANNEL_ID = "shoulder_surfer_alert_channel"
+        private const val ALERT_NOTIFICATION_ID = 1003
         const val ACTION_START = "com.phoneguard.shouldersurfer.START"
         const val ACTION_STOP = "com.phoneguard.shouldersurfer.STOP"
 
@@ -112,10 +114,20 @@ class ShoulderSurferService : LifecycleService() {
                 "Защита от подглядывания",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Мониторинг surroundings для обнаружения подглядывания"
+                description = "Мониторинг окружения для обнаружения подглядывания"
+            }
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "Оповещения о подглядывании",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Уведомления при обнаружении посторонних за экраном"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 250, 250)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
+            manager.createNotificationChannel(alertChannel)
         }
     }
 
@@ -239,7 +251,29 @@ class ShoulderSurferService : LifecycleService() {
 
     private fun onSurferDetected(face: com.google.mlkit.vision.face.Face) {
         Log.w(TAG, "Potential shoulder surfer detected!")
-        // TODO: Trigger UI warning, blur screen, capture photo, send notification
-        // For now, just log it
+        notifySurferDetected()
+    }
+
+    private fun notifySurferDetected() {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setContentTitle(getString(R.string.shoulder_surfer_notification_title))
+            .setContentText(getString(R.string.shoulder_surfer_notification_text))
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(ALERT_NOTIFICATION_ID, notification)
     }
 }
