@@ -37,6 +37,21 @@
 # Biometric
 -keep class androidx.biometric.** { *; }
 
+# Gson (FullScanOrchestrator)
+-keep class com.google.gson.** { *; }
+
+# JSON (PhoneGuardVpnService)
+-keep class org.json.** { *; }
+
+# Crypto / PBKDF2 (SecurityUtils)
+-keep class javax.crypto.** { *; }
+-keep class javax.crypto.spec.** { *; }
+
+# PhoneGuard util & UI
+-keep class com.phoneguard.util.** { *; }
+-keep class com.phoneguard.ui.screens.antitheft.** { *; }
+-keep class com.phoneguard.vault.** { *; }
+
 # Keep model classes
 -keep class com.phoneguard.model.** { *; }
 -keep class com.phoneguard.data.local.** { *; }

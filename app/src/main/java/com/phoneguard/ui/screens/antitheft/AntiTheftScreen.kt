@@ -1,330 +1,245 @@
 package com.phoneguard.ui.screens.antitheft
 
-import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.antitheft.DeviceAdminReceiverImpl
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AntiTheftScreen(
-    viewModel: AntiTheftViewModel = hiltViewModel()
-) {
+fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    var pinInput by remember { mutableStateOf("") }
+    var backupNumberInput by remember { mutableStateOf(uiState.backupNumber) }
 
-    val deviceAdminLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        viewModel.checkDeviceAdminStatus()
+    LaunchedEffect(Unit) {
+        viewModel.uiState.collectLatest { state ->
+            backupNumberInput = state.backupNumber
+        }
     }
 
-    var showPinDialog by remember { mutableStateOf(false) }
-
-    Scaffold(topBar = {
-        TopAppBar(title = { Text(stringResource(R.string.anti_theft_setup)) })
-    }) { paddingValues ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.anti_theft)) }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
         Column(
             modifier = Modifier
-                .padding(paddingValues)
+                .padding(padding)
+                .fillMaxSize()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Device Admin Card
+            // PIN Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(imageVector = Icons.Default.Lock, contentDescription = null)
+                        Text(text = stringResource(R.string.pin_code), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    if (!uiState.hasPin) {
+                        OutlinedTextField(
+                            value = pinInput,
+                            onValueChange = { pinInput = it.take(6) },
+                            label = { Text(stringResource(R.string.set_pin)) },
+                            visualTransformation = PasswordVisualTransformation(),
+                            isError = pinInput.isNotEmpty() && !viewModel.validatePin(pinInput),
+                            supportingText = {
+                                if (pinInput.isNotEmpty() && !viewModel.validatePin(pinInput)) {
+                                    Text(stringResource(R.string.pin_too_short))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Button(
+                            onClick = {
+                                if (viewModel.validatePin(pinInput)) {
+                                    viewModel.setPin(pinInput)
+                                    pinInput = ""
+                                }
+                            },
+                            enabled = viewModel.validatePin(pinInput),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.save))
+                        }
+                    } else {
+                        Text(text = stringResource(R.string.pin_set), color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+
+            // Backup Number Section
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(imageVector = Icons.Default.Phone, contentDescription = null)
+                        Text(text = stringResource(R.string.backup_number), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedTextField(
+                        value = backupNumberInput,
+                        onValueChange = { backupNumberInput = it },
+                        label = { Text(stringResource(R.string.backup_number_hint)) },
+                        isError = backupNumberInput.isNotEmpty() && !viewModel.validatePhoneNumber(backupNumberInput),
+                        supportingText = {
+                            if (backupNumberInput.isNotEmpty() && !viewModel.validatePhoneNumber(backupNumberInput)) {
+                                Text(stringResource(R.string.error_invalid_number))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(
+                        onClick = { viewModel.setBackupNumber(backupNumberInput) },
+                        enabled = backupNumberInput.isBlank() || viewModel.validatePhoneNumber(backupNumberInput),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
+                }
+            }
+
+            // Device Admin
             FeatureToggleCard(
                 title = stringResource(R.string.device_admin),
                 description = stringResource(R.string.device_admin_description),
-                checked = uiState.isDeviceAdminEnabled,
                 icon = Icons.Default.Security,
-                onCheckedChange = {
-                    if (it) {
-                        val componentName = DeviceAdminReceiverImpl.getComponentName(context)
+                checked = uiState.isDeviceAdminEnabled,
+                onCheckedChange = { /* handled by button */ },
+                buttonText = if (uiState.isDeviceAdminEnabled) stringResource(R.string.disable) else stringResource(R.string.enable_device_admin),
+                onButtonClick = {
+                    val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                    val componentName = DeviceAdminReceiverImpl.getComponentName(context)
+                    if (uiState.isDeviceAdminEnabled) {
+                        devicePolicyManager.removeActiveAdmin(componentName)
+                        viewModel.checkDeviceAdminStatus()
+                    } else {
                         val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
                             putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
                             putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, context.getString(R.string.device_admin_description))
                         }
-                        deviceAdminLauncher.launch(intent)
+                        context.startActivity(intent)
                     }
                 }
             )
 
-            // PIN Card
-            PinSetupCard(
-                hasPin = uiState.hasPin,
-                onSetPin = { showPinDialog = true }
+            // SIM Lock
+            FeatureToggleCard(
+                title = stringResource(R.string.sim_lock),
+                description = stringResource(R.string.sim_lock_enabled),
+                icon = Icons.Default.Phone,
+                checked = uiState.isSimLockEnabled,
+                onCheckedChange = { viewModel.toggleSimLock(it) }
             )
 
-            // Backup Number Card
-            BackupNumberCard(
-                backupNumber = uiState.backupNumber,
-                onSave = { viewModel.setBackupNumber(it) },
-                isValid = { viewModel.validatePhoneNumber(it) }
+            // Photo on failed attempts
+            FeatureToggleCard(
+                title = stringResource(R.string.failed_attempts_photo),
+                description = stringResource(R.string.photo_on_failed_attempts_enabled),
+                icon = Icons.Default.PhotoCamera,
+                checked = uiState.isPhotoEnabled,
+                onCheckedChange = { viewModel.togglePhotoOnFailedAttempts(it) }
             )
 
-            Divider()
-
-            // Protection Toggles
-            ProtectionTogglesSection(
-                uiState = uiState,
-                viewModel = viewModel
+            // Remote Alarm
+            FeatureToggleCard(
+                title = stringResource(R.string.remote_alarm),
+                description = stringResource(R.string.remote_alarm_description),
+                icon = Icons.Default.Vibration,
+                checked = uiState.isRemoteAlarmEnabled,
+                onCheckedChange = { viewModel.toggleRemoteAlarm(it) }
             )
-
-            Divider()
-
-            // How it Works
-            HowItWorksSection()
-
-            if (showPinDialog) {
-                PinSetupDialog(
-                    onDismiss = { showPinDialog = false },
-                    onConfirm = { pin ->
-                        viewModel.setPin(pin)
-                        showPinDialog = false
-                    },
-                    validatePin = { viewModel.validatePin(it) }
-                )
-            }
         }
     }
 }
 
 @Composable
-fun FeatureToggleCard(
+private fun FeatureToggleCard(
     title: String,
     description: String,
-    checked: Boolean,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onCheckedChange: (Boolean) -> Unit
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    buttonText: String? = null,
+    onButtonClick: (() -> Unit)? = null
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Icon(imageVector = icon, contentDescription = title)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-                Text(text = description, style = MaterialTheme.typography.bodyMedium)
-            }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
-        }
-    }
-}
-
-@Composable
-fun PinSetupCard(
-    hasPin: Boolean,
-    onSetPin: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onSetPin
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Icon(Icons.Default.Lock, contentDescription = null)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.pin_code),
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = if (hasPin) stringResource(R.string.pin_set) else stringResource(R.string.pin_not_set),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null)
-        }
-    }
-}
-
-@Composable
-fun BackupNumberCard(
-    backupNumber: String,
-    onSave: (String) -> Unit,
-    isValid: (String) -> Boolean
-) {
-    var input by remember { mutableStateOf(backupNumber) }
-
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Icon(Icons.Default.Phone, contentDescription = null)
-                Text(
-                    text = stringResource(R.string.backup_number),
-                    style = MaterialTheme.typography.titleMedium
-                )
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(imageVector = icon, contentDescription = null)
+                Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = input,
-                onValueChange = { 
-                    input = it 
-                },
-                label = { Text(stringResource(R.string.enter_backup_number)) },
-                placeholder = { Text(stringResource(R.string.backup_number_hint)) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+            Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                isError = input.isNotEmpty() && !isValid(input)
-            )
-            if (input.isNotEmpty() && isValid(input)) {
-                Button(
-                    onClick = { onSave(input) },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text(stringResource(R.string.save))
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (buttonText != null && onButtonClick != null) {
+                    Button(onClick = onButtonClick) {
+                        Text(buttonText)
+                    }
+                } else {
+                    Switch(
+                        checked = checked,
+                        onCheckedChange = onCheckedChange
+                    )
                 }
             }
         }
     }
-}
-
-@Composable
-fun ProtectionTogglesSection(
-    uiState: AntiTheftUiState,
-    viewModel: AntiTheftViewModel
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.protection_features),
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        FeatureToggleCard(
-            title = stringResource(R.string.sim_lock),
-            description = stringResource(R.string.sim_lock_enabled),
-            checked = uiState.isSimLockEnabled,
-            icon = Icons.Default.SimCard,
-            onCheckedChange = { viewModel.toggleSimLock(it) }
-        )
-
-        FeatureToggleCard(
-            title = stringResource(R.string.failed_attempts_photo),
-            description = stringResource(R.string.photo_on_failed_attempts_enabled),
-            checked = uiState.isPhotoEnabled,
-            icon = Icons.Default.PhotoCamera,
-            onCheckedChange = { viewModel.togglePhotoOnFailedAttempts(it) }
-        )
-
-        FeatureToggleCard(
-            title = stringResource(R.string.remote_alarm),
-            description = stringResource(R.string.remote_alarm_description),
-            checked = uiState.isRemoteAlarmEnabled,
-            icon = Icons.Default.NotificationsActive,
-            onCheckedChange = { viewModel.toggleRemoteAlarm(it) }
-        )
-    }
-}
-
-@Composable
-fun HowItWorksSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.how_it_works),
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = stringResource(R.string.sms_commands_description),
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Card {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CommandItem(command = stringResource(R.string.command_lock), desc = stringResource(R.string.command_lock_desc))
-                CommandItem(command = stringResource(R.string.command_alarm), desc = stringResource(R.string.command_alarm_desc))
-                CommandItem(command = stringResource(R.string.command_location), desc = stringResource(R.string.command_location_desc))
-                CommandItem(command = stringResource(R.string.command_wipe), desc = stringResource(R.string.command_wipe_desc))
-            }
-        }
-    }
-}
-
-@Composable
-fun CommandItem(command: String, desc: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = command, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-        Text(text = desc, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-@Composable
-fun PinSetupDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-    validatePin: (String) -> Boolean
-) {
-    var pin by remember { mutableStateOf("") }
-    var confirmPin by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.set_pin)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { pin = it },
-                    label = { Text(stringResource(R.string.enter_pin)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    isError = pin.isNotEmpty() && !validatePin(pin)
-                )
-                OutlinedTextField(
-                    value = confirmPin,
-                    onValueChange = { confirmPin = it },
-                    label = { Text(stringResource(R.string.confirm_pin)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    isError = confirmPin.isNotEmpty() && confirmPin != pin
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(pin) },
-                enabled = validatePin(pin) && pin == confirmPin
-            ) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
-    )
 }

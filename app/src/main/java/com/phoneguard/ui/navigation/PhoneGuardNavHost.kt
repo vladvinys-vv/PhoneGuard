@@ -15,7 +15,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.phoneguard.R
-import com.phoneguard.ui.screens.*
 import com.phoneguard.ui.screens.antitheft.AntiTheftScreen
 import com.phoneguard.ui.screens.callblocker.CallBlockerScreen
 import com.phoneguard.ui.screens.dashboard.DashboardScreen

@@ -42,6 +42,10 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- Android 13+ media permissions -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <!-- Device Admin for protection against uninstall -->
     <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
     <!-- System Alert Window for Overlay -->
@@ -82,8 +86,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.PhoneGuard"
-        android:requestLegacyExternalStorage="true">
+        android:theme="@style/Theme.PhoneGuard">
 
         <!-- Main Activity -->
         <activity
@@ -111,16 +114,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- SIM Change Receiver -->
-        <receiver
-            android:name=".antitheft.SimChangeReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
         <!-- SMS Command Receiver -->
         <receiver
             android:name=".antitheft.SmsCommandReceiver"
@@ -135,8 +128,7 @@
         <service
             android:name=".callblocker.CallScreeningServiceImpl"
             android:exported="true"
-            android:permission="android.permission.BIND_SCREENING_SERVICE"
-            android:foregroundServiceType="shortService">
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
             <intent-filter>
                 <action android:name="android.telecom.CallScreeningService" />
             </intent-filter>
