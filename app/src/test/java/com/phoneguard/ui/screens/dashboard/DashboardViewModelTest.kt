@@ -3,7 +3,7 @@ package com.phoneguard.ui.screens.dashboard
 import app.cash.turbine.test
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.fullscan.FullScanOrchestrator
-import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
