@@ -111,6 +111,9 @@ dependencies {
 
     // Google Play Services Location (for Fused Location)
     implementation "com.google.android.gms:play-services-location:21.3.0"
+
+    // ML Kit Face Detection (for shoulder surfer detection)
+    implementation "com.google.android.gms:play-services-mlkit-face-detection:17.1.0"
     
     // Testing
     testImplementation "junit:junit:$rootProject.ext.junit_version"

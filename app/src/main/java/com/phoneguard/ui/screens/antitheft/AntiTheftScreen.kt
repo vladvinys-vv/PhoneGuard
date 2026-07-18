@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -202,6 +203,22 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
                 icon = Icons.Default.Vibration,
                 checked = uiState.isRemoteAlarmEnabled,
                 onCheckedChange = { viewModel.toggleRemoteAlarm(it) }
+            )
+
+            // Shoulder Surfer Detection
+            FeatureToggleCard(
+                title = stringResource(R.string.shoulder_surfer),
+                description = stringResource(R.string.shoulder_surfer_description),
+                icon = Icons.Default.Visibility,
+                checked = uiState.isShoulderSurferEnabled,
+                onCheckedChange = { enabled ->
+                    viewModel.toggleShoulderSurfer(enabled)
+                    if (enabled) {
+                        ShoulderSurferService.start(context)
+                    } else {
+                        ShoulderSurferService.stop(context)
+                    }
+                }
             )
         }
     }

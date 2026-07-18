@@ -37,6 +37,10 @@
 # Biometric
 -keep class androidx.biometric.** { *; }
 
+# ML Kit Face Detection
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+
 # Gson (FullScanOrchestrator)
 -keep class com.google.gson.** { *; }
 
@@ -51,6 +55,7 @@
 -keep class com.phoneguard.util.** { *; }
 -keep class com.phoneguard.ui.screens.antitheft.** { *; }
 -keep class com.phoneguard.vault.** { *; }
+-keep class com.phoneguard.shouldersurfer.** { *; }
 
 # Keep model classes
 -keep class com.phoneguard.model.** { *; }

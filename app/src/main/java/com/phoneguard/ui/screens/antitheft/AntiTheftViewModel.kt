@@ -20,6 +20,7 @@ data class AntiTheftUiState(
     val isSimLockEnabled: Boolean = false,
     val isPhotoEnabled: Boolean = false,
     val isRemoteAlarmEnabled: Boolean = false,
+    val isShoulderSurferEnabled: Boolean = false,
     val isPro: Boolean = false,
     val isLoading: Boolean = false
 )
@@ -46,8 +47,9 @@ class AntiTheftViewModel @Inject constructor(
                 preferencesManager.isSimLockEnabled,
                 preferencesManager.isPhotoOnFailedAttemptsEnabled,
                 preferencesManager.isRemoteAlarmEnabled,
+                preferencesManager.isShoulderSurferEnabled,
                 preferencesManager.isPro
-            ) { hasPin, backupNumber, simLock, photoEnabled, remoteAlarm, isPro ->
+            ) { hasPin, backupNumber, simLock, photoEnabled, remoteAlarm, shoulderSurfer, isPro ->
                 _uiState.update { state ->
                     state.copy(
                         hasPin = hasPin,
@@ -55,6 +57,7 @@ class AntiTheftViewModel @Inject constructor(
                         isSimLockEnabled = simLock,
                         isPhotoEnabled = photoEnabled,
                         isRemoteAlarmEnabled = remoteAlarm,
+                        isShoulderSurferEnabled = shoulderSurfer,
                         isPro = isPro
                     )
                 }
@@ -98,6 +101,12 @@ class AntiTheftViewModel @Inject constructor(
     fun toggleRemoteAlarm(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setRemoteAlarmEnabled(enabled)
+        }
+    }
+
+    fun toggleShoulderSurfer(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setShoulderSurferEnabled(enabled)
         }
     }
 

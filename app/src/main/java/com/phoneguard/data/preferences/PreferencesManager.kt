@@ -32,6 +32,9 @@ class PreferencesManager(private val context: Context) {
         private val KEY_SIM_SWAP_CONFIRMED = booleanPreferencesKey("sim_swap_confirmed")
         private val KEY_SIM_SWAP_UNCONFIRMED = booleanPreferencesKey("sim_swap_unconfirmed")
         private val KEY_SENSITIVE_APPS_GUARD_ENABLED = booleanPreferencesKey("sensitive_apps_guard_enabled")
+
+        // Shoulder Surfer
+        private val KEY_SHOULDER_SURFER_ENABLED = booleanPreferencesKey("shoulder_surfer_enabled")
     }
 
     // PIN Hash
@@ -140,5 +143,12 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setSensitiveAppsGuardEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SENSITIVE_APPS_GUARD_ENABLED] = enabled }
+    }
+
+    // Shoulder Surfer
+    val isShoulderSurferEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_SHOULDER_SURFER_ENABLED] ?: false }
+
+    suspend fun setShoulderSurferEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SHOULDER_SURFER_ENABLED] = enabled }
     }
 }

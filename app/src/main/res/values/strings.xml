@@ -66,6 +66,8 @@
     <string name="command_wipe_desc">Удалить все данные</string>
     <string name="failed_attempts_photo">Фото при неудачных попытках</string>
     <string name="photo_on_failed_attempts_enabled">Делать фото при 3 неудачных попытках</string>
+    <string name="shoulder_surfer">Защита от подглядывания</string>
+    <string name="shoulder_surfer_description">Камера анализирует окружение и обнаруживает посторонних за экраном</string>
     <string name="protection_features">Защитные функции</string>
     <string name="how_it_works">Как это работает</string>
     <string name="sms_commands_description">Отправьте эти SMS-команды на ваш резервный номер, чтобы управлять устройством удалённо</string>
