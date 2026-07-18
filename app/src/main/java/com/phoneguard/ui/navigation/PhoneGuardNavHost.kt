@@ -21,6 +21,7 @@ import com.phoneguard.ui.screens.dashboard.DashboardScreen
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel
 import com.phoneguard.ui.screens.firewall.FirewallScreen
 import com.phoneguard.ui.screens.privacyscanner.PrivacyScannerScreen
+import com.phoneguard.ui.screens.settings.SettingsScreen
 import com.phoneguard.ui.screens.spywarecheck.SpywareCheckScreen
 import com.phoneguard.ui.screens.vault.VaultScreen
 import com.phoneguard.ui.screens.simswap.SimSwapConfirmationScreen
@@ -123,7 +124,7 @@ fun PhoneGuardNavHost(
                     SpywareCheckScreen(viewModel = hiltViewModel())
                 }
                 composable(Screen.Settings.route) {
-                    SettingsScreen()
+                    SettingsScreen(viewModel = hiltViewModel())
                 }
                 composable(Screen.Firewall.route) {
                     FirewallScreen()
