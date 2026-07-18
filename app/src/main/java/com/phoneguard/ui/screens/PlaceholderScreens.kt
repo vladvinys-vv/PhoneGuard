@@ -10,11 +10,6 @@ import androidx.compose.ui.unit.dp
 import com.phoneguard.R
 
 @Composable
-fun CallBlockerScreen(viewModel: Any? = null) {
-    PlaceholderScreen(title = stringResource(R.string.call_sms_blocker))
-}
-
-@Composable
 fun SettingsScreen() {
     PlaceholderScreen(title = stringResource(R.string.settings))
 }

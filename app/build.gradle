@@ -127,6 +127,7 @@ dependencies {
     // Mocking
     testImplementation "io.mockk:mockk:$rootProject.ext.mockk_version"
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$rootProject.ext.coroutines_version"
+    testImplementation "app.cash.turbine:turbine:1.2.0"
 }
 
 kapt {

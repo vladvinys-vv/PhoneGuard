@@ -100,7 +100,7 @@
 6.3. Добавить instrumented тесты для DAO (Room in-memory).
 
 ### Этап 7: UI / UX
-7.1. Реализовать заглушки: AntiTheft (✅), CallBlocker, PrivacyScanner (✅), SpywareCheck (✅), Settings, Firewall, Vault, FullScan (✅).
+7.1. Реализовать заглушки: AntiTheft (✅), CallBlocker (✅ существующая реализация), PrivacyScanner (✅), SpywareCheck (✅), Settings, Firewall, Vault, FullScan (✅).
 7.2. Сделать баллы Dashboard динамическими (подсчитывать из реальных настроек и данных).
 7.3. Добавить навигацию по `SimSwapStatusCard` на экран истории.
 7.4. Исправить `FullScanScreen` — отображать список истории, а не timestamp объекта.
@@ -112,3 +112,4 @@
 8.4. Добавить переключатель в `AntiTheftScreen` с запуском/остановкой сервиса.
 8.5. Обновить `AndroidManifest`: permission `FOREGROUND_SERVICE_CAMERA`, сервис с `foregroundServiceType="camera"`.
 8.6. Обновить ProGuard для ML Kit и нового сервиса.
+8.7. Добавить уведомление с вибрацией при обнаружении подглядывающего.
