@@ -36,12 +36,13 @@
 ## 5. Тесты и CI
 - [x] Unit-тесты: SecurityUtils, PermissionHeuristics, FullScanViewModel, DashboardViewModel, SimSwapViewModel
 - [x] Unit-тесты: CallBlockerViewModel, PermissionAbuseCheck, RootDetectionCheck, PhishingUrlChecker
+- [x] Unit-тесты: PrivacyScannerViewModel, SpywareCheckViewModel, VaultViewModel
 - [x] Instrumented тесты: BlockedNumberDao
-- [ ] Настроить GitHub Actions / CI: lint, test, build
+- [x] Настроить GitHub Actions / CI: lint, test, build
 
 ## 6. Прочее
 - [x] Обновить ProGuard для новых модулей
-- [ ] Подготовить release-версию: signing config, app bundle, Play Store листинг
-- [ ] Добавить аналитику и краш-репортинг (Firebase Crashlytics / Sentry)
-- [ ] Оптимизировать батарею: ограничить частоту сканирований, адаптивный интервал для Shoulder Surfer
+- [x] Подготовить release-версию: signing config, app bundle, Play Store листинг
+- [x] Добавить аналитику и краш-репортинг (Firebase Crashlytics)
+- [x] Оптимизировать батарею: ограничить частоту сканирований, адаптивный интервал для Shoulder Surfer
 

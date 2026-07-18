@@ -36,4 +36,19 @@ class SecurityUtilsTest {
         assertFalse(SecurityUtils.verifyPin("1234", "invalid"))
         assertFalse(SecurityUtils.verifyPin("1234", "a:b:c"))
     }
+
+    @Test
+    fun `hashPin handles empty string`() {
+        val hash = SecurityUtils.hashPin("")
+        assertTrue(hash.contains(":"))
+        assertTrue(SecurityUtils.verifyPin("", hash))
+    }
+
+    @Test
+    fun `hashPin handles long string`() {
+        val longPin = "a".repeat(1000)
+        val hash = SecurityUtils.hashPin(longPin)
+        assertTrue(hash.contains(":"))
+        assertTrue(SecurityUtils.verifyPin(longPin, hash))
+    }
 }

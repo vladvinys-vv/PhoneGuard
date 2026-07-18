@@ -54,4 +54,37 @@ class PermissionHeuristicsTest {
         )
         assertFalse(PermissionHeuristics.hasExcessivePermissions(app))
     }
+
+    @Test
+    fun `social app with only safe permissions is not excessive`() {
+        val app = PrivacyApp(
+            packageName = "com.example.social",
+            appName = "Social",
+            icon = mockk(relaxed = true),
+            permissions = listOf(
+                AppPermission("android.permission.INTERNET", false),
+                AppPermission("android.permission.ACCESS_NETWORK_STATE", false)
+            ),
+            hasExcessivePermissions = false,
+            installTime = 0,
+            category = AppCategory.SOCIAL
+        )
+        assertFalse(PermissionHeuristics.hasExcessivePermissions(app))
+    }
+
+    @Test
+    fun `app with non-dangerous permission is not excessive`() {
+        val app = PrivacyApp(
+            packageName = "com.example.app",
+            appName = "App",
+            icon = mockk(relaxed = true),
+            permissions = listOf(
+                AppPermission("android.permission.INTERNET", false)
+            ),
+            hasExcessivePermissions = false,
+            installTime = 0,
+            category = AppCategory.UNKNOWN
+        )
+        assertFalse(PermissionHeuristics.hasExcessivePermissions(app))
+    }
 }
