@@ -1,6 +1,7 @@
 package com.phoneguard.ui.screens.settings
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,12 +20,20 @@ import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,8 +74,7 @@ fun SettingsScreen(
                         Icon(imageVector = Icons.Default.Language, contentDescription = null)
                         Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
-                    Text(text = "Русский (Russian)", style = MaterialTheme.typography.bodyMedium)
-                    Text(text = "Language selection will be available in a future update.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LanguageSelector()
                 }
             }
 
@@ -138,4 +147,49 @@ private fun SettingsLinkCard(
             }
         }
     }
+}
+
+@Composable
+private fun LanguageSelector() {
+    val context = LocalContext.current
+    val languages = listOf("Русский" to "ru", "English" to "en")
+    var selectedLanguage by remember { mutableStateOf("Русский") }
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it }
+    ) {
+        TextField(
+            value = selectedLanguage,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(stringResource(R.string.language)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            languages.forEach { (name, code) ->
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    onClick = {
+                        selectedLanguage = name
+                        expanded = false
+                        setLocale(code, context)
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun setLocale(language: String, context: Context) {
+    val locale = Locale(language)
+    Locale.setDefault(locale)
+    val config = Configuration(context.resources.configuration)
+    config.setLocale(locale)
+    context.resources.updateConfiguration(config, context.resources.displayMetrics)
 }

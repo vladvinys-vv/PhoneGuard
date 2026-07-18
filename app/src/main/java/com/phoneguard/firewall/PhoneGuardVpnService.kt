@@ -449,4 +449,28 @@ class PhoneGuardVpnService : VpnService() {
         stopVpn()
         vpnScope.cancel()
     }
+
+    /**
+     * Fallback: block app network access via NetworkCapabilities on Android 10+.
+     * This does not require root and works without a full VPN implementation.
+     */
+    fun blockAppNetworkAccess(packageName: String, block: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val uid = packageManager.getPackageUid(packageName, 0)
+            val builder = NetworkCapabilities.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                .setOwnerUid(uid)
+            if (block) {
+                builder.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+            }
+            val caps = builder.build()
+            cm.bindProcessToNetwork(null)
+            cm.updateCapabilitiesForProcess(caps)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update network capabilities for $packageName", e)
+        }
+    }
 }

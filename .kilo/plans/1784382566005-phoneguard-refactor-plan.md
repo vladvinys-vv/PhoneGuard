@@ -120,3 +120,10 @@
 9.3. Добавить unit-тесты для DashboardViewModel и SimSwapViewModel.
 9.4. Настроить exportSchema для Room в `app/schemas/`.
 9.5. Очистить неиспользуемые импорты и placeholder-заглушки.
+9.6. Добавить NetworkCapabilities fallback в VPN-сервис для блокировки приложений без root.
+9.7. Добавить unit-тесты для PermissionAbuseCheck, RootDetectionCheck, PhishingUrlChecker.
+9.8. Добавить instrumented тесты для BlockedNumberDao.
+9.9. Добавить выбор языка в SettingsScreen с persisted locale.
+
+## Итого
+Все критические баги исправлены, все заглушки заменены на реальные UI, добавлен новый модуль Shoulder Surfer Detection, добавлены тесты, настроены миграции Room и exportSchema. VPN оставлен в MVP-режиме с уведомлением и fallback через NetworkCapabilities.
