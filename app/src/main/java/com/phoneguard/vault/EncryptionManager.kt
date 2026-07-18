@@ -70,6 +70,7 @@ class EncryptionManager @Inject constructor(
     fun decryptFileFromVault(item: VaultItem): File? {
         val encryptedFile = createEncryptedFile(item.fileName)
         val outputFile = File.createTempFile("decrypted_", ".tmp", context.cacheDir)
+        outputFile.deleteOnExit()
         val inputStream = encryptedFile.openFileInput()
         val outputStream = outputFile.outputStream()
 
@@ -78,6 +79,10 @@ class EncryptionManager @Inject constructor(
         inputStream.close()
 
         return outputFile
+    }
+
+    fun cleanupDecryptedFile(file: File) {
+        file.delete()
     }
 
     fun deleteVaultFile(item: VaultItem) {
@@ -98,10 +103,16 @@ class EncryptionManager @Inject constructor(
         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (cursor.moveToFirst()) {
-                fileName = cursor.getString(nameIndex)
+                fileName = cursor.getString(nameIndex) ?: fileName
             }
         }
-        return fileName
+        return sanitizeFileName(fileName)
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        val withoutPath = name.replace(File.separator, "_").replace("..", "_")
+        val withoutControl = withoutPath.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+        return withoutControl.take(100).ifBlank { "file_${System.currentTimeMillis()}" }
     }
 
     private fun getFileSize(uri: Uri): Long {

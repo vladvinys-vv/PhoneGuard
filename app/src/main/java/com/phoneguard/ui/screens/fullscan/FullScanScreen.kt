@@ -2,6 +2,7 @@ package com.phoneguard.ui.screens.fullscan
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,7 +33,7 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
                 title = { Text(stringResource(R.string.full_scan)) },
                 actions = {
                     if (!isScanning) {
-                        IconButton(onClick = { viewModel.startFullScan() }) {
+                        IconButton(onClick = { viewModel.startScan() }) {
                             Icon(Icons.Default.PlayArrow, contentDescription = "Start Scan")
                         }
                     }
@@ -52,14 +55,71 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
                 ScanReportCard(report = r)
             }
 
-            scanHistory?.let { history ->
+            if (scanHistory.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "Последнее сканирование: ${history.timestamp}",
+                    text = stringResource(R.string.scan_history),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(scanHistory) { history ->
+                        ScanHistoryCard(history)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanHistoryCard(history: ScanHistory) {
+    val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+    val dateText = sdf.format(Date(history.timestamp))
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                history.riskScore >= 80 -> Color(0xFFC8E6C9)
+                history.riskScore >= 50 -> Color(0xFFFFF9C4)
+                else -> Color(0xFFFFCDD2)
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = dateText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "${history.issuesFound} issues",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Text(
+                text = "${history.riskScore}/100",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    history.riskScore >= 80 -> Color(0xFF2E7D32)
+                    history.riskScore >= 50 -> Color(0xFFF57F17)
+                    else -> Color(0xFFC62828)
+                }
+            )
         }
     }
 }

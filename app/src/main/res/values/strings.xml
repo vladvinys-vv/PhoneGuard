@@ -205,6 +205,7 @@
 
     <!-- Full Scan -->
     <string name="full_scan">Полное сканирование</string>
+    <string name="scan_history">История сканирований</string>
 
     <!-- SIM Swap -->
     <string name="sim_swap">Защита от SIM-swap</string>

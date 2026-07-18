@@ -12,6 +12,7 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.phoneguard.antitheft.SecurityService
 import com.phoneguard.data.local.SimSwapEventDao
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.util.await
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
@@ -102,6 +103,7 @@ class SimSwapDetector @Inject constructor(
     private suspend fun sendBackupSms(event: SimSwapEvent): Boolean = withContext(IO) {
         val backupNumber = preferencesManager.backupNumber.first()
         if (backupNumber.isBlank()) return@withContext false
+
         val date = Date(event.timestamp)
         val message = buildString {
             append("SIM вашего телефона поменялась ")
@@ -110,8 +112,18 @@ class SimSwapDetector @Inject constructor(
             append(event.addressString ?: "неизвестная локация")
             append(". Подтвердите это срочной ссылкой/кодом, иначе приложение заблокируется через 5 минут.")
         }
-        return@withContext try {
+
+        try {
+            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                context.getSystemService(android.telephony.SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                android.telephony.SmsManager.getDefault()
+            }
+            smsManager?.sendTextMessage(backupNumber, null, message, null, null)
             true
+        } catch (e: SecurityException) {
+            false
         } catch (e: Exception) {
             false
         }
@@ -160,10 +172,4 @@ class SimSwapDetector @Inject constructor(
 
 sealed interface SimSwapUiEvent {
     data class ShowConfirmation(val event: SimSwapEvent) : SimSwapUiEvent
-}
-
-suspend fun FusedLocationProviderClient.await(): android.location.Location? = try {
-    kotlinx.coroutines.tasks.await(lastLocation)
-} catch (e: Exception) {
-    null
 }

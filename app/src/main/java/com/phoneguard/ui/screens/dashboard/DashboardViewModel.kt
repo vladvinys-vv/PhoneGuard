@@ -41,23 +41,23 @@ class DashboardViewModel @Inject constructor(
 
     private fun calculateSecurityScore() {
         viewModelScope.launch {
-            preferencesManager.isDeviceAdminEnabled.collect { isDeviceAdminEnabled ->
-                preferencesManager.isSimLockEnabled.collect { isSimLockEnabled ->
-                    preferencesManager.isPhotoOnFailedAttemptsEnabled.collect { isPhotoEnabled ->
-                        val antiTheftScore = calculateAntiTheftScore(
-                            isDeviceAdminEnabled,
-                            isSimLockEnabled,
-                            isPhotoEnabled
-                        )
-                        _securityScore.update {
-                            it.copy(
-                                antiTheft = antiTheftScore,
-                                total = antiTheftScore + it.callBlocker + it.privacy + it.spyware
-                            )
-                        }
-                    }
+            combine(
+                preferencesManager.isDeviceAdminEnabled,
+                preferencesManager.isSimLockEnabled,
+                preferencesManager.isPhotoOnFailedAttemptsEnabled
+            ) { isDeviceAdminEnabled, isSimLockEnabled, isPhotoEnabled ->
+                val antiTheftScore = calculateAntiTheftScore(
+                    isDeviceAdminEnabled,
+                    isSimLockEnabled,
+                    isPhotoEnabled
+                )
+                _securityScore.update {
+                    it.copy(
+                        antiTheft = antiTheftScore,
+                        total = antiTheftScore + it.callBlocker + it.privacy + it.spyware
+                    )
                 }
-            }
+            }.collect()
         }
     }
 

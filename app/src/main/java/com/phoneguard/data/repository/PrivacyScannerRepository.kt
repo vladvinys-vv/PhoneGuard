@@ -43,7 +43,6 @@ class PrivacyScannerRepository @Inject constructor(
 
     @SuppressLint("NewApi")
     fun getInstalledApps(): Flow<List<PrivacyApp>> = flow {
-        emit(emptyList())
         val apps = withContext(Dispatchers.IO) {
             val installedPackages = packageManager.getInstalledPackages(PackageManager.GET_PERMISSIONS)
             installedPackages.mapNotNull { pkg ->

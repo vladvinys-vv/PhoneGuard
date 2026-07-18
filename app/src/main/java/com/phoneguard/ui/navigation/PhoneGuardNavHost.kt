@@ -21,6 +21,8 @@ import com.phoneguard.ui.screens.callblocker.CallBlockerScreen
 import com.phoneguard.ui.screens.dashboard.DashboardScreen
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel
 import com.phoneguard.ui.screens.firewall.FirewallScreen
+import com.phoneguard.ui.screens.privacyscanner.PrivacyScannerScreen
+import com.phoneguard.ui.screens.spywarecheck.SpywareCheckScreen
 import com.phoneguard.ui.screens.vault.VaultScreen
 import com.phoneguard.ui.screens.simswap.SimSwapConfirmationScreen
 import com.phoneguard.ui.screens.simswap.SimSwapHistoryScreen
@@ -105,7 +107,8 @@ fun PhoneGuardNavHost(
                         onNavigateToCallBlocker = { navController.navigate(Screen.CallBlocker.route) },
                         onNavigateToPrivacyScanner = { navController.navigate(Screen.PrivacyScanner.route) },
                         onNavigateToSpywareCheck = { navController.navigate(Screen.SpywareCheck.route) },
-                        onNavigateToFullScan = { navController.navigate(Screen.FullScan.route) }
+                        onNavigateToFullScan = { navController.navigate(Screen.FullScan.route) },
+                        onNavigateToSimSwap = { navController.navigate("simswap_history") }
                     )
                 }
                 composable(Screen.AntiTheft.route) {
@@ -115,10 +118,10 @@ fun PhoneGuardNavHost(
                     CallBlockerScreen(viewModel = hiltViewModel())
                 }
                 composable(Screen.PrivacyScanner.route) {
-                    PrivacyScannerScreen()
+                    PrivacyScannerScreen(viewModel = hiltViewModel())
                 }
                 composable(Screen.SpywareCheck.route) {
-                    SpywareCheckScreen()
+                    SpywareCheckScreen(viewModel = hiltViewModel())
                 }
                 composable(Screen.Settings.route) {
                     SettingsScreen()

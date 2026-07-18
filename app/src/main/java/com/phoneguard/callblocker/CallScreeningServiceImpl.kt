@@ -7,10 +7,8 @@ import androidx.annotation.RequiresApi
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.preferences.PreferencesManager
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
@@ -24,14 +22,12 @@ class CallScreeningServiceImpl : CallScreeningService() {
     @Inject
     lateinit var preferencesManager: PreferencesManager
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     override fun onScreenCall(callDetails: Call.Details) {
         val phoneNumber = callDetails.handle.schemeSpecificPart ?: return
-        
-        runBlocking {
+
+        runBlocking(Dispatchers.IO) {
             val shouldBlock = checkShouldBlockNumber(phoneNumber)
-            
+
             val response = if (shouldBlock) {
                 CallResponse.Builder()
                     .setDisallowCall(true)
@@ -45,9 +41,9 @@ class CallScreeningServiceImpl : CallScreeningService() {
                     .setRejectCall(false)
                     .build()
             }
-            
+
             respondToCall(callDetails, response)
-            
+
             if (shouldBlock) {
                 logBlockedCall(phoneNumber)
             }
@@ -56,36 +52,30 @@ class CallScreeningServiceImpl : CallScreeningService() {
 
     private suspend fun checkShouldBlockNumber(phoneNumber: String): Boolean {
         val blockedNumberDao = appDatabase.blockedNumberDao()
-        
-        // Check whitelist first - always allow whitelisted numbers
+
         if (blockedNumberDao.isWhitelisted(phoneNumber)) {
             return false
         }
-        
-        // Check blacklist
+
         if (blockedNumberDao.isBlacklisted(phoneNumber)) {
             return true
         }
-        
-        // Check block rules
-        preferencesManager.blockUnknownNumbers.collect { blockUnknown ->
-            if (blockUnknown && phoneNumber.isBlank()) {
-                return true
-            }
+
+        val blockUnknown = preferencesManager.blockUnknownNumbers.first()
+        if (blockUnknown && phoneNumber.isBlank()) {
+            return true
         }
-        
-        preferencesManager.blockHiddenNumbers.collect { blockHidden ->
-            if (blockHidden && phoneNumber == "private") {
-                return true
-            }
+
+        val blockHidden = preferencesManager.blockHiddenNumbers.first()
+        if (blockHidden && phoneNumber == "private") {
+            return true
         }
-        
-        preferencesManager.blockInternationalNumbers.collect { blockInternational ->
-            if (blockInternational && phoneNumber.startsWith("+")) {
-                return true
-            }
+
+        val blockInternational = preferencesManager.blockInternationalNumbers.first()
+        if (blockInternational && phoneNumber.startsWith("+")) {
+            return true
         }
-        
+
         return false
     }
 

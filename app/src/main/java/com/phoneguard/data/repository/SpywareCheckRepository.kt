@@ -113,9 +113,19 @@ class SpywareCheckRepository @Inject constructor(
     }
 
     private fun getSideloadedApps(apps: List<ApplicationInfo>): List<SpywareApp> {
+        val legitimateInstallers = setOf(
+            "com.android.vending",       // Google Play
+            "com.samsung.android.galaxyapps", // Samsung Galaxy Store
+            "com.huawei.appmarket",      // Huawei AppGallery
+            "com.amazon.venezia",         // Amazon Appstore
+            "com.xiaomi.market",         // Xiaomi GetApps
+            "com.opera.appstore",        // Opera Mobile Store
+            "com.aapte.android.market",  // Aptoide
+            null                          // ADB install / unknown
+        )
         return apps.mapNotNull { appInfo ->
             val installer = packageManager.getInstallerPackageName(appInfo.packageName)
-            if (installer != "com.android.vending" && appInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0) {
+            if (installer !in legitimateInstallers && appInfo.flags and ApplicationInfo.FLAG_SYSTEM == 0) {
                 createSpywareAppFromPackage(appInfo.packageName, listOf(SpywareIndicator.SIDELOADED))
             } else {
                 null
