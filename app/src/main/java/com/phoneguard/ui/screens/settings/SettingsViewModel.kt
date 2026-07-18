@@ -3,6 +3,7 @@ package com.phoneguard.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.data.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -10,7 +11,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     val isDarkTheme: StateFlow<Boolean> = preferencesManager.isDarkTheme
@@ -25,5 +27,9 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.setLanguage(lang)
         }
+    }
+
+    fun exportLogs() = viewModelScope.launch {
+        settingsRepository.exportLogs(emptyList(), emptyList(), emptyList())
     }
 }

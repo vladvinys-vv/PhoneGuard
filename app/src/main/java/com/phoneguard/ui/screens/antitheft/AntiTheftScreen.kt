@@ -65,13 +65,10 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
     var pinInput by remember { mutableStateOf("") }
     var backupNumberInput by remember { mutableStateOf(uiState.backupNumber) }
 
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            ShoulderSurferService.start(context)
-        } else {
-            snackbarHostState.showSnackbar("Требуется разрешение на камеру для защиты от подглядывания")
+    viewModel.ObserveEvents { event ->
+        when (event) {
+            is Event.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            else -> {}
         }
     }
 
@@ -227,19 +224,6 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
                 checked = uiState.isShoulderSurferEnabled,
                 onCheckedChange = { enabled ->
                     viewModel.toggleShoulderSurfer(enabled)
-                    if (enabled) {
-                        val hasPermission = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.CAMERA
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        if (hasPermission) {
-                            ShoulderSurferService.start(context)
-                        } else {
-                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    } else {
-                        ShoulderSurferService.stop(context)
-                    }
                 }
             )
         }

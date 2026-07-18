@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phoneguard.antitheft.DeviceAdminReceiverImpl
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.domain.shouldersurfer.ShoulderSurferUseCase
+import com.phoneguard.ui.common.Event
+import com.phoneguard.ui.common.EventViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -28,8 +31,9 @@ data class AntiTheftUiState(
 @HiltViewModel
 class AntiTheftViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
+    private val shoulderSurferUseCase: ShoulderSurferUseCase,
     @ApplicationContext private val context: Context
-) : ViewModel() {
+) : EventViewModel() {
 
     private val _uiState = MutableStateFlow(AntiTheftUiState())
     val uiState: StateFlow<AntiTheftUiState> = _uiState.asStateFlow()
@@ -77,12 +81,14 @@ class AntiTheftViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             preferencesManager.savePinCode(pin)
             _uiState.update { it.copy(isLoading = false) }
+            sendEvent(Event.ShowSnackbar("PIN установлен"))
         }
     }
 
     fun setBackupNumber(number: String) {
         viewModelScope.launch {
             preferencesManager.saveBackupNumber(number)
+            sendEvent(Event.ShowSnackbar("Резервный номер сохранён"))
         }
     }
 
@@ -107,6 +113,13 @@ class AntiTheftViewModel @Inject constructor(
     fun toggleShoulderSurfer(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setShoulderSurferEnabled(enabled)
+            if (enabled) {
+                shoulderSurferUseCase.start()
+                sendEvent(Event.ShowSnackbar("Защита от подглядывания включена"))
+            } else {
+                shoulderSurferUseCase.stop()
+                sendEvent(Event.ShowSnackbar("Защита от подглядывания выключена"))
+            }
         }
     }
 

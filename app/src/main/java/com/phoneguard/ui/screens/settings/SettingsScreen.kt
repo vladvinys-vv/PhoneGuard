@@ -150,7 +150,8 @@ fun SettingsScreen(
             // Export Logs
             Button(
                 onClick = {
-                    Toast.makeText(context, "Экспорт логов: функция в разработке", Toast.LENGTH_SHORT).show()
+                    settingsViewModel.exportLogs()
+                    Toast.makeText(context, "Экспорт логов запущен", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
