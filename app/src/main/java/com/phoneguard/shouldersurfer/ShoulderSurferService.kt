@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.os.Build
 import android.util.Log
 import androidx.camera.core.CameraSelector
@@ -37,7 +39,7 @@ class ShoulderSurferService : LifecycleService() {
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var analysisJob: Job? = null
     private var lastDetectionTime = 0L
-    private val detectionIntervalMs = 2000L // Analyze every 2 seconds to save battery
+    private var adaptiveIntervalMs = 2000L
 
     private val faceDetector by lazy {
         FaceDetection.getClient(
@@ -96,13 +98,6 @@ class ShoulderSurferService : LifecycleService() {
         return START_NOT_STICKY
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        stopDetection()
-        cameraExecutor.shutdown()
-        faceDetector.close()
-    }
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -145,6 +140,7 @@ class ShoulderSurferService : LifecycleService() {
 
     private fun startDetection() {
         if (analysisJob?.isActive == true) return
+        adaptiveIntervalMs = getAdaptiveInterval()
 
         analysisJob = lifecycleScope.launch {
             try {
@@ -168,10 +164,29 @@ class ShoulderSurferService : LifecycleService() {
                     imageAnalyzer
                 )
 
-                Log.d(TAG, "Camera bound for shoulder surfer detection")
+                Log.d(TAG, "Camera bound for shoulder surfer detection, interval=${adaptiveIntervalMs}ms")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start camera", e)
             }
+        }
+    }
+
+    private fun getAdaptiveInterval(): Long {
+        val batteryLevel = getBatteryLevel()
+        return when {
+            batteryLevel <= 10 -> 8000L
+            batteryLevel <= 20 -> 5000L
+            batteryLevel <= 50 -> 4000L
+            else -> 2000L
+        }
+    }
+
+    private fun getBatteryLevel(): Int {
+        return try {
+            val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } catch (_: Exception) {
+            100
         }
     }
 
@@ -188,7 +203,7 @@ class ShoulderSurferService : LifecycleService() {
 
     private fun analyzeImage(imageProxy: ImageProxy) {
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastDetectionTime < detectionIntervalMs) {
+        if (currentTime - lastDetectionTime < adaptiveIntervalMs) {
             imageProxy.close()
             return
         }
@@ -222,24 +237,19 @@ class ShoulderSurferService : LifecycleService() {
         if (faces.isEmpty()) return
 
         for (face in faces) {
-            // Heuristic: face is likely looking at screen if:
-            // 1. Euler X (pitch) is within -20 to +20 degrees (head not tilted up/down)
-            // 2. Euler Y (yaw) is within -30 to +30 degrees (head not turned away)
-            // 3. Eyes are open (if classification available)
-            val pitch = face.headEulerAngleX // -180..180, 0 = facing camera
-            val yaw = face.headEulerAngleY   // -180..180, 0 = facing camera
+            val pitch = face.headEulerAngleX
+            val yaw = face.headEulerAngleY
 
             val isFacingScreen = pitch in -20f..20f && yaw in -30f..30f
 
             if (isFacingScreen) {
-                // Check if eyes are open (ML Kit provides this when CLASSIFICATION_MODE_ALL)
                 val leftEyeOpen = face.leftEyeOpenProbability ?: 1.0f
                 val rightEyeOpen = face.rightEyeOpenProbability ?: 1.0f
                 val eyesOpen = leftEyeOpen > 0.3f && rightEyeOpen > 0.3f
 
                 if (eyesOpen) {
                     onSurferDetected(face)
-                    return // Only handle first surfer
+                    return
                 }
             }
         }
@@ -271,5 +281,12 @@ class ShoulderSurferService : LifecycleService() {
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(ALERT_NOTIFICATION_ID, notification)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopDetection()
+        cameraExecutor.shutdown()
+        faceDetector.close()
     }
 }

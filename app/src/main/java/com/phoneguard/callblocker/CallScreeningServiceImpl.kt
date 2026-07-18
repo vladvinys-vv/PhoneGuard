@@ -7,9 +7,11 @@ import androidx.annotation.RequiresApi
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.preferences.PreferencesManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @RequiresApi(Build.VERSION_CODES.N)
@@ -22,10 +24,12 @@ class CallScreeningServiceImpl : CallScreeningService() {
     @Inject
     lateinit var preferencesManager: PreferencesManager
 
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     override fun onScreenCall(callDetails: Call.Details) {
         val phoneNumber = callDetails.handle.schemeSpecificPart ?: return
 
-        runBlocking(Dispatchers.IO) {
+        serviceScope.launch {
             val shouldBlock = checkShouldBlockNumber(phoneNumber)
 
             val response = if (shouldBlock) {
@@ -87,5 +91,10 @@ class CallScreeningServiceImpl : CallScreeningService() {
                 isSms = false
             )
         )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.launch { /* cancel children if needed */ }
     }
 }

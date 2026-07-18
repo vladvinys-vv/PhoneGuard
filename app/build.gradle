@@ -5,6 +5,7 @@ plugins {
     id 'dagger.hilt.android.plugin'
     id 'kotlin-parcelize'
     id 'org.jetbrains.kotlin.plugin.compose'
+    id 'com.google.firebase.crashlytics'
 }
 
 android {
@@ -36,6 +37,20 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug {
+            applicationIdSuffix ".debug"
+        }
+    }
+
+    signingConfigs {
+        release {
+            // Signing config should be provided via environment variables or local.properties
+            // storeFile file(System.getenv("KEYSTORE_PATH") ?: "keystore.jks")
+            // storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
+            // keyAlias System.getenv("KEY_ALIAS") ?: ""
+            // keyPassword System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
@@ -121,7 +136,12 @@ dependencies {
 
     // ML Kit Face Detection (for shoulder surfer detection)
     implementation "com.google.android.gms:play-services-mlkit-face-detection:17.1.0"
-    
+
+    // Firebase Crashlytics
+    implementation platform("com.google.firebase:firebase-bom:33.1.0")
+    implementation "com.google.firebase:firebase-crashlytics"
+    implementation "com.google.firebase:firebase-analytics"
+
     // Testing
     testImplementation "junit:junit:$rootProject.ext.junit_version"
     androidTestImplementation "androidx.test.ext:junit:1.2.1"
