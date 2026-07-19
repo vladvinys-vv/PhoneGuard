@@ -3,11 +3,11 @@
 This document tracks features that are planned but not yet fully implemented.
 
 ## CallBlocker
-- **SMS Blocking**: Android does not provide a public API for SMS blocking without carrier integration. See `sms-blocker-limitation.md` for details.
-- **CSV Import**: Add import/export for blacklist/whitelist via CSV files.
+- **SMS Blocking**: Documented limitation (see `sms-blocker-limitation.md`).
+- **CSV Import**: Implemented via `CsvImportHelper` and `CallBlockerViewModel.importFromCsv`.
 - **Spam Database**: Local JSON asset with known spam numbers + periodic updates.
 - **Pattern Rules**: Regex/wildcard-based blocking rules (e.g., `+7*`).
-- **Block Notifications**: Show notification when a call/SMS is blocked.
+- **Block Notifications**: Implemented via `CallScreeningServiceImpl.showBlockedNotification`.
 
 ## Firewall
 - **Real Traffic Forwarding**: Requires `Tun2Socket` / `PacketForwarder` library or root access. Current implementation is MVP with VPN interface but no actual packet inspection.
@@ -38,7 +38,7 @@ This document tracks features that are planned but not yet fully implemented.
 ## Testing
 - **Manual Testing**: Required on Android 8, 10, 12, 13, 14, 15 across Samsung, Xiaomi, Huawei, Pixel.
 - **Battery Testing**: Use Battery Historian to verify background task efficiency.
-- **Memory Testing**: Use LeakCanary to detect memory leaks.
+- **Memory Testing**: LeakCanary added as debug dependency.
 
 ## Release
 - **Firebase Config**: Add `google-services.json` for Firebase Analytics and Crashlytics.
@@ -49,9 +49,50 @@ This document tracks features that are planned but not yet fully implemented.
 ## Completed
 - [x] Bottom navigation
 - [x] Performance Monitoring integration
-- [x] ShoulderSurferService camera resolution optimization
+- [x] ShoulderSurferService camera resolution optimization (320x240)
 - [x] Navigation tests
 - [x] UseCase/Repository tests
 - [x] SMS blocker limitation documentation
 - [x] Scan comparison (basic)
 - [x] Firewall traffic statistics (basic)
+- [x] CSV import for CallBlocker
+- [x] Block notifications for CallBlocker
+- [x] LeakCanary for memory leak detection
+- [x] gradle.properties for production builds
+- [x] Firebase Performance Monitoring dependency
+- [x] NetworkMonitor utility
+- [x] CrashHandler with global uncaught exception handler
+- [x] DataCleanupWorker for auto-deleting logs older than 90 days
+- [x] ScheduledFullScanWorker for periodic scans
+- [x] ConsentScreen for permissions
+- [x] GDPR delete all data functionality
+- [x] Battery optimization prompt
+- [x] Deep linking for all main screens
+- [x] Pull-to-refresh actions for main lists
+- [x] Empty states with icons for all lists
+- [x] Confirm dialogs for destructive actions
+- [x] FLAG_SECURE for Vault screen
+- [x] SQLCipher encryption with Android Keystore
+- [x] Network security config
+- [x] ProGuard rules for all modules
+- [x] CI/CD with GitHub Actions
+- [x] Signing config with keystore.properties support
+- [x] Dark theme support
+- [x] Onboarding screen
+- [x] Language selector
+- [x] LogExporter with real data
+- [x] AnalyticsHelper for Firebase Analytics
+- [x] All ViewModel tests
+- [x] All DAO tests
+- [x] UI tests for Settings, CallBlocker, Firewall
+- [x] Navigation tests
+- [x] Pagination for large lists
+- [x] InstalledAppsCache (24h TTL)
+- [x] StrictMode in debug
+- [x] Scan throttle (6 hours)
+- [x] Battery optimization prompt
+- [x] usesPermissionFlags and permissionGroup in manifest
+- [x] CSV import for CallBlocker
+- [x] Block notifications for CallBlocker
+- [x] LeakCanary for memory leak detection
+- [x] gradle.properties for production builds

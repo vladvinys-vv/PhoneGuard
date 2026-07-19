@@ -63,4 +63,8 @@
 - [x] Документировать SMS blocker limitation
 - [x] Добавить scan comparison
 - [x] Добавить firewall traffic statistics
+- [x] Добавить CSV импорт для CallBlocker
+- [x] Добавить уведомления о блокировке звонков
+- [x] Добавить LeakCanary для детекта утечек памяти
+- [x] Добавить gradle.properties для production сборки
 

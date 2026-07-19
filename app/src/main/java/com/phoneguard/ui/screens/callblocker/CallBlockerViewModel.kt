@@ -1,11 +1,15 @@
 package com.phoneguard.ui.screens.callblocker
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.local.BlockedLog
 import com.phoneguard.data.local.BlockedNumber
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.util.CsvImportHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -15,7 +19,9 @@ import javax.inject.Inject
 @HiltViewModel
 class CallBlockerViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
-    private val appDatabase: com.phoneguard.data.local.AppDatabase
+    private val appDatabase: com.phoneguard.data.local.AppDatabase,
+    @ApplicationContext private val context: Context,
+    private val csvImportHelper: CsvImportHelper
 ) : ViewModel() {
     private val blockedNumberDao = appDatabase.blockedNumberDao()
     private val blockedLogDao = appDatabase.blockedLogDao()
@@ -137,5 +143,14 @@ class CallBlockerViewModel @Inject constructor(
     fun formatTimestamp(timestamp: Long): String {
         val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         return sdf.format(Date(timestamp))
+    }
+
+    fun importFromCsv(uri: Uri, isWhitelist: Boolean = false) {
+        viewModelScope.launch {
+            val numbers = csvImportHelper.importBlockedNumbers(uri, isWhitelist)
+            numbers.forEach { number ->
+                addNumber(number, null, isWhitelist)
+            }
+        }
     }
 }

@@ -1,11 +1,18 @@
 package com.phoneguard.callblocker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
 import android.os.Build
 import android.telecom.Call
 import android.telecom.CallScreeningService
+import androidx.core.app.NotificationCompat
 import androidx.annotation.RequiresApi
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.ui.MainActivity
+import com.phoneguard.R
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +32,52 @@ class CallScreeningServiceImpl : CallScreeningService() {
     lateinit var preferencesManager: PreferencesManager
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    companion object {
+        const val CHANNEL_ID = "call_blocker_channel"
+        const val NOTIFICATION_ID = 1001
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Call Blocker",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Notifications for blocked calls"
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun showBlockedNotification(phoneNumber: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Call blocked")
+            .setContentText("Blocked: $phoneNumber")
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, notification)
+    }
 
     override fun onScreenCall(callDetails: Call.Details) {
         val phoneNumber = callDetails.handle.schemeSpecificPart ?: return
@@ -91,6 +144,7 @@ class CallScreeningServiceImpl : CallScreeningService() {
                 isSms = false
             )
         )
+        showBlockedNotification(phoneNumber)
     }
 
     override fun onDestroy() {

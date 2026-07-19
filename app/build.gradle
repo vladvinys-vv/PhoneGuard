@@ -146,6 +146,7 @@ dependencies {
     implementation platform("com.google.firebase:firebase-bom:33.1.0")
     implementation "com.google.firebase:firebase-crashlytics"
     implementation "com.google.firebase:firebase-analytics"
+    implementation "com.google.firebase:firebase-performance"
 
     // Testing
     testImplementation "junit:junit:$rootProject.ext.junit_version"
@@ -155,6 +156,7 @@ dependencies {
     androidTestImplementation "androidx.compose.ui:ui-test-junit4"
     debugImplementation "androidx.compose.ui:ui-tooling"
     debugImplementation "androidx.compose.ui:ui-test-manifest"
+    debugImplementation "com.squareup.leakcanary:leakcanary-android:2.14"
     
     // Mocking
     testImplementation "io.mockk:mockk:$rootProject.ext.mockk_version"

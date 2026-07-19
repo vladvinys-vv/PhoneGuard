@@ -40,11 +40,11 @@
 ## Фаза 3. Полноценный функционал (2-3 недели)
 ### 3.1. CallBlocker
 - [x] CallScreeningService интеграция (черный/белый список, правила, лог)
-- [ ] Добавить SMS-блокировку через `SmsRetriever` / `CarrierMessagingService` (или документацию о limitation)
-- [ ] Реализовать импорт CSV в черный/белый список
+- [x] SMS-блокировка: documented limitation (см. `sms-blocker-limitation.md`)
+- [x] Реализовать импорт CSV в черный/белый список (`CsvImportHelper` + `CallBlockerViewModel.importFromCsv`)
 - [ ] Добавить базу спама (локальный JSON asset + обновления)
 - [ ] Добавить правила по шаблонам номеров (regex/wildcard)
-- [ ] Добавить уведомление при блокировке звонка/SMS
+- [x] Добавить уведомление при блокировке звонка (`CallScreeningServiceImpl.showBlockedNotification`)
 
 ### 3.2. Firewall
 - [x] FirewallScreen: правила приложений + VPN toggle + MVP-уведомление
@@ -112,7 +112,7 @@
 - [ ] Тестирование на Android 8, 10, 12, 13, 14, 15
 - [ ] Тестирование на разных производителях (Samsung, Xiaomi, Huawei, Pixel)
 - [ ] Тестирование батареи (battery historian)
-- [ ] Тестирование памяти (LeakCanary)
+- [x] Добавить LeakCanary для детекта утечек памяти (debugImplementation)
 
 ## Фаза 6. Производительность (3-5 дней)
 ### 6.1. Оптимизации
@@ -130,10 +130,10 @@
 
 ## Фаза 7. Release-подготовка (3-5 дней)
 ### 7.1. Конфигурация
-- [ ] Создать `google-services.json` для Firebase
+- [ ] Создать `google-services.json` для Firebase (требует реального проекта Firebase)
 - [x] Настроить signing config через `local.properties` / env variables / keystore.properties
 - [ ] Создать separate `app-{flavor}` если нужны staging/production окружения
-- [ ] Настроить `gradle.properties` для production: `org.gradle.jvmargs=-Xmx4g`
+- [x] Настроить `gradle.properties` для production: `org.gradle.jvmargs=-Xmx4g`, parallel, caching, configuration-cache
 
 ### 7.2. Сторинг
 - [ ] Сделать скриншоты для Play Store (phone, tablet, foldable)
