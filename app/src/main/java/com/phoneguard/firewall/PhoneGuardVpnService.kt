@@ -64,23 +64,20 @@ class PhoneGuardVpnService : VpnService() {
     @Inject
     lateinit var firewallRepository: FirewallRepository
 
+    @Inject
+    lateinit var rulesManager: FirewallRulesManager
+
     private var vpnInterface: ParcelFileDescriptor? = null
     private var vpnJob: Job? = null
     private val vpnScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /** Кэш правил: packageName → FirewallRule */
-    private val rulesCache = mutableMapOf<String, FirewallRule>()
-
-    /** Кэш UID → packageName */
-    private val uidPackageCache = mutableMapOf<Int, String>()
+    // Pre-allocated buffers to reduce GC pressure
+    private val ipHeaderBuffer = ByteArray(60)
+    private val packetBuffer = ByteArray(65535)
 
     /** Rate limiter для логов */
     private var logCount = 0
     private var logWindowStart = 0L
-
-    // Pre-allocated buffers to reduce GC pressure
-    private val ipHeaderBuffer = ByteArray(60)
-    private val packetBuffer = ByteArray(65535)
 
     override fun onCreate() {
         super.onCreate()
@@ -140,24 +137,9 @@ class PhoneGuardVpnService : VpnService() {
 
         vpnJob = vpnScope.launch {
             try {
-                val rules = firewallRepository.allRules.first()
-                rulesCache.clear()
-                rules.forEach { rulesCache[it.packageName] = it }
-
-                uidPackageCache.clear()
-                val pm = packageManager
-                val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getInstalledApplications(
-                        android.content.pm.PackageManager.ApplicationInfoFlags.of(0)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    pm.getInstalledApplications(0)
-                }
-                installedApps.forEach { app ->
-                    uidPackageCache[app.uid] = app.packageName
-                }
-                Log.d(TAG, "Loaded ${rulesCache.size} rules, ${uidPackageCache.size} apps")
+                rulesManager.loadRules()
+                rulesManager.loadInstalledApps(packageManager)
+                Log.d(TAG, "Loaded ${rulesManager.getRulesSnapshot().size} rules, ${rulesManager.getPackageNameForUid(0)?.let { "installed apps" } ?: "installed apps"}")
 
                 val builder = Builder()
                     .addAddress(TUN_ADDRESS, 32)
@@ -309,13 +291,13 @@ class PhoneGuardVpnService : VpnService() {
             return
         }
 
-        val pkg = uidPackageCache[uid]
+        val pkg = rulesManager.getPackageNameForUid(uid)
         if (pkg == null) {
             output.write(packet)
             return
         }
 
-        val rule = rulesCache[pkg]
+        val rule = rulesManager.getRuleForPackage(pkg)
         val shouldBlock = shouldBlockPacket(rule, destIpStr, destPort)
 
         if (shouldBlock) {
