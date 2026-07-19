@@ -36,8 +36,9 @@
 ## 5. Тесты и CI
 - [x] Unit-тесты: SecurityUtils, PermissionHeuristics, FullScanViewModel, DashboardViewModel, SimSwapViewModel
 - [x] Unit-тесты: CallBlockerViewModel, PermissionAbuseCheck, RootDetectionCheck, PhishingUrlChecker
-- [x] Unit-тесты: PrivacyScannerViewModel, SpywareCheckViewModel, VaultViewModel
-- [x] Instrumented тесты: BlockedNumberDao
+- [x] Unit-тесты: PrivacyScannerViewModel, SpywareCheckViewModel, VaultViewModel, AntiTheftViewModel, FirewallViewModel, SettingsViewModel, OnboardingViewModel
+- [x] Instrumented тесты: BlockedNumberDao, BlockedLogDao, FirewallDao, ScanHistoryDao, VaultDao, SimSwapEventDao
+- [x] UI тесты: SettingsScreenTest, CallBlockerScreenTest, FirewallScreenTest
 - [x] Настроить GitHub Actions / CI: lint, test, build
 
 ## 6. Прочее
@@ -45,4 +46,13 @@
 - [x] Подготовить release-версию: signing config, app bundle, Play Store листинг
 - [x] Добавить аналитику и краш-репортинг (Firebase Crashlytics)
 - [x] Оптимизировать батарею: ограничить частоту сканирований, адаптивный интервал для Shoulder Surfer
+- [x] Добавить StrictMode в debug сборке
+- [x] Добавить pagination для больших списков
+- [x] Кэшировать getInstalledApps() на 24 часа
+- [x] Добавить deep linking для основных экранов
+- [x] Добавить consent screen для permissions
+- [x] Добавить GDPR удаление всех данных
+- [x] Добавить WorkManager для scheduled scans и data cleanup
+- [x] Добавить battery optimization prompt
+- [x] Добавить usesPermissionFlags и permissionGroup в манифест
 

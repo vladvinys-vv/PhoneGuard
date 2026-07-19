@@ -99,14 +99,13 @@
 ## Фаза 5. Тестирование (1 неделя)
 ### 5.1. Unit-тесты
 - [x] Добавить тесты для ViewModel: Dashboard, CallBlocker, SimSwap, FullScan, Vault, PrivacyScanner, SpywareCheck, Settings, AntiTheft, Firewall, Onboarding
-- [x] Добавить тесты для утилит (SecurityUtils, LogExporter)
+- [x] Добавить тесты для утилит (SecurityUtils, LogExporter, AnalyticsHelper)
 - [ ] Добавить тесты для UseCases/Repositories
 - [ ] Цель: покрытие 80%+ business logic
 
 ### 5.2. Instrumented тесты
-- [x] DAO тесты: BlockedNumberDao
-- [ ] DAO тесты для всех сущностей (in-memory Room)
-- [ ] UI тесты через ComposeTestRule для ключевых сценариев
+- [x] DAO тесты: BlockedNumberDao, BlockedLogDao, FirewallDao, ScanHistoryDao, VaultDao, SimSwapEventDao
+- [x] UI тесты через ComposeTestRule для ключевых сценариев (SettingsScreen, CallBlockerScreen, FirewallScreen)
 - [ ] Тесты навигации
 
 ### 5.3. Мануальное тестирование
@@ -117,14 +116,14 @@
 
 ## Фаза 6. Производительность (3-5 дней)
 ### 6.1. Оптимизации
-- [ ] Добавить pagination для больших списков (CallBlocker history, Firewall logs)
-- [ ] Оптимизировать `getInstalledApps()` — кэшировать результат на 24 часа
+- [x] Добавить pagination для больших списков (CallBlocker, Firewall, ScanHistory DAO paged queries)
+- [x] Оптимизировать `getInstalledApps()` — кэшировать результат на 24 часа (`InstalledAppsCache`)
 - [x] Добавить Room индексы для часто queried полей
 - [ ] Оптимизировать `ShoulderSurferService`: уменьшить resolution камеры для анализа
-- [ ] Добавить `StrictMode` в debug-сборке для детекта медленных операций на главном потоке
+- [x] Добавить `StrictMode` в debug-сборке для детекта медленных операций на главном потоке
 
 ### 6.2. Батарея
-- [ ] Ограничить частоту сканирований: не чаще 1 раза в 6 часов
+- [x] Ограничить частоту сканирований: не чаще 1 раза в 6 часов (`FullScanViewModel` throttle)
 - [x] Добавить `WorkManager` с `Constraints` для фоновых задач (DataCleanupWorker, ScheduledFullScanWorker)
 - [x] Остановить `ShoulderSurferService` при низком батарее < 15% (auto-pause)
 - [x] Добавить battery optimization prompt для foreground service
@@ -156,8 +155,8 @@
 - [ ] Подготовить Privacy Policy PDF
 
 ### 8.2. Permissions
-- [ ] Добавить `android:usesPermissionFlags` для foreground service
-- [ ] Добавить `android:permissionGroup` в манифест
+- [x] Добавить `android:usesPermissionFlags` для foreground service
+- [x] Добавить `android:permissionGroup` в манифест для CALL_SCREENING
 - [ ] Протестировать permission flow на Android 6-15
 
 ## Оценка сроков и ресурсов
@@ -180,7 +179,7 @@
 ### Must Have (P0)
 - [x] Все P0 баги из Фазы 1 исправлены
 - [x] Покрытие тестами 60%+ бизнес-логики (ViewModels + утилиты)
-- [ ] Настроен CI/CD
+- [x] Настроен CI/CD (GitHub Actions: lint, test, build)
 - [x] Firebase Crashlytics подключен
 - [x] Signing config готов
 - [ ] Privacy Policy и Terms готовы

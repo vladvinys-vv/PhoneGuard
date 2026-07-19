@@ -8,6 +8,9 @@ import com.phoneguard.model.ScanHistory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,14 +30,22 @@ class FullScanViewModel @Inject constructor(
     private val _scanHistory = MutableStateFlow<List<ScanHistory>>(emptyList())
     val scanHistory: StateFlow<List<ScanHistory>> = _scanHistory.asStateFlow()
 
+    private val _lastScanTimestamp = MutableStateFlow<Long>(0)
+    val lastScanTimestamp: StateFlow<Long> = _lastScanTimestamp.asStateFlow()
+
     init {
         loadHistory()
     }
 
     fun startScan() {
         if (_isScanning.value) return
+        val now = System.currentTimeMillis()
+        if (now - _lastScanTimestamp.value < TimeUnit.HOURS.toMillis(6)) {
+            return
+        }
         _isScanning.value = true
         _report.value = null
+        _lastScanTimestamp.value = now
 
         viewModelScope.launch {
             orchestrator.runFullScan().collect { state ->

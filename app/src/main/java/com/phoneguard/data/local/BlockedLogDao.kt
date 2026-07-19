@@ -26,4 +26,10 @@ interface BlockedLogDao {
 
     @Query("DELETE FROM blocked_log WHERE timestamp < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)
+
+    @Query("SELECT * FROM blocked_log ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
+    suspend fun getPagedBlockedLogs(limit: Int, offset: Int): List<BlockedLog>
+
+    @Query("SELECT COUNT(*) FROM blocked_log")
+    suspend fun getBlockedLogsCount(): Int
 }
