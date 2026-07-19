@@ -71,8 +71,8 @@ fun PrivacyScannerListScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.privacy_scanner)) },
                 actions = {
-                    IconButton(onClick = { viewModel.loadApps() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    IconButton(onClick = { viewModel.loadApps() }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
                     }
                 }
             )
@@ -191,7 +191,7 @@ fun PrivacyScannerDetailScreen(
             TopAppBar(
                 title = { Text(app?.appName ?: stringResource(R.string.app_name)) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = onNavigateBack, contentDescription = "Back") {
                         Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 }

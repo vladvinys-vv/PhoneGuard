@@ -51,6 +51,11 @@
 -keep class javax.crypto.** { *; }
 -keep class javax.crypto.spec.** { *; }
 
+# WorkManager / Hilt Workers
+-keep class androidx.work.** { *; }
+-keep class * extends androidx.hilt.work.HiltWorker { *; }
+-keep class com.phoneguard.worker.** { *; }
+
 # PhoneGuard util & UI
 -keep class com.phoneguard.util.** { *; }
 -keep class com.phoneguard.ui.screens.antitheft.** { *; }
@@ -77,3 +82,23 @@
 # Keep model classes
 -keep class com.phoneguard.model.** { *; }
 -keep class com.phoneguard.data.local.** { *; }
+
+# Navigation Compose
+-keep class androidx.navigation.compose.** { *; }
+-dontwarn androidx.navigation.compose.**
+
+# SQLCipher
+-keep class net.sqlcipher.** { *; }
+-dontwarn net.sqlcipher.**
+
+# Google Play Services
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
+# ML Kit
+-keep class com.google.mlkit.vision.face.** { *; }
+-dontwarn com.google.mlkit.vision.face.**
+
+# Optimization
+-optimizationpasses 5
+-allowaccessmodification

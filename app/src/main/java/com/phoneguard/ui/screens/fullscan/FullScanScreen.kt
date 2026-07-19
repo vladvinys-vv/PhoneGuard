@@ -36,8 +36,8 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
                 title = { Text(stringResource(R.string.full_scan)) },
                 actions = {
                     if (!isScanning) {
-                        IconButton(onClick = { viewModel.startScan() }) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Start Scan")
+                        IconButton(onClick = { viewModel.startScan() }, contentDescription = "Start Scan") {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
                         }
                     }
                 }
@@ -120,13 +120,13 @@ fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit, viewModel: FullScanV
             TopAppBar(
                 title = { Text("Scan Report") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = onBack, contentDescription = "Back") {
+                        Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.exportPdf(scan) }) {
-                        Icon(Icons.Default.FileDownload, contentDescription = stringResource(R.string.export_pdf))
+                    IconButton(onClick = { viewModel.exportPdf(scan) }, contentDescription = stringResource(R.string.export_pdf)) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
                     }
                 }
             )

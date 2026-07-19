@@ -66,8 +66,8 @@ fun VaultScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.secure_vault)) },
                 actions = {
-                    IconButton(onClick = { /* Room flows are reactive */ }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    IconButton(onClick = { /* Room flows are reactive */ }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
                     }
                 }
             )
@@ -198,12 +198,12 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (item.category == VaultItemCategory.IMAGE) {
-                    IconButton(onClick = { /* preview placeholder */ }) {
-                        Icon(Icons.Default.Visibility, contentDescription = "Preview")
+                    IconButton(onClick = { /* preview placeholder */ }, contentDescription = "Preview") {
+                        Icon(Icons.Default.Visibility, contentDescription = null)
                     }
                 }
-                IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Удалить")
+                IconButton(onClick = { showDeleteDialog = true }, contentDescription = "Удалить") {
+                    Icon(Icons.Default.Delete, contentDescription = null)
                 }
             }
         }

@@ -45,8 +45,8 @@ fun CallBlockerScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.call_sms_blocker)) },
                 actions = {
-                    IconButton(onClick = { /* Room flows are reactive; refresh is implicit */ }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    IconButton(onClick = { /* Room flows are reactive; refresh is implicit */ }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
                     }
                 }
             )
@@ -196,8 +196,8 @@ fun NumberListSection(
                 headlineContent = { Text(number.phoneNumber) },
                 supportingContent = number.name?.let { { Text(it) } },
                 trailingContent = {
-                    IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_number))
+                    IconButton(onClick = { showDeleteDialog = true }, contentDescription = stringResource(R.string.delete_number)) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
                     }
                 }
             )

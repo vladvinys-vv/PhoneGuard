@@ -91,8 +91,13 @@ class ShoulderSurferService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                startForeground(NOTIFICATION_ID, createNotification())
-                startDetection()
+                try {
+                    startForeground(NOTIFICATION_ID, createNotification())
+                    startDetection()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start shoulder surfer service", e)
+                    stopSelf()
+                }
             }
             ACTION_STOP -> {
                 stopDetection()
@@ -251,9 +256,10 @@ class ShoulderSurferService : LifecycleService() {
     }
 
     private fun notifySurferDetected() {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+            ?: Intent(this, com.phoneguard.ui.MainActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT

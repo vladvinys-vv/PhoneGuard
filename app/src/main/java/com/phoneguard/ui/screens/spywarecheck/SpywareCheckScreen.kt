@@ -34,8 +34,8 @@ fun SpywareCheckScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.spyware_check)) },
                 actions = {
-                    IconButton(onClick = { viewModel.scanForSpyware() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    IconButton(onClick = { viewModel.scanForSpyware() }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
                     }
                 }
             )

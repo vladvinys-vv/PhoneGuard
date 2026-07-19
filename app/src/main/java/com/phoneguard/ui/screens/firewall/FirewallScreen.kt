@@ -60,8 +60,8 @@ fun FirewallScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.firewall)) },
                 actions = {
-                    IconButton(onClick = { viewModel.loadApps() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    IconButton(onClick = { viewModel.loadApps() }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
                     }
                 }
             )
@@ -336,8 +336,8 @@ private fun AppFirewallItem(
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick = { showDomainDialog = true }) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit domains/IPs")
+                IconButton(onClick = { showDomainDialog = true }, contentDescription = "Edit domains/IPs") {
+                    Icon(Icons.Default.Edit, contentDescription = null)
                 }
                 FilterChip(
                     selected = blockAll,

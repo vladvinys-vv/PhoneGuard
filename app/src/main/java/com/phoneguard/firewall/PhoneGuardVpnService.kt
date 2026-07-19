@@ -234,44 +234,50 @@ class PhoneGuardVpnService : VpnService() {
      * 5. Block or forward
      */
     private suspend fun handlePacket(packet: ByteArray, output: FileOutputStream) {
+        try {
+            doHandlePacket(packet, output)
+        } catch (e: Exception) {
+            Log.w(TAG, "Packet handling failed, forwarding packet", e)
+            try {
+                output.write(packet)
+            } catch (_: Exception) {}
+        }
+    }
+
+    private suspend fun doHandlePacket(packet: ByteArray, output: FileOutputStream) {
         if (packet.size < 20) {
-            // Too small for IP header, forward
             output.write(packet)
             return
         }
 
-        // IPv4 version + header length
         val versionAndIHL = packet[0].toInt() and 0xFF
         val version = (versionAndIHL shr 4) and 0x0F
         val headerLen = (versionAndIHL and 0x0F) * 4
 
         if (version != 4 || headerLen < 20 || headerLen > packet.size) {
-            // Not IPv4 or invalid header, forward
             output.write(packet)
             return
         }
 
-        val totalLen = ((packet[2].toInt() and 0xFF) shl 8) or (packet[3].toInt() and 0xFF)
         val protocol = packet[9].toInt() and 0xFF
 
-        // Destination IP
-        val destIp = packet[16].toInt() and 0xFF to 0 or
-                     packet[17].toInt() and 0xFF to 8 or
-                     packet[18].toInt() and 0xFF to 16 or
-                     packet[19].toInt() and 0xFF to 24
+        val destIpBytes = byteArrayOf(
+            packet[16], packet[17], packet[18], packet[19]
+        )
+        val destIpStr = try {
+            InetAddress.getByAddress(destIpBytes).hostAddress ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
 
-        val destIpStr = InetAddress.getByAddress(
-            byteArrayOf(
-                packet[16], packet[17], packet[18], packet[19]
-            )
-        ).hostAddress ?: "unknown"
-
-        // Source IP
-        val srcIpStr = InetAddress.getByAddress(
-            byteArrayOf(
-                packet[12], packet[13], packet[14], packet[15]
-            )
-        ).hostAddress ?: "unknown"
+        val srcIpBytes = byteArrayOf(
+            packet[12], packet[13], packet[14], packet[15]
+        )
+        val srcIpStr = try {
+            InetAddress.getByAddress(srcIpBytes).hostAddress ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
 
         var destPort = 0
         var srcPort = 0
@@ -279,20 +285,16 @@ class PhoneGuardVpnService : VpnService() {
         if (headerLen + 4 <= packet.size) {
             when (protocol) {
                 6 -> { // TCP
-                    if (headerLen + 4 <= packet.size) {
-                        srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
-                                  (packet[headerLen + 1].toInt() and 0xFF)
-                        destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
-                                   (packet[headerLen + 3].toInt() and 0xFF)
-                    }
+                    srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
+                              (packet[headerLen + 1].toInt() and 0xFF)
+                    destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
+                               (packet[headerLen + 3].toInt() and 0xFF)
                 }
                 17 -> { // UDP
-                    if (headerLen + 4 <= packet.size) {
-                        srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
-                                  (packet[headerLen + 1].toInt() and 0xFF)
-                        destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
-                                   (packet[headerLen + 3].toInt() and 0xFF)
-                    }
+                    srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
+                              (packet[headerLen + 1].toInt() and 0xFF)
+                    destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
+                               (packet[headerLen + 3].toInt() and 0xFF)
                 }
                 1 -> { // ICMP — always allow
                     output.write(packet)
@@ -301,17 +303,14 @@ class PhoneGuardVpnService : VpnService() {
             }
         }
 
-        // Определяем UID через ConnectionManager
         val uid = getUidForConnection(destIpStr, destPort, protocol)
         if (uid == null) {
-            // Не можем определить UID — форвардим
             output.write(packet)
             return
         }
 
         val pkg = uidPackageCache[uid]
         if (pkg == null) {
-            // Пакет от системного процесса или неизвестного UID
             output.write(packet)
             return
         }
@@ -321,7 +320,6 @@ class PhoneGuardVpnService : VpnService() {
 
         if (shouldBlock) {
             logBlock(pkg, destIpStr, destPort, protocol)
-            // Drop packet (don't write to output)
         } else {
             output.write(packet)
         }

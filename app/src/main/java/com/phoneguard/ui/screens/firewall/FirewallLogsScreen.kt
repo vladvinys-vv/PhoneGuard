@@ -31,8 +31,8 @@ fun FirewallLogsScreen(
             TopAppBar(
                 title = { Text("Firewall Logs") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = onBack, contentDescription = "Back") {
+                        Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
