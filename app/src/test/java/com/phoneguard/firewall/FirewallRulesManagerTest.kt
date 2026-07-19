@@ -41,7 +41,7 @@ class FirewallRulesManagerTest {
                 updatedAt = System.currentTimeMillis()
             )
         )
-        coEvery { repository.allRules } returns flowOf(rules)
+        every { repository.allRules } returns flowOf(rules)
 
         manager.loadRules()
 
