@@ -3,6 +3,8 @@ package com.phoneguard.ui.screens.antitheft
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.media.MediaPlayer
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phoneguard.antitheft.DeviceAdminReceiverImpl
@@ -24,6 +26,7 @@ data class AntiTheftUiState(
     val isPhotoEnabled: Boolean = false,
     val isRemoteAlarmEnabled: Boolean = false,
     val isShoulderSurferEnabled: Boolean = false,
+    val isAlarmPlaying: Boolean = false,
     val isPro: Boolean = false,
     val isLoading: Boolean = false
 )
@@ -137,5 +140,37 @@ class AntiTheftViewModel @Inject constructor(
 
     fun validatePin(pin: String): Boolean {
         return pin.length >= 4 && pin.all { it.isDigit() }
+    }
+
+    private var alarmPlayer: MediaPlayer? = null
+
+    fun playAlarm() {
+        if (alarmPlayer != null) return
+        viewModelScope.launch {
+            try {
+                val alarmUri: Uri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+                    ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+                alarmPlayer = MediaPlayer.create(context, alarmUri)?.apply {
+                    isLooping = true
+                    start()
+                }
+                _uiState.update { it.copy(isAlarmPlaying = true) }
+                sendEvent(Event.ShowSnackbar(context.getString(R.string.alarm_started)))
+            } catch (e: Exception) {
+                sendEvent(Event.ShowSnackbar("Не удалось запустить сигнализацию"))
+            }
+        }
+    }
+
+    fun stopAlarm() {
+        viewModelScope.launch {
+            try {
+                alarmPlayer?.stop()
+                alarmPlayer?.release()
+            } catch (e: Exception) {}
+            alarmPlayer = null
+            _uiState.update { it.copy(isAlarmPlaying = false) }
+            sendEvent(Event.ShowSnackbar(context.getString(R.string.alarm_stopped)))
+        }
     }
 }

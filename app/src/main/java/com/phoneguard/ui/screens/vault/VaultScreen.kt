@@ -25,6 +25,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.VaultItem
+import com.phoneguard.model.VaultItemCategory
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -180,12 +181,23 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
                         androidx.compose.ui.platform.LocalContext.current,
                         item.fileSize
                     )
-                }"
+                } • ${item.category.name}"
+            )
+        },
+        leadingContent = {
+            Icon(
+                imageVector = when (item.category) {
+                    VaultItemCategory.IMAGE -> Icons.Default.Image
+                    VaultItemCategory.VIDEO -> Icons.Default.PlayArrow
+                    VaultItemCategory.DOCUMENT -> Icons.Default.Description
+                    VaultItemCategory.OTHER -> Icons.Default.InsertDriveFile
+                },
+                contentDescription = item.category.name
             )
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (item.isImage) {
+                if (item.category == VaultItemCategory.IMAGE) {
                     IconButton(onClick = { /* preview placeholder */ }) {
                         Icon(Icons.Default.Visibility, contentDescription = "Preview")
                     }

@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -100,14 +101,36 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit) {
+fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit, viewModel: FullScanViewModel = hiltViewModel()) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val exportResult by viewModel.exportPdfResult.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(exportResult) {
+        exportResult?.let { path ->
+            val message = context.getString(R.string.export_pdf_success, path)
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearExportResult()
+        } ?: run {
+            if (viewModel.exportPdfResult.value == null && exportResult == null) {
+                // no change
+            }
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Scan Report") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.exportPdf(scan) }) {
+                        Icon(Icons.Default.FileDownload, contentDescription = stringResource(R.string.export_pdf))
                     }
                 }
             )

@@ -257,5 +257,12 @@
     <string name="analytics_consent_title">Аналитика</string>
     <string name="analytics_consent_description">Отправлять анонимную статистику для улучшения приложения</string>
     <string name="analytics_enabled">Аналитика включена</string>
+    <string name="export_pdf">Экспорт PDF</string>
+    <string name="export_pdf_success">Отчёт сохранён: %1$s</string>
+    <string name="export_pdf_failed">Не удалось экспортировать отчёт</string>
+    <string name="siren_alarm">Сигнализация</string>
+    <string name="siren_alarm_description">Запустить громкий сигнал на устройстве</string>
+    <string name="alarm_started">Сигнализация запущена</string>
+    <string name="alarm_stopped">Сигнализация остановлена</string>
 
 </resources>

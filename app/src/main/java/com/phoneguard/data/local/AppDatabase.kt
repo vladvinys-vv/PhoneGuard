@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
 import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -15,6 +16,8 @@ import com.phoneguard.model.FirewallLog
 import com.phoneguard.model.VaultItem
 import com.phoneguard.model.SimSwapEvent
 import com.phoneguard.model.ScanHistory
+import com.phoneguard.model.VaultItemCategory
+import com.phoneguard.model.FirewallLog
 import com.phoneguard.util.DatabaseKeyManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import net.sqlcipher.database.SupportFactory
@@ -32,7 +35,7 @@ import javax.inject.Singleton
         ScanHistory::class,
         com.phoneguard.model.SpamNumber::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = true,
     autoMigrations = []
 )
@@ -43,6 +46,26 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun vaultDao(): VaultDao
     abstract fun simSwapEventDao(): com.phoneguard.model.SimSwapEventDao
     abstract fun scanHistoryDao(): ScanHistoryDao
+
+    companion object {
+        @TypeConverter
+        @JvmStatic
+        fun fromVaultItemCategory(value: VaultItemCategory): String = value.name
+
+        @TypeConverter
+        @JvmStatic
+        fun toVaultItemCategory(value: String): VaultItemCategory =
+            VaultItemCategory.valueOf(value.ifEmpty { VaultItemCategory.OTHER.name })
+
+        @TypeConverter
+        @JvmStatic
+        fun fromTrafficDirection(value: FirewallLog.TrafficDirection): String = value.name
+
+        @TypeConverter
+        @JvmStatic
+        fun toTrafficDirection(value: String): FirewallLog.TrafficDirection =
+            FirewallLog.TrafficDirection.valueOf(value.ifEmpty { FirewallLog.TrafficDirection.UNKNOWN.name })
+    }
 }
 
 @Singleton
@@ -158,12 +181,25 @@ class AppDatabaseProvider @Inject constructor(
         }
     }
 
+    private val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `vault_items` ADD COLUMN `category` TEXT NOT NULL DEFAULT 'OTHER'")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_vault_items_category` ON `vault_items` (`category`)")
+        }
+    }
+
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `firewall_logs` ADD COLUMN `trafficDirection` TEXT NOT NULL DEFAULT 'UNKNOWN'")
+        }
+    }
+
     val database: AppDatabase = Room.databaseBuilder(
         context,
         AppDatabase::class.java,
         "phoneguard_db"
     )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
         .openHelperFactory { config ->
             val passphrase = databaseKeyManager.getDatabasePassphrase()
             val factory = SupportFactory(passphrase)

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -216,7 +217,7 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
                 onCheckedChange = { viewModel.toggleRemoteAlarm(it) }
             )
 
-    // Shoulder Surfer Detection
+            // Shoulder Surfer Detection
             var hasCameraPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
             val cameraPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission()
@@ -236,6 +237,21 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
                         cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
                     } else {
                         viewModel.toggleShoulderSurfer(enabled)
+                    }
+                }
+            )
+
+            // Siren Alarm
+            FeatureToggleCard(
+                title = stringResource(R.string.siren_alarm),
+                description = stringResource(R.string.siren_alarm_description),
+                icon = Icons.Default.VolumeUp,
+                checked = uiState.isAlarmPlaying,
+                onCheckedChange = { enabled ->
+                    if (enabled) {
+                        viewModel.playAlarm()
+                    } else {
+                        viewModel.stopAlarm()
                     }
                 }
             )

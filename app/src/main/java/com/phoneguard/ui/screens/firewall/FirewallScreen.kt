@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
@@ -33,6 +34,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.FirewallRule
+import com.phoneguard.model.FirewallLog
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.core.graphics.drawable.toBitmap
@@ -44,6 +46,7 @@ fun FirewallScreen(
 ) {
     val context = LocalContext.current
     val apps by viewModel.apps.collectAsState()
+    val logs by viewModel.allLogs.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
 
     val vpnLauncher = rememberLauncherForActivityResult(
@@ -132,15 +135,15 @@ fun FirewallScreen(
                     Button(
                         onClick = {
                             if (isVpnActive) {
-                        viewModel.stopVpn()
-                    } else {
-                        val vpnIntent = viewModel.prepareVpn()
-                        if (vpnIntent != null) {
-                            vpnLauncher.launch(vpnIntent)
-                        } else {
-                            viewModel.onVpnPrepared()
-                        }
-                    }
+                                viewModel.stopVpn()
+                            } else {
+                                val vpnIntent = viewModel.prepareVpn()
+                                if (vpnIntent != null) {
+                                    vpnLauncher.launch(vpnIntent)
+                                } else {
+                                    viewModel.onVpnPrepared()
+                                }
+                            }
                         }
                     ) {
                         Text(
@@ -187,6 +190,32 @@ fun FirewallScreen(
                     }
                 }
             }
+
+            // Recent Logs
+            if (logs.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Recent Blocks",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 200.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(logs.take(20)) { log ->
+                        ListItem(
+                            headlineContent = { Text(log.appName) },
+                            supportingContent = {
+                                Text("${log.ipAddress ?: log.domainName} • ${log.trafficDirection.name} • ${log.connectionType.name}")
+                            }
+                        )
+                        Divider()
+                    }
+                }
+            }
         }
     )
 }
@@ -197,6 +226,7 @@ private fun AppFirewallItem(
     onRuleChanged: (com.phoneguard.model.FirewallRule) -> Unit
 ) {
     var rule by remember { mutableStateOf(appInfo.rule) }
+    var showDomainDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     val blockWifi = rule?.blockWifi ?: false
@@ -234,6 +264,65 @@ private fun AppFirewallItem(
         onRuleChanged(newRule)
     }
 
+    if (showDomainDialog) {
+        var domainsText by remember { mutableStateOf(rule?.blockedDomains?.removeSurrounding("[", "]")?.replace("\"", "") ?: "") }
+        var ipsText by remember { mutableStateOf(rule?.blockedIps?.removeSurrounding("[", "]")?.replace("\"", "") ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showDomainDialog = false },
+            title = { Text("Block domains/IPs") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = domainsText,
+                        onValueChange = { domainsText = it },
+                        label = { Text("Domains (comma separated)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = ipsText,
+                        onValueChange = { ipsText = it },
+                        label = { Text("IPs (comma separated)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newRule = (rule ?: com.phoneguard.model.FirewallRule(
+                        packageName = appInfo.packageName,
+                        appName = appInfo.appName,
+                        blockWifi = false,
+                        blockMobile = false,
+                        blockAll = false,
+                        blockVpn = false,
+                        blockBackground = false,
+                        blockedDomains = "[]",
+                        blockedIps = "[]",
+                        allowByDefault = true,
+                        allowWifiOnly = false,
+                        allowMobileOnly = false,
+                        updatedAt = System.currentTimeMillis()
+                    )).copy(
+                        blockedDomains = domainsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toString(),
+                        blockedIps = ipsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toString(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    rule = newRule
+                    onRuleChanged(newRule)
+                    showDomainDialog = false
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDomainDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     ListItem(
         modifier = Modifier.fillMaxWidth(),
         headlineContent = { Text(appInfo.appName) },
@@ -247,6 +336,9 @@ private fun AppFirewallItem(
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick = { showDomainDialog = true }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit domains/IPs")
+                }
                 FilterChip(
                     selected = blockAll,
                     onClick = {
@@ -307,22 +399,5 @@ private fun AppFirewallItem(
             }
         }
     )
-}
-                }
-            } else {
-                LazyColumn {
-                    items(apps) { app ->
-                        AppFirewallItem(
-                            appInfo = app,
-                            onRuleChanged = { rule ->
-                                viewModel.upsertRule(rule)
-                            }
-                        )
-                        Divider()
-                    }
-                }
-            }
-        }
-    }
 }
 

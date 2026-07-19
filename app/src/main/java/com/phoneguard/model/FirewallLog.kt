@@ -12,7 +12,9 @@ data class FirewallLog(
     val ipAddress: String? = null,
     val domainName: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
-    val connectionType: ConnectionType
+    val connectionType: ConnectionType,
+    val trafficDirection: TrafficDirection = TrafficDirection.UNKNOWN
 ) {
     enum class ConnectionType { WIFI, MOBILE, UNKNOWN }
+    enum class TrafficDirection { INBOUND, OUTBOUND, UNKNOWN }
 }

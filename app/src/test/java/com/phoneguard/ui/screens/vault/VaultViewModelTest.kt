@@ -3,6 +3,7 @@ package com.phoneguard.ui.screens.vault
 import app.cash.turbine.test
 import com.phoneguard.data.repository.VaultRepository
 import com.phoneguard.model.VaultItem
+import com.phoneguard.model.VaultItemCategory
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,7 +55,7 @@ class VaultViewModelTest {
 
     @Test
     fun `allItems emits repository list`() = runTest {
-        val items = listOf(VaultItem(1, "file1", 100, "image/jpeg", "key1", 0, true))
+        val items = listOf(VaultItem(1, "file1", 100, "image/jpeg", "key1", 0, VaultItemCategory.IMAGE))
         every { repository.allItems } returns flowOf(items)
 
         viewModel.allItems.test {

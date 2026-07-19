@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import androidx.security.crypto.EncryptedFile
 import androidx.security.crypto.MasterKey
 import com.phoneguard.model.VaultItem
+import com.phoneguard.model.VaultItemCategory
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -63,7 +64,12 @@ class EncryptionManager @Inject constructor(
             fileSize = fileSize,
             mimeType = mimeType,
             encryptionKeyAlias = masterKey.keyAlias,
-            isImage = mimeType.startsWith("image/")
+            category = when {
+                mimeType.startsWith("image/") -> VaultItemCategory.IMAGE
+                mimeType.startsWith("video/") -> VaultItemCategory.VIDEO
+                mimeType.startsWith("application/pdf") || mimeType.startsWith("text/") -> VaultItemCategory.DOCUMENT
+                else -> VaultItemCategory.OTHER
+            }
         )
     }
 

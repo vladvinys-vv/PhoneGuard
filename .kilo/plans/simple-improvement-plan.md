@@ -31,6 +31,8 @@
 - [x] Добавить выбор языка в Settings
 - [x] Добавить темную тему / настройку темы
 - [x] Добавить экспорт логов / reports в JSON
+- [x] PDF export integration in FullScan UI
+- [x] Scan comparison UI in FullScan
 - [x] Онбординг при первом запуске
 
 ## 5. Тесты и CI
@@ -67,4 +69,13 @@
 - [x] Добавить уведомления о блокировке звонков
 - [x] Добавить LeakCanary для детекта утечек памяти
 - [x] Добавить gradle.properties для production сборки
+- [x] Vault multi-category support (IMAGE, VIDEO, DOCUMENT, OTHER)
+- [x] Firewall log detailization (appName, trafficDirection)
+- [x] Firewall domain/IP management UI
+- [x] AntiTheft siren/alarm with MediaPlayer
+- [x] Unit tests for PdfExportHelper and AntiTheft alarm
+- [x] Privacy Policy template
+- [x] Play Store listing template
+- [x] Changelog template
+- [x] Manual testing checklist
 

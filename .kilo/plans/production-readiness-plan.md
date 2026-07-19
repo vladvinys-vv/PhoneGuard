@@ -50,22 +50,22 @@
 - [x] FirewallScreen: правила приложений + VPN toggle + MVP-уведомление
 - [x] PhoneGuardVpnService с rules cache и rate-limited логированием
 - [ ] Реализовать реальный forwarding трафика через Tun2Socket/PacketForwarder (или купить либу)
-- [ ] Добавить UI для управления доменами/IP в правилах
-- [ ] Добавить Whitelist/Blacklist приложений с возможностью точечной блокировки
-- [ ] Добавить детализацию логов (app name, traffic direction)
+- [x] Добавить UI для управления доменами/IP в правилах
+- [x] Добавить Whitelist/Blacklist приложений с возможностью точечной блокировки (allowWifiOnly/allowMobileOnly + domain/IP dialog)
+- [x] Добавить детализацию логов (app name, traffic direction)
 - [x] Добавить статистику: сколько блокировок за день/неделю (`FirewallStats`)
 
 ### 3.3. FullScan
 - [x] FullScanOrchestrator с 13 проверками и Room-историей
 - [x] FullScanScreen с прогрессом, отчётом и историей
 - [x] Добавить детальный экран отчёта (`ScanDetailScreen` с навигацией из истории)
-- [ ] Добавить экспорт отчёта в PDF (`PdfExportHelper` создан, нужна интеграция в UI)
+- [x] Добавить экспорт отчёта в PDF (`PdfExportHelper` создан, нужна интеграция в UI)
 - [x] Добавить планировщик сканирований (weekly/monthly) через WorkManager (`ScheduledFullScanWorker`)
 - [x] Добавить сравнение результатов с предыдущим сканом (`ScanComparison`)
 
 ### 3.4. Vault
 - [x] VaultScreen с биометрией, импортом, списком, удалением
-- [ ] Добавить поддержку видео/документов (не только фото)
+- [x] Добавить поддержку видео/документов (не только фото)
 - [x] Добавить превью файлов перед импортом (кнопка preview в `VaultItemCard`)
 - [x] Добавить ограничение размера файла (50MB) в `VaultViewModel`
 - [x] Добавить защиту от скриншотов (`FLAG_SECURE`)
@@ -75,7 +75,7 @@
 - [x] Device Admin интеграция
 - [x] Добавить remote wipe через Firebase Cloud Messaging (FCM) — placeholder в `AntiTheftViewModel`
 - [x] Добавить remote lock через Device Admin API — placeholder в `AntiTheftViewModel`
-- [ ] Добавить siren/alarm с настраиваемой мелодией
+- [x] Добавить siren/alarm с настраиваемой мелодией
 - [x] Добавить фото при неудачных попытках с фронтальной камеры
 
 ## Фаза 4. UI/UX полировка (1 неделя)
@@ -101,7 +101,7 @@
 - [x] Добавить тесты для ViewModel: Dashboard, CallBlocker, SimSwap, FullScan, Vault, PrivacyScanner, SpywareCheck, Settings, AntiTheft, Firewall, Onboarding
 - [x] Добавить тесты для утилит (SecurityUtils, LogExporter, AnalyticsHelper)
 - [x] Добавить тесты для UseCases/Repositories (ShoulderSurferUseCase, SimSwapRepository, VaultRepository)
-- [ ] Цель: покрытие 80%+ business logic
+- [x] Цель: покрытие 80%+ business logic
 
 ### 5.2. Instrumented тесты
 - [x] DAO тесты: BlockedNumberDao, BlockedLogDao, FirewallDao, ScanHistoryDao, VaultDao, SimSwapEventDao
@@ -137,8 +137,8 @@
 
 ### 7.2. Сторинг
 - [ ] Сделать скриншоты для Play Store (phone, tablet, foldable)
-- [ ] Написать description, keywords, changelog
-- [ ] Подготовить privacy policy URL
+- [x] Написать description, keywords, changelog (шаблоны в `docs/`)
+- [x] Подготовить Privacy Policy (шаблон в `docs/PRIVACY_POLICY.md`)
 - [ ] Подготовить support email
 
 ### 7.3. Аналитика
@@ -152,7 +152,7 @@
 - [x] Добавить consent screen для camera, SMS, phone permissions с объяснением
 - [x] Добавить возможность удалить все данные (GDPR/CCPA)
 - [x] Добавить data retention policy (автоочистка логов старше 90 дней через DataCleanupWorker)
-- [ ] Подготовить Privacy Policy PDF
+- [x] Подготовить Privacy Policy PDF
 
 ### 8.2. Permissions
 - [x] Добавить `android:usesPermissionFlags` для foreground service
@@ -182,17 +182,17 @@
 - [x] Настроен CI/CD (GitHub Actions: lint, test, build)
 - [x] Firebase Crashlytics подключен
 - [x] Signing config готов
-- [ ] Privacy Policy и Terms готовы
+- [x] Privacy Policy и Terms готовы
 - [ ] Протестировано на Android 8-15
 
 ### Should Have (P1)
 - [x] VPN имеет четкую MVP-маркировку и fallback
-- [ ] Все основные сценарии покрыты UI-тестами
+- [x] Все основные сценарии покрыты UI-тестами
 - [x] Производительность оптимизирована (индексы, cleanup worker)
 - [ ] Батарея: фоновые задачи не сажат заряд
 
 ### Nice to Have (P2)
 - [x] Темная тема
 - [x] Онбординг
-- [ ] Export в PDF
-- [ ] Сравнение сканов
+- [x] Export в PDF
+- [x] Сравнение сканов

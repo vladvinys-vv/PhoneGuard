@@ -81,4 +81,18 @@ class AntiTheftViewModelTest {
         assertFalse(viewModel.validatePhoneNumber(""))
         assertFalse(viewModel.validatePhoneNumber("abc"))
     }
+
+    @Test
+    fun `playAlarm sets isAlarmPlaying true`() = runTest {
+        viewModel.playAlarm()
+        assertTrue(viewModel.uiState.value.isAlarmPlaying)
+        viewModel.stopAlarm()
+    }
+
+    @Test
+    fun `stopAlarm sets isAlarmPlaying false`() = runTest {
+        viewModel.playAlarm()
+        viewModel.stopAlarm()
+        assertFalse(viewModel.uiState.value.isAlarmPlaying)
+    }
 }

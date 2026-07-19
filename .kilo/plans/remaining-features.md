@@ -11,24 +11,24 @@ This document tracks features that are planned but not yet fully implemented.
 
 ## Firewall
 - **Real Traffic Forwarding**: Requires `Tun2Socket` / `PacketForwarder` library or root access. Current implementation is MVP with VPN interface but no actual packet inspection.
-- **Domain/IP Management**: UI for managing blocked domains and IPs per app.
+- **Domain/IP Management**: UI for managing blocked domains and IPs per app (implemented via edit dialog in AppFirewallItem).
 - **Traffic Statistics**: Daily/weekly blocking statistics per app (partially implemented via `FirewallStats`).
-- **Log Details**: Add traffic direction (inbound/outbound) and app name to logs.
+- **Log Details**: Add traffic direction (inbound/outbound) and app name to logs (implemented).
 
 ## FullScan
 - **Detailed Report Screen**: Tap on scan history to view full report with all issues.
-- **PDF Export**: Export scan report as PDF.
-- **Scan Comparison**: Basic comparison implemented (`ScanComparison` in `FullScanViewModel`). Needs UI integration.
+- **PDF Export**: Export scan report as PDF (integrated into ScanDetailScreen).
+- **Scan Comparison**: Basic comparison implemented (`ScanComparison` in `FullScanViewModel`). UI integration in progress.
 
 ## Vault
-- **Video/Document Support**: Currently supports images only. Extend to video, PDF, documents.
+- **Video/Document Support**: Implemented via `VaultItemCategory` enum (IMAGE, VIDEO, DOCUMENT, OTHER).
 - **File Preview**: Show thumbnail preview before importing.
 - **File Size Limit**: Implemented (50MB limit in `VaultViewModel`).
 
 ## AntiTheft
-- **Remote Wipe via FCM**: Implement Firebase Cloud Messaging for remote wipe command.
-- **Remote Lock via Device Admin**: Use `DeviceAdminReceiver` for remote lock.
-- **Siren/Alarm**: Customizable alarm sound for remote alarm feature.
+- **Remote Wipe via FCM**: Implement Firebase Cloud Messaging for remote wipe command (placeholder).
+- **Remote Lock via Device Admin**: Use `DeviceAdminReceiver` for remote lock (placeholder).
+- **Siren/Alarm**: Customizable alarm sound implemented via MediaPlayer with system alarm URI.
 - **Failed Attempts Photo**: Implemented via camera permission and photo capture.
 
 ## Performance
@@ -36,14 +36,14 @@ This document tracks features that are planned but not yet fully implemented.
 - **Network Caching**: Implemented 24h cache for `getInstalledApps()` via `InstalledAppsCache`.
 
 ## Testing
-- **Manual Testing**: Required on Android 8, 10, 12, 13, 14, 15 across Samsung, Xiaomi, Huawei, Pixel.
+- **Manual Testing**: Checklist created (`MANUAL_TESTING.md`). Required on Android 8, 10, 12, 13, 14, 15 across Samsung, Xiaomi, Huawei, Pixel.
 - **Battery Testing**: Use Battery Historian to verify background task efficiency.
 - **Memory Testing**: LeakCanary added as debug dependency.
 
 ## Release
-- **Firebase Config**: Add `google-services.json` for Firebase Analytics and Crashlytics.
-- **Play Store Assets**: Screenshots, description, keywords, changelog.
-- **Privacy Policy**: Create privacy policy document.
+- **Firebase Config**: Add `google-services.json` for Firebase Analytics and Crashlytics (requires real Firebase project).
+- **Play Store Assets**: Screenshots, description, keywords, changelog (templates created in `docs/`).
+- **Privacy Policy**: Created (`docs/PRIVACY_POLICY.md`).
 - **Support Email**: Configure support contact.
 
 ## Completed
@@ -93,7 +93,7 @@ This document tracks features that are planned but not yet fully implemented.
 - [x] Battery optimization prompt
 - [x] usesPermissionFlags and permissionGroup in manifest
 - [x] Detailed report screen for FullScan (`ScanDetailScreen`)
-- [x] PDF export utility (`PdfExportHelper`)
+- [x] PDF export utility (`PdfExportHelper`) with UI integration
 - [x] File preview button in Vault
 - [x] FCM remote wipe/lock placeholders in AntiTheft
 - [x] Spam database schema (`SpamNumber` entity + DAO + migration)
@@ -103,3 +103,12 @@ This document tracks features that are planned but not yet fully implemented.
 - [x] Block notifications for CallBlocker
 - [x] LeakCanary for memory leak detection
 - [x] gradle.properties for production builds
+- [x] Vault multi-category support (IMAGE, VIDEO, DOCUMENT, OTHER)
+- [x] Firewall log detailization (appName, trafficDirection)
+- [x] Firewall domain/IP management UI
+- [x] AntiTheft siren/alarm with MediaPlayer
+- [x] Unit tests for PdfExportHelper and AntiTheft alarm
+- [x] Privacy Policy template
+- [x] Play Store listing template
+- [x] Changelog template
+- [x] Manual testing checklist

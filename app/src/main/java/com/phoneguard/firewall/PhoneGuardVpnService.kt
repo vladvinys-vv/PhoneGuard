@@ -377,19 +377,18 @@ class PhoneGuardVpnService : VpnService() {
         val connectionType = if (isOnWifi()) FirewallLog.ConnectionType.WIFI
         else FirewallLog.ConnectionType.MOBILE
 
-        val protoName = when (protocol) {
-            6 -> "TCP"
-            17 -> "UDP"
-            else -> "IP"
-        }
+        val trafficDirection = FirewallLog.TrafficDirection.OUTBOUND
+
+        val appName = resolveAppName(packageName)
 
         val log = FirewallLog(
             packageName = packageName,
-            appName = packageName, // Will be resolved by UI
+            appName = appName,
             ipAddress = "$destIp:$destPort",
             domainName = null,
             timestamp = System.currentTimeMillis(),
-            connectionType = connectionType
+            connectionType = connectionType,
+            trafficDirection = trafficDirection
         )
 
         firewallRepository.insertLog(log)
@@ -402,7 +401,16 @@ class PhoneGuardVpnService : VpnService() {
             } catch (_: Exception) {}
         }
 
-        Log.d(TAG, "BLOCKED: $packageName → $destIp:$destPort ($protoName)")
+        Log.d(TAG, "BLOCKED: $packageName → $destIp:$destPort")
+    }
+
+    private fun resolveAppName(packageName: String): String {
+        return try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            packageManager.getApplicationLabel(appInfo).toString()
+        } catch (e: Exception) {
+            packageName
+        }
     }
 
     /**

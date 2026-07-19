@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.fullscan.FullScanOrchestrator
 import com.phoneguard.model.FullScanReport
 import com.phoneguard.model.ScanHistory
+import com.phoneguard.util.PdfExportHelper
 import com.phoneguard.util.PerformanceMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -17,7 +18,8 @@ import javax.inject.Inject
 @HiltViewModel
 class FullScanViewModel @Inject constructor(
     private val orchestrator: FullScanOrchestrator,
-    private val performanceMonitor: PerformanceMonitor
+    private val performanceMonitor: PerformanceMonitor,
+    private val pdfExportHelper: PdfExportHelper
 ) : ViewModel() {
 
     private val _isScanning = MutableStateFlow(false)
@@ -37,6 +39,9 @@ class FullScanViewModel @Inject constructor(
 
     private val _comparison = MutableStateFlow<ScanComparison?>(null)
     val comparison: StateFlow<ScanComparison?> = _comparison.asStateFlow()
+
+    private val _exportPdfResult = MutableStateFlow<String?>(null)
+    val exportPdfResult: StateFlow<String?> = _exportPdfResult.asStateFlow()
 
     init {
         loadHistory()
@@ -100,6 +105,21 @@ class FullScanViewModel @Inject constructor(
 
     suspend fun getLatestSummary(): Pair<Int?, String?> =
         orchestrator.getLatestScanSummary()
+
+    fun exportPdf(scan: ScanHistory) {
+        viewModelScope.launch {
+            val file = pdfExportHelper.exportScanReport(scan)
+            if (file != null) {
+                _exportPdfResult.value = file.absolutePath
+            } else {
+                _exportPdfResult.value = null
+            }
+        }
+    }
+
+    fun clearExportResult() {
+        _exportPdfResult.value = null
+    }
 
     data class ScanComparison(
         val riskScoreDiff: Int,
