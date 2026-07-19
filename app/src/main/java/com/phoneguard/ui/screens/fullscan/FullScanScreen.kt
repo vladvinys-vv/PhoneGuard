@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.compose.rememberNavController
 import com.phoneguard.R
 import com.phoneguard.model.*
 import java.text.SimpleDateFormat
@@ -26,6 +27,7 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
     val progress by viewModel.progress.collectAsState()
     val report by viewModel.report.collectAsState()
     val scanHistory by viewModel.scanHistory.collectAsState()
+    val navController = rememberNavController()
 
     Scaffold(
         topBar = {
@@ -41,34 +43,54 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            if (isScanning) {
-                ScanProgressCard(progress)
-            }
-
-            report?.let { r ->
-                ScanReportCard(report = r)
-            }
-
-            if (scanHistory.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.scan_history),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
+        NavHost(navController = navController, startDestination = "fullscan_main") {
+            composable("fullscan_main") {
+                Column(
+                    modifier = Modifier
+                        .padding(padding)
+                        .fillMaxSize()
+                        .padding(16.dp)
                 ) {
-                    items(scanHistory) { history ->
-                        ScanHistoryCard(history)
+                    if (isScanning) {
+                        ScanProgressCard(progress)
+                    }
+
+                    report?.let { r ->
+                        ScanReportCard(report = r)
+                    }
+
+                    if (scanHistory.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.scan_history),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            items(scanHistory) { history ->
+                                ScanHistoryCard(
+                                    history = history,
+                                    onClick = {
+                                        navController.navigate("scan_detail/${history.id}")
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            composable("scan_detail/{scanId}") { backStackEntry ->
+                val scanId = backStackEntry.arguments?.getString("scanId")?.toLongOrNull()
+                val scan = scanHistory.find { it.id == scanId }
+                if (scan != null) {
+                    ScanDetailScreen(scan = scan, onBack = { navController.popBackStack() })
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Scan not found")
                     }
                 }
             }
@@ -76,8 +98,70 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScanHistoryCard(history: ScanHistory) {
+fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Scan Report") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = when {
+                        scan.riskScore >= 80 -> Color(0xFFC8E6C9)
+                        scan.riskScore >= 50 -> Color(0xFFFFF9C4)
+                        else -> Color(0xFFFFCDD2)
+                    }
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Risk Score: ${scan.riskScore}/100",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Issues Found: ${scan.issuesFound}")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Date: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(scan.timestamp))}")
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Report Details",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = scan.reportJson,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanHistoryCard(history: ScanHistory, onClick: () -> Unit = {}) {
     val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
     val dateText = sdf.format(Date(history.timestamp))
 

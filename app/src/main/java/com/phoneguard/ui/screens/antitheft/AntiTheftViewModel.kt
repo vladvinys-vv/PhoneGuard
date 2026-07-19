@@ -123,6 +123,14 @@ class AntiTheftViewModel @Inject constructor(
         }
     }
 
+    fun triggerRemoteWipe() {
+        sendEvent(Event.ShowSnackbar("Remote wipe requires FCM integration"))
+    }
+
+    fun triggerRemoteLock() {
+        sendEvent(Event.ShowSnackbar("Remote lock requires Device Admin API"))
+    }
+
     fun validatePhoneNumber(number: String): Boolean {
         return number.isNotBlank() && android.util.Patterns.PHONE.matcher(number).matches()
     }

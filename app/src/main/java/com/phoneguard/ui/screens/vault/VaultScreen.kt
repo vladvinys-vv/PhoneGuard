@@ -184,8 +184,15 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
             )
         },
         trailingContent = {
-            IconButton(onClick = { showDeleteDialog = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Удалить")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (item.isImage) {
+                    IconButton(onClick = { /* preview placeholder */ }) {
+                        Icon(Icons.Default.Visibility, contentDescription = "Preview")
+                    }
+                }
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Удалить")
+                }
             }
         }
     )

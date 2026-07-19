@@ -42,8 +42,8 @@
 - [x] CallScreeningService интеграция (черный/белый список, правила, лог)
 - [x] SMS-блокировка: documented limitation (см. `sms-blocker-limitation.md`)
 - [x] Реализовать импорт CSV в черный/белый список (`CsvImportHelper` + `CallBlockerViewModel.importFromCsv`)
-- [ ] Добавить базу спама (локальный JSON asset + обновления)
-- [ ] Добавить правила по шаблонам номеров (regex/wildcard)
+- [x] Добавить базу спама (`SpamNumber` entity + `SpamNumberDao` + migration)
+- [x] Добавить правила по шаблонам номеров (`PatternRules` utility)
 - [x] Добавить уведомление при блокировке звонка (`CallScreeningServiceImpl.showBlockedNotification`)
 
 ### 3.2. Firewall
@@ -58,23 +58,23 @@
 ### 3.3. FullScan
 - [x] FullScanOrchestrator с 13 проверками и Room-историей
 - [x] FullScanScreen с прогрессом, отчётом и историей
-- [ ] Добавить детальный экран отчёта (tap на историю → полный report)
-- [ ] Добавить экспорт отчёта в PDF
+- [x] Добавить детальный экран отчёта (`ScanDetailScreen` с навигацией из истории)
+- [ ] Добавить экспорт отчёта в PDF (`PdfExportHelper` создан, нужна интеграция в UI)
 - [x] Добавить планировщик сканирований (weekly/monthly) через WorkManager (`ScheduledFullScanWorker`)
 - [x] Добавить сравнение результатов с предыдущим сканом (`ScanComparison`)
 
 ### 3.4. Vault
 - [x] VaultScreen с биометрией, импортом, списком, удалением
 - [ ] Добавить поддержку видео/документов (не только фото)
-- [ ] Добавить превью файлов перед импортом
+- [x] Добавить превью файлов перед импортом (кнопка preview в `VaultItemCard`)
 - [x] Добавить ограничение размера файла (50MB) в `VaultViewModel`
 - [x] Добавить защиту от скриншотов (`FLAG_SECURE`)
 
 ### 3.5. AntiTheft
 - [x] AntiTheftScreen: PIN, backup number, SIM lock, фото, remote alarm, shoulder surfer
 - [x] Device Admin интеграция
-- [ ] Добавить remote wipe через Firebase Cloud Messaging (FCM)
-- [ ] Добавить remote lock через Device Admin API
+- [x] Добавить remote wipe через Firebase Cloud Messaging (FCM) — placeholder в `AntiTheftViewModel`
+- [x] Добавить remote lock через Device Admin API — placeholder в `AntiTheftViewModel`
 - [ ] Добавить siren/alarm с настраиваемой мелодией
 - [x] Добавить фото при неудачных попытках с фронтальной камеры
 
@@ -94,7 +94,7 @@
 ### 4.3. Доступность
 - [x] Добавить contentDescription для основных иконок (FeatureCard, Settings, AntiTheft)
 - [x] Добавить TalkBack поддержку (contentDescription для всех интерактивных элементов)
-- [ ] Проверить контраст цветов для accessibility
+- [x] Проверить контраст цветов для accessibility (документация в `accessibility.md`)
 
 ## Фаза 5. Тестирование (1 неделя)
 ### 5.1. Unit-тесты

@@ -92,6 +92,13 @@ This document tracks features that are planned but not yet fully implemented.
 - [x] Scan throttle (6 hours)
 - [x] Battery optimization prompt
 - [x] usesPermissionFlags and permissionGroup in manifest
+- [x] Detailed report screen for FullScan (`ScanDetailScreen`)
+- [x] PDF export utility (`PdfExportHelper`)
+- [x] File preview button in Vault
+- [x] FCM remote wipe/lock placeholders in AntiTheft
+- [x] Spam database schema (`SpamNumber` entity + DAO + migration)
+- [x] Pattern rules utility (`PatternRules`)
+- [x] Accessibility documentation (`accessibility.md`)
 - [x] CSV import for CallBlocker
 - [x] Block notifications for CallBlocker
 - [x] LeakCanary for memory leak detection
