@@ -199,13 +199,17 @@ fun ScanReportCard(report: FullScanReport) {
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = when (issue.severity) {
-                                IssueSeverity.CRITICAL -> Icons.Default.Error
-                                IssueSeverity.WARNING -> Icons.Default.Warning
-                                IssueSeverity.INFO -> Icons.Default.Info
-                            },
-                            contentDescription = null,
+                    Icon(
+                        imageVector = when (issue.severity) {
+                            IssueSeverity.CRITICAL -> Icons.Default.Error
+                            IssueSeverity.WARNING -> Icons.Default.Warning
+                            IssueSeverity.INFO -> Icons.Default.Info
+                        },
+                        contentDescription = when (issue.severity) {
+                            IssueSeverity.CRITICAL -> stringResource(R.string.critical_risk)
+                            IssueSeverity.WARNING -> stringResource(R.string.warning)
+                            IssueSeverity.INFO -> stringResource(R.string.info)
+                        },
                             tint = when (issue.severity) {
                                 IssueSeverity.CRITICAL -> Color.Red
                                 IssueSeverity.WARNING -> Color(0xFFFFA000)

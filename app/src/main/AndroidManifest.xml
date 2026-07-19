@@ -160,16 +160,6 @@
             </intent-filter>
         </service>
 
-        <!-- New Package Receiver -->
-        <receiver
-            android:name=".spywarecheck.PackageAddedReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.PACKAGE_ADDED" />
-                <data android:scheme="package" />
-            </intent-filter>
-        </receiver>
-
         <!-- SIM Swap Confirmation -->
         <activity
             android:name=".simswap.SimSwapConfirmationActivity"
@@ -188,10 +178,20 @@
         <!-- SIM Swap Receiver -->
         <receiver
             android:name=".simswap.SimSwapReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.SIM_STATE_CHANGED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- New Package Receiver -->
+        <receiver
+            android:name=".spywarecheck.PackageAddedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <data android:scheme="package" />
             </intent-filter>
         </receiver>
     </application>

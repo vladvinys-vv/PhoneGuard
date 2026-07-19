@@ -31,7 +31,7 @@ import javax.inject.Singleton
         com.phoneguard.model.SimSwapEvent::class,
         ScanHistory::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
     autoMigrations = []
 )
@@ -131,12 +131,22 @@ class AppDatabaseProvider @Inject constructor(
         }
     }
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_scan_history_timestamp` ON `scan_history` (`timestamp`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_blocked_log_timestamp` ON `blocked_log` (`timestamp`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_firewall_logs_timestamp` ON `firewall_logs` (`timestamp`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_blocked_numbers_phoneNumber` ON `blocked_numbers` (`phoneNumber`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_vault_items_createdAt` ON `vault_items` (`createdAt`)")
+        }
+    }
+
     val database: AppDatabase = Room.databaseBuilder(
         context,
         AppDatabase::class.java,
         "phoneguard_db"
     )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .openHelperFactory { config ->
             val passphrase = databaseKeyManager.getDatabasePassphrase()
             val factory = SupportFactory(passphrase)

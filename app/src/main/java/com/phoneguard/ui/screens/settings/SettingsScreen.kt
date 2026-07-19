@@ -75,7 +75,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(imageVector = Icons.Default.Language, contentDescription = null)
+                        Icon(imageVector = Icons.Default.Language, contentDescription = stringResource(R.string.language))
                         Text(text = stringResource(R.string.language), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     LanguageSelector(settingsViewModel = settingsViewModel)
@@ -98,7 +98,7 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Brightness3, contentDescription = null)
+                        Icon(imageVector = Icons.Default.Brightness3, contentDescription = stringResource(R.string.dark_theme))
                         Column {
                             Text(text = stringResource(R.string.dark_theme), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                             Text(text = stringResource(R.string.dark_theme_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -183,7 +183,7 @@ private fun SettingsLinkCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = null)
+            Icon(imageVector = icon, contentDescription = title)
             Column {
                 Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                 Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

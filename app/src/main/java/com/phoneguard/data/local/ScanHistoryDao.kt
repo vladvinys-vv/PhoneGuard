@@ -22,4 +22,7 @@ interface ScanHistoryDao {
 
     @Query("DELETE FROM scan_history WHERE id = :id")
     suspend fun deleteScan(id: Long)
+
+    @Query("DELETE FROM scan_history WHERE timestamp < :cutoff")
+    suspend fun deleteOlderThan(cutoff: Long)
 }

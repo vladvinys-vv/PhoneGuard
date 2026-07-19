@@ -101,7 +101,7 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(imageVector = Icons.Default.Lock, contentDescription = null)
+                        Icon(imageVector = Icons.Default.Lock, contentDescription = stringResource(R.string.pin_code))
                         Text(text = stringResource(R.string.pin_code), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     if (!uiState.hasPin) {
@@ -140,7 +140,7 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(imageVector = Icons.Default.Phone, contentDescription = null)
+                        Icon(imageVector = Icons.Default.Phone, contentDescription = stringResource(R.string.backup_number))
                         Text(text = stringResource(R.string.backup_number), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     OutlinedTextField(
@@ -256,7 +256,7 @@ private fun FeatureToggleCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(imageVector = icon, contentDescription = null)
+                Icon(imageVector = icon, contentDescription = title)
                 Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

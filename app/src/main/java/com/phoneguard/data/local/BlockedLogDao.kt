@@ -23,4 +23,7 @@ interface BlockedLogDao {
 
     @Query("DELETE FROM blocked_log")
     suspend fun clearAllLogs()
+
+    @Query("DELETE FROM blocked_log WHERE timestamp < :cutoff")
+    suspend fun deleteOlderThan(cutoff: Long)
 }
