@@ -29,4 +29,7 @@ interface BlockedNumberDao {
 
     @Query("DELETE FROM blocked_numbers WHERE id = :id")
     suspend fun deleteBlockedNumberById(id: Long)
+
+    @Query("DELETE FROM blocked_numbers")
+    suspend fun deleteAll()
 }

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,7 +69,12 @@ fun PrivacyScannerListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.privacy_scanner)) }
+                title = { Text(stringResource(R.string.privacy_scanner)) },
+                actions = {
+                    IconButton(onClick = { viewModel.loadApps() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    }
+                }
             )
         }
     ) { padding ->

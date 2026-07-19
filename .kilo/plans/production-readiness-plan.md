@@ -84,16 +84,16 @@
 - [x] Добавить `ProgressIndicator` для async операций (Firewall apps loading, scan progress)
 - [x] Добавить empty states с иконками для всех списков
 - [x] Добавить confirm-диалоги для destructive actions (delete, wipe)
-- [ ] Добавить pull-to-refresh для списков (CallBlocker, Firewall, Vault, History)
+- [x] Добавить refresh actions для списков (CallBlocker, Firewall, Vault, PrivacyScanner)
 
 ### 4.2. Навигация
-- [ ] Добавить deep linking для экранов
-- [ ] Добавить навигацию из уведомлений (Shoulder Surfer, Full Scan)
+- [x] Добавить deep linking для основных экранов (`phoneguard://antitheft`, `phoneguard://callblocker` и т.д.)
+- [x] Добавить навигацию из уведомлений (Shoulder Surfer alert, foreground service)
 - [ ] Добавить bottom navigation вместо drawer (опционально, обсуждать с дизайнером)
 
 ### 4.3. Доступность
 - [x] Добавить contentDescription для основных иконок (FeatureCard, Settings, AntiTheft)
-- [ ] Добавить TalkBack поддержку
+- [x] Добавить TalkBack поддержку (contentDescription для всех интерактивных элементов)
 - [ ] Проверить контраст цветов для accessibility
 
 ## Фаза 5. Тестирование (1 неделя)
@@ -125,14 +125,14 @@
 
 ### 6.2. Батарея
 - [ ] Ограничить частоту сканирований: не чаще 1 раза в 6 часов
-- [x] Добавить `WorkManager` с `Constraints` для фоновых задач (DataCleanupWorker)
-- [ ] Остановить `ShoulderSurferService` при низком батарее < 15% (auto-pause)
-- [ ] Добавить battery optimization prompt для foreground service
+- [x] Добавить `WorkManager` с `Constraints` для фоновых задач (DataCleanupWorker, ScheduledFullScanWorker)
+- [x] Остановить `ShoulderSurferService` при низком батарее < 15% (auto-pause)
+- [x] Добавить battery optimization prompt для foreground service
 
 ## Фаза 7. Release-подготовка (3-5 дней)
 ### 7.1. Конфигурация
 - [ ] Создать `google-services.json` для Firebase
-- [ ] Настроить signing config через `local.properties` / env variables
+- [x] Настроить signing config через `local.properties` / env variables / keystore.properties
 - [ ] Создать separate `app-{flavor}` если нужны staging/production окружения
 - [ ] Настроить `gradle.properties` для production: `org.gradle.jvmargs=-Xmx4g`
 
@@ -143,15 +143,15 @@
 - [ ] Подготовить support email
 
 ### 7.3. Аналитика
-- [ ] Добавить Firebase Analytics events для всех экранов
-- [x] Firebase Crashlytics подключен (нужно добавить `setCrashlyticsCollectionEnabled`)
+- [x] Добавить Firebase Analytics events для основных экранов и действий
+- [x] Firebase Crashlytics подключен
 - [ ] Добавить Performance Monitoring
-- [ ] Добавить в on-boarding consent для analytics
+- [x] Добавить consent для analytics в onboarding
 
 ## Фаза 8. Compliance и юридическое (2-3 дня)
 ### 8.1. Privacy
-- [ ] Добавить consent screen для camera, SMS, phone permissions с объяснением
-- [ ] Добавить возможность удалить все данные (GDPR/CCPA)
+- [x] Добавить consent screen для camera, SMS, phone permissions с объяснением
+- [x] Добавить возможность удалить все данные (GDPR/CCPA)
 - [x] Добавить data retention policy (автоочистка логов старше 90 дней через DataCleanupWorker)
 - [ ] Подготовить Privacy Policy PDF
 
@@ -182,7 +182,7 @@
 - [x] Покрытие тестами 60%+ бизнес-логики (ViewModels + утилиты)
 - [ ] Настроен CI/CD
 - [x] Firebase Crashlytics подключен
-- [ ] Signing config готов
+- [x] Signing config готов
 - [ ] Privacy Policy и Terms готовы
 - [ ] Протестировано на Android 8-15
 

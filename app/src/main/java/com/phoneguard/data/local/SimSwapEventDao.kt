@@ -22,4 +22,7 @@ interface SimSwapEventDao {
 
     @Query("UPDATE sim_swap_events SET isAttackSuspected = 1 WHERE id = :id")
     suspend fun markAttackSuspected(id: Long)
+
+    @Query("DELETE FROM sim_swap_events")
+    suspend fun deleteAll()
 }

@@ -19,6 +19,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Brightness3
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Battery3
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -115,6 +118,38 @@ fun SettingsScreen(
                 }
             }
 
+            // Scheduled Scan Toggle
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = stringResource(R.string.scheduled_scan))
+                        Column {
+                            Text(text = stringResource(R.string.scheduled_scan), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                            Text(text = stringResource(R.string.schedule_scan_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    val isScheduledScanEnabled by settingsViewModel.isScheduledScanEnabled.collectAsState()
+                    Switch(
+                        checked = isScheduledScanEnabled,
+                        onCheckedChange = { checked ->
+                            settingsViewModel.setScheduledScan(checked)
+                        }
+                    )
+                }
+            }
+
             // Privacy Policy
             SettingsLinkCard(
                 title = stringResource(R.string.privacy_policy),
@@ -160,6 +195,53 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.export_logs))
+            }
+
+            // GDPR Delete All Data
+            var showDeleteDialog by remember { mutableStateOf(false) }
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text(stringResource(R.string.delete_all_data)) },
+                    text = { Text(stringResource(R.string.delete_all_data_description)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            settingsViewModel.deleteAllData()
+                            showDeleteDialog = false
+                        }) {
+                            Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                )
+            }
+            OutlinedButton(
+                onClick = { showDeleteDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Icon(imageVector = Icons.Default.Delete, contentDescription = null)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(stringResource(R.string.delete_all_data))
+            }
+
+            // Battery Optimization
+            OutlinedButton(
+                onClick = {
+                    val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                    }
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(imageVector = Icons.Default.Battery3, contentDescription = stringResource(R.string.battery_optimization_title))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(stringResource(R.string.open_battery_settings))
             }
         }
     }

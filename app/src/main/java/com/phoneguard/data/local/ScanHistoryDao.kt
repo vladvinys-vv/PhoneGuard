@@ -25,4 +25,7 @@ interface ScanHistoryDao {
 
     @Query("DELETE FROM scan_history WHERE timestamp < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)
+
+    @Query("DELETE FROM scan_history")
+    suspend fun deleteAll()
 }

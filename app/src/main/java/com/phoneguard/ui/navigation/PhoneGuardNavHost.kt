@@ -12,8 +12,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navDeepLink
 import com.phoneguard.R
 import com.phoneguard.ui.screens.antitheft.AntiTheftScreen
 import com.phoneguard.ui.screens.callblocker.CallBlockerScreen
@@ -111,28 +111,52 @@ fun PhoneGuardNavHost(
                         onNavigateToSimSwap = { navController.navigate("simswap_history") }
                     )
                 }
-                composable(Screen.AntiTheft.route) {
+                composable(
+                    route = Screen.AntiTheft.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://antitheft" })
+                ) {
                     AntiTheftScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.CallBlocker.route) {
+                composable(
+                    route = Screen.CallBlocker.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://callblocker" })
+                ) {
                     CallBlockerScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.PrivacyScanner.route) {
+                composable(
+                    route = Screen.PrivacyScanner.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://privacy" })
+                ) {
                     PrivacyScannerScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.SpywareCheck.route) {
+                composable(
+                    route = Screen.SpywareCheck.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://spyware" })
+                ) {
                     SpywareCheckScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.Settings.route) {
+                composable(
+                    route = Screen.Settings.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://settings" })
+                ) {
                     SettingsScreen(settingsViewModel = hiltViewModel())
                 }
-                composable(Screen.Firewall.route) {
+                composable(
+                    route = Screen.Firewall.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://firewall" })
+                ) {
                     FirewallScreen()
                 }
-                composable(Screen.SecureVault.route) {
+                composable(
+                    route = Screen.SecureVault.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://vault" })
+                ) {
                     VaultScreen()
                 }
-                composable(Screen.FullScan.route) {
+                composable(
+                    route = Screen.FullScan.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://fullscan" })
+                ) {
                     FullScanScreen()
                 }
                 composable("simswap") {

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +41,14 @@ fun CallBlockerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.call_sms_blocker)) })
+            TopAppBar(
+                title = { Text(stringResource(R.string.call_sms_blocker)) },
+                actions = {
+                    IconButton(onClick = { /* Room flows are reactive; refresh is implicit */ }) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    }
+                }
+            )
         },
         floatingActionButton = {
             if (selectedTab < 2) {

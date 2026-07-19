@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,7 +55,12 @@ fun FirewallScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.firewall)) }
+                title = { Text(stringResource(R.string.firewall)) },
+                actions = {
+                    IconButton(onClick = { viewModel.loadApps() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    }
+                }
             )
         }
     ) { padding ->

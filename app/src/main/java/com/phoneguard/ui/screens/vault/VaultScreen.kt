@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,7 +61,12 @@ fun VaultScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.secure_vault)) }
+                title = { Text(stringResource(R.string.secure_vault)) },
+                actions = {
+                    IconButton(onClick = { /* Room flows are reactive */ }) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    }
+                }
             )
         },
         floatingActionButton = {

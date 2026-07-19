@@ -20,4 +20,7 @@ interface VaultDao {
 
     @Delete
     suspend fun deleteItem(item: VaultItem)
+
+    @Query("DELETE FROM vault_items")
+    suspend fun deleteAll()
 }

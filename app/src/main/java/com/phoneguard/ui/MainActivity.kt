@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.ui.navigation.PhoneGuardNavHost
+import com.phoneguard.ui.screens.onboarding.ConsentScreen
 import com.phoneguard.ui.screens.onboarding.OnboardingScreen
 import com.phoneguard.ui.theme.PhoneGuardTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -26,14 +27,28 @@ class MainActivity : ComponentActivity() {
         setContent {
             val isDarkTheme by preferencesManager.isDarkTheme.collectAsState(initial = false)
             val isFirstLaunch by preferencesManager.isFirstLaunch.collectAsState(initial = true)
+            val isConsentDone by preferencesManager.isConsentDone.collectAsState(initial = false)
             PhoneGuardTheme(darkTheme = isDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    if (isFirstLaunch) {
-                        OnboardingScreen(onCompleted = {
-                            // State will update automatically via isFirstLaunch collectAsState
-                        })
-                    } else {
-                        PhoneGuardNavHost()
+                    when {
+                        isFirstLaunch -> {
+                            OnboardingScreen(onCompleted = {
+                                // State will update automatically via isFirstLaunch collectAsState
+                            })
+                        }
+                        !isConsentDone -> {
+                            ConsentScreen(
+                                onAccept = {
+                                    preferencesManager.setConsentDone()
+                                },
+                                onDecline = {
+                                    preferencesManager.setConsentDone()
+                                }
+                            )
+                        }
+                        else -> {
+                            PhoneGuardNavHost()
+                        }
                     }
                 }
             }

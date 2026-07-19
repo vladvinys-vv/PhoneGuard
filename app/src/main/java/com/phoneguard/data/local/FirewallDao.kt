@@ -33,6 +33,9 @@ interface FirewallDao {
     @Query("DELETE FROM firewall_logs")
     suspend fun clearLogs()
 
+    @Query("DELETE FROM firewall_rules")
+    suspend fun clearRules()
+
     @Query("DELETE FROM firewall_logs WHERE timestamp < :cutoff")
     suspend fun deleteLogsOlderThan(cutoff: Long)
 }

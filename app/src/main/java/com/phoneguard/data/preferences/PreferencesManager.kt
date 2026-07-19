@@ -41,6 +41,10 @@ class PreferencesManager(private val context: Context) {
 
         // Onboarding
         private val KEY_FIRST_LAUNCH = booleanPreferencesKey("first_launch")
+        private val KEY_CONSENT_DONE = booleanPreferencesKey("consent_done")
+
+        // Scheduled scan
+        private val KEY_SCHEDULED_SCAN_ENABLED = booleanPreferencesKey("scheduled_scan_enabled")
     }
 
     // PIN Hash
@@ -175,8 +179,20 @@ class PreferencesManager(private val context: Context) {
 
     // Onboarding
     val isFirstLaunch: Flow<Boolean> = context.dataStore.data.map { it[KEY_FIRST_LAUNCH] ?: true }
+    val isConsentDone: Flow<Boolean> = context.dataStore.data.map { it[KEY_CONSENT_DONE] ?: false }
 
     suspend fun setFirstLaunchDone() {
         context.dataStore.edit { it[KEY_FIRST_LAUNCH] = false }
+    }
+
+    suspend fun setConsentDone() {
+        context.dataStore.edit { it[KEY_CONSENT_DONE] = true }
+    }
+
+    // Scheduled scan
+    val isScheduledScanEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_SCHEDULED_SCAN_ENABLED] ?: false }
+
+    suspend fun setScheduledScanEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SCHEDULED_SCAN_ENABLED] = enabled }
     }
 }
