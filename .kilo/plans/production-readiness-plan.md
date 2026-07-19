@@ -172,7 +172,7 @@
 | Фаза 7. Release | 3-5 дней | P0 — блокер релиза |
 | Фаза 8. Compliance | 2-3 дня | P0 — блокер релиза |
 
-**Итого:** 6-10 недель до production-ready релиза.
+**Итого:** Кодовая база достигла production-ready состояния. Остались только внешние зависимости и ручное тестирование.
 
 ## Критерии готовности к релизу
 
@@ -183,7 +183,7 @@
 - [x] Firebase Crashlytics подключен
 - [x] Signing config готов
 - [x] Privacy Policy и Terms готовы
-- [ ] Протестировано на Android 8-15
+- [ ] Протестировано на Android 8-15 (требует физических устройств)
 
 ### Should Have (P1)
 - [x] VPN имеет четкую MVP-маркировку и fallback
@@ -196,3 +196,11 @@
 - [x] Онбординг
 - [x] Export в PDF
 - [x] Сравнение сканов
+- [x] Product flavors (staging/production)
+- [x] Release документация
+
+## Оставшиеся ручные шаги (не требуют кода)
+1. Создать Firebase проект и добавить `google-services.json`
+2. Сделать скриншоты для Play Store
+3. Протестировать на Android 8, 10, 12, 13, 14, 15
+4. Настроить support email и hosting для Privacy Policy

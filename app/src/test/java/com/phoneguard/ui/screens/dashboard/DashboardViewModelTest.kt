@@ -3,6 +3,7 @@ package com.phoneguard.ui.screens.dashboard
 import app.cash.turbine.test
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.fullscan.FullScanOrchestrator
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,9 +29,9 @@ class DashboardViewModelTest {
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
-        coEvery { preferencesManager.isDeviceAdminEnabled } returns flowOf(true)
-        coEvery { preferencesManager.isSimLockEnabled } returns flowOf(false)
-        coEvery { preferencesManager.isPhotoOnFailedAttemptsEnabled } returns flowOf(true)
+        every { preferencesManager.isDeviceAdminEnabled } returns flowOf(true)
+        every { preferencesManager.isSimLockEnabled } returns flowOf(false)
+        every { preferencesManager.isPhotoOnFailedAttemptsEnabled } returns flowOf(true)
         coEvery { fullScanOrchestrator.getLatestScanSummary() } returns (50 to "18.07.2026 12:00")
         viewModel = DashboardViewModel(preferencesManager, fullScanOrchestrator)
     }
