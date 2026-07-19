@@ -183,7 +183,7 @@
 - [x] Firebase Crashlytics подключен
 - [x] Signing config готов
 - [x] Privacy Policy и Terms готовы
-- [ ] Протестировано на Android 8-15 (требует физических устройств)
+- [ ] Протестировано на Android 8-15 (требует физических устройств и ручного тестирования)
 
 ### Should Have (P1)
 - [x] VPN имеет четкую MVP-маркировку и fallback
@@ -196,6 +196,11 @@
 - [x] Онбординг
 - [x] Export в PDF
 - [x] Сравнение сканов
+- [x] Всплывающие shortcut для быстрого доступа к основным экранам
+- [x] Seed data для спам-базы
+- [x] Migration tests для Room
+- [x] Дополнительные unit-тесты для утилит (NetworkMonitor, CrashHandler, PatternRules, BatteryOptimizationHelper)
+- [x] Accessibility audit: contentDescription для всех IconButton
 - [x] Product flavors (staging/production)
 - [x] Release документация
 
