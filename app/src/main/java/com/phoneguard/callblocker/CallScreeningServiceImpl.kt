@@ -95,6 +95,6 @@ class CallScreeningServiceImpl : CallScreeningService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        serviceScope.launch { /* cancel children if needed */ }
+        serviceScope.cancel()
     }
 }

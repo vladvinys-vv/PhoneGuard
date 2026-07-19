@@ -138,14 +138,12 @@ class PhoneGuardVpnService : VpnService() {
             return
         }
 
-        try {
-            // Load rules cache
-            runBlocking {
+        vpnJob = vpnScope.launch {
+            try {
                 val rules = firewallRepository.allRules.first()
                 rulesCache.clear()
                 rules.forEach { rulesCache[it.packageName] = it }
 
-                // Build UID → packageName cache
                 uidPackageCache.clear()
                 val pm = packageManager
                 val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -160,31 +158,26 @@ class PhoneGuardVpnService : VpnService() {
                     uidPackageCache[app.uid] = app.packageName
                 }
                 Log.d(TAG, "Loaded ${rulesCache.size} rules, ${uidPackageCache.size} apps")
+
+                val builder = Builder()
+                    .addAddress(TUN_ADDRESS, 32)
+                    .addRoute(TUN_NETWORK, TUN_PREFIX)
+                    .setMtu(TUN_MTU)
+                    .setSession("PhoneGuard Firewall")
+                    .addDnsServer("8.8.8.8")
+                    .addDnsServer("1.1.1.1")
+
+                vpnInterface = builder.establish()
+                if (vpnInterface != null) {
+                    startForeground(VPN_NOTIFICATION_ID, getNotification())
+                    Log.d(TAG, "VPN started, TUN interface created")
+                    runVpnLoop()
+                } else {
+                    Log.e(TAG, "Failed to establish VPN interface")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start VPN", e)
             }
-
-            // Build VPN interface
-            val builder = Builder()
-                .addAddress(TUN_ADDRESS, 32)
-                .addRoute(TUN_NETWORK, TUN_PREFIX)
-                .setMtu(TUN_MTU)
-                .setSession("PhoneGuard Firewall")
-                .addDnsServer("8.8.8.8")
-                .addDnsServer("1.1.1.1")
-
-            // На Android 10+ можно заблокировать определённые приложения на уровне VPN
-            // Но мы управляем на уровне пакетов, поэтому не используем
-            // allowedApplications / disallowedApplications
-
-            vpnInterface = builder.establish()
-            if (vpnInterface != null) {
-                startForeground(VPN_NOTIFICATION_ID, getNotification())
-                Log.d(TAG, "VPN started, TUN interface created")
-                runVpnLoop()
-            } else {
-                Log.e(TAG, "Failed to establish VPN interface")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start VPN", e)
         }
     }
 

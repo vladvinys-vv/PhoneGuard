@@ -115,8 +115,30 @@ fun VaultScreen(
 
 @Composable
 fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     val dateStr = remember(item.createdAt) { sdf.format(Date(item.createdAt)) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Удалить файл?") },
+            text = { Text("Это действие нельзя отменить.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(item)
+                    showDeleteDialog = false
+                }) {
+                    Text("Удалить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 
     ListItem(
         headlineContent = { Text(item.fileName) },
@@ -131,7 +153,7 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
             )
         },
         trailingContent = {
-            IconButton(onClick = { onDelete(item) }) {
+            IconButton(onClick = { showDeleteDialog = true }) {
                 Icon(Icons.Default.Delete, contentDescription = "Удалить")
             }
         }

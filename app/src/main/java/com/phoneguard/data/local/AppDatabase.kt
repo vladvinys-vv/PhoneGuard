@@ -15,9 +15,9 @@ import com.phoneguard.model.FirewallLog
 import com.phoneguard.model.VaultItem
 import com.phoneguard.model.SimSwapEvent
 import com.phoneguard.model.ScanHistory
+import com.phoneguard.util.DatabaseKeyManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import net.sqlcipher.database.SupportFactory
-import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,7 +46,8 @@ abstract class AppDatabase : RoomDatabase() {
 
 @Singleton
 class AppDatabaseProvider @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
+    private val databaseKeyManager: DatabaseKeyManager
 ) {
     private val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
@@ -130,14 +131,6 @@ class AppDatabaseProvider @Inject constructor(
         }
     }
 
-    // TODO: Replace with proper key management (Android Keystore / user-derived passphrase)
-    private fun getDatabasePassphrase(): ByteArray {
-        // This is a placeholder. In production, derive passphrase from user credentials
-        // or store it in Android Keystore. Never hardcode in production.
-        val passphrase = "PhoneGuard_DB_Encryption_Key_2024".toByteArray(Charsets.UTF_8)
-        return passphrase
-    }
-
     val database: AppDatabase = Room.databaseBuilder(
         context,
         AppDatabase::class.java,
@@ -145,7 +138,7 @@ class AppDatabaseProvider @Inject constructor(
     )
         .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .openHelperFactory { config ->
-            val passphrase = getDatabasePassphrase()
+            val passphrase = databaseKeyManager.getDatabasePassphrase()
             val factory = SupportFactory(passphrase)
             SupportSQLiteOpenHelper.Configuration.builder(config.context)
                 .name(config.name)

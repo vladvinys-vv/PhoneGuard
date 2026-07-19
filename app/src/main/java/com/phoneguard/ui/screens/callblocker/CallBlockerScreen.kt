@@ -150,11 +150,32 @@ fun NumberListSection(
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(numbers) { number ->
+            var showDeleteDialog by remember { mutableStateOf(false) }
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("Удалить номер?") },
+                    text = { Text("Это действие нельзя отменить.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onDelete(number)
+                            showDeleteDialog = false
+                        }) {
+                            Text("Удалить")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("Отмена")
+                        }
+                    }
+                )
+            }
             ListItem(
                 headlineContent = { Text(number.phoneNumber) },
                 supportingContent = number.name?.let { { Text(it) } },
                 trailingContent = {
-                    IconButton(onClick = { onDelete(number) }) {
+                    IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_number))
                     }
                 }

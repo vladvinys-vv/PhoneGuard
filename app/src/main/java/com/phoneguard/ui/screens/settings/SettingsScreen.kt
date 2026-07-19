@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -148,10 +149,13 @@ fun SettingsScreen(
             }
 
             // Export Logs
+            val exportResult by settingsViewModel.exportResult.collectAsState()
+            exportResult?.let { message ->
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
             Button(
                 onClick = {
                     settingsViewModel.exportLogs()
-                    Toast.makeText(context, "Экспорт логов запущен", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {

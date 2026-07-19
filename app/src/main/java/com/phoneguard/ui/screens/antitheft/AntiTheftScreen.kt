@@ -216,14 +216,27 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
                 onCheckedChange = { viewModel.toggleRemoteAlarm(it) }
             )
 
-            // Shoulder Surfer Detection
+    // Shoulder Surfer Detection
+            var hasCameraPermission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) }
+            val cameraPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission()
+            ) { isGranted ->
+                hasCameraPermission = isGranted
+                if (isGranted) {
+                    viewModel.toggleShoulderSurfer(true)
+                }
+            }
             FeatureToggleCard(
                 title = stringResource(R.string.shoulder_surfer),
                 description = stringResource(R.string.shoulder_surfer_description),
                 icon = Icons.Default.Visibility,
                 checked = uiState.isShoulderSurferEnabled,
                 onCheckedChange = { enabled ->
-                    viewModel.toggleShoulderSurfer(enabled)
+                    if (enabled && !hasCameraPermission) {
+                        cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                    } else {
+                        viewModel.toggleShoulderSurfer(enabled)
+                    }
                 }
             )
         }

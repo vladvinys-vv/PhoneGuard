@@ -20,6 +20,7 @@ class ShoulderSurferRepository @Inject constructor(
     }
 
     fun isServiceRunning(): Boolean {
-        return false // TODO: implement via ActivityManager or bound service callback
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        return manager.getRunningServices(100).any { it.service.className == ShoulderSurferService::class.java.name }
     }
 }
