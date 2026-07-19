@@ -101,7 +101,8 @@ class PreferencesManager(private val context: Context) {
     }
 
     // Pro status
-    // TODO: re-enable if publishing to Play with monetization
+    // Note: Pro features are currently unlocked for personal/internal use.
+    // Re-enable monetization check before publishing to Play Store.
     val isPro: Flow<Boolean> = flow { emit(true) }
 
     suspend fun setPro(isPro: Boolean) {

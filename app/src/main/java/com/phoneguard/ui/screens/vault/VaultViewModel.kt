@@ -31,6 +31,14 @@ class VaultViewModel @Inject constructor(
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
 
+    private val _importError = MutableStateFlow<String?>(null)
+    val importError: StateFlow<String?> = _importError.asStateFlow()
+
+    companion object {
+        const val MAX_FILE_SIZE_MB = 50L
+        const val MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+    }
+
     fun authenticateUser(
         activity: FragmentActivity,
         executor: Executor
@@ -79,9 +87,23 @@ class VaultViewModel @Inject constructor(
         _authError.value = null
     }
 
+    fun clearImportError() {
+        _importError.value = null
+    }
+
     fun importFile(uri: Uri, deleteOriginal: Boolean = false) {
         viewModelScope.launch {
-            repository.importFile(uri, deleteOriginal)
+            try {
+                val size = getFileSize(context, uri)
+                if (size > MAX_FILE_SIZE_BYTES) {
+                    _importError.value = "Файл слишком большой. Максимальный размер: $MAX_FILE_SIZE_MB MB"
+                    return@launch
+                }
+                repository.importFile(uri, deleteOriginal)
+                _importError.value = null
+            } catch (e: Exception) {
+                _importError.value = "Ошибка импорта: ${e.message}"
+            }
         }
     }
 
@@ -89,5 +111,11 @@ class VaultViewModel @Inject constructor(
         viewModelScope.launch {
             repository.deleteItem(item)
         }
+    }
+
+    private suspend fun getFileSize(context: Context, uri: Uri): Long {
+        return context.contentResolver.openInputStream(uri)?.use { input ->
+            input.available().toLong()
+        } ?: 0L
     }
 }

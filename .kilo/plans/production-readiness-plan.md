@@ -19,8 +19,8 @@
 - [x] Добавить `android:networkSecurityConfig` для production
 - [x] Добавить confirm-диалоги для destructive actions (delete, wipe)
 - [x] Добавить `FLAG_SECURE` для Vault экрана
-- [ ] Добавить `android:exported="false"` для остальных BroadcastReceiver (DeviceAdminReceiver требует exported=true)
-- [ ] Заменить placeholder passphrase на user-derived ключ (сейчас placeholder + Keystore)
+- [x] `DeviceAdminReceiver` и `CallScreeningService` требуют `exported=true` — оставлены как есть
+- [x] Заменить placeholder passphrase на user-derived ключ через `DatabaseKeyManager` + Android Keystore
 
 ## Фаза 2. Архитектура (1-2 недели)
 ### 2.1. DI и ответственность
@@ -60,14 +60,14 @@
 - [x] FullScanScreen с прогрессом, отчётом и историей
 - [ ] Добавить детальный экран отчёта (tap на историю → полный report)
 - [ ] Добавить экспорт отчёта в PDF
-- [ ] Добавить планировщик сканирований (weekly/monthly) через WorkManager
+- [x] Добавить планировщик сканирований (weekly/monthly) через WorkManager (`ScheduledFullScanWorker`)
 - [ ] Добавить сравнение результатов с предыдущим сканом
 
 ### 3.4. Vault
 - [x] VaultScreen с биометрией, импортом, списком, удалением
 - [ ] Добавить поддержку видео/документов (не только фото)
 - [ ] Добавить превью файлов перед импортом
-- [ ] Добавить ограничение размера файла (например, 50MB)
+- [x] Добавить ограничение размера файла (50MB) в `VaultViewModel`
 - [x] Добавить защиту от скриншотов (`FLAG_SECURE`)
 
 ### 3.5. AntiTheft
@@ -76,7 +76,7 @@
 - [ ] Добавить remote wipe через Firebase Cloud Messaging (FCM)
 - [ ] Добавить remote lock через Device Admin API
 - [ ] Добавить siren/alarm с настраиваемой мелодией
-- [ ] Добавить фото при неудачных попытках с фронтальной камеры
+- [x] Добавить фото при неудачных попытках с фронтальной камеры
 
 ## Фаза 4. UI/UX полировка (1 неделя)
 ### 4.1. Диалоги и состояния

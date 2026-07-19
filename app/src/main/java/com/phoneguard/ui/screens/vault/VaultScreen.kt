@@ -35,6 +35,7 @@ fun VaultScreen(
 ) {
     val isUnlocked by viewModel.isUnlocked.collectAsState()
     val items by viewModel.allItems.collectAsState()
+    val importError by viewModel.importError.collectAsState()
     val context = LocalContext.current
     val view = LocalView.current
 
@@ -59,6 +60,7 @@ fun VaultScreen(
     }
 
     Scaffold(
+        scaffoldState = scaffoldState,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.secure_vault)) },
@@ -110,6 +112,13 @@ fun VaultScreen(
                 }
             }
         } else {
+            importError?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
             if (items.isEmpty()) {
                 Box(
                     modifier = Modifier

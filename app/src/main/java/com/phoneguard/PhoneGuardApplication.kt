@@ -8,6 +8,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.phoneguard.util.CrashHandler
 import com.phoneguard.worker.DataCleanupWorker
 import dagger.hilt.android.HiltAndroidApp
 import java.util.concurrent.TimeUnit
@@ -30,6 +31,7 @@ class PhoneGuardApplication : Application() {
                     .build()
             )
         }
+        CrashHandler().install()
         scheduleDataCleanup()
     }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.fullscan.FullScanOrchestrator
 import com.phoneguard.model.FullScanReport
 import com.phoneguard.model.ScanHistory
+import com.phoneguard.util.PerformanceMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -15,7 +16,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class FullScanViewModel @Inject constructor(
-    private val orchestrator: FullScanOrchestrator
+    private val orchestrator: FullScanOrchestrator,
+    private val performanceMonitor: PerformanceMonitor
 ) : ViewModel() {
 
     private val _isScanning = MutableStateFlow(false)
@@ -47,16 +49,25 @@ class FullScanViewModel @Inject constructor(
         _report.value = null
         _lastScanTimestamp.value = now
 
+        val trace = performanceMonitor.startTrace(PerformanceMonitor.TRACE_SCAN)
+        trace.start()
+
         viewModelScope.launch {
-            orchestrator.runFullScan().collect { state ->
-                when (state) {
-                    is FullScanOrchestrator.FullScanState.Progress -> _progress.value = state
-                    is FullScanOrchestrator.FullScanState.Result -> {
-                        _report.value = state.report
-                        _isScanning.value = false
-                        loadHistory()
+            try {
+                orchestrator.runFullScan().collect { state ->
+                    when (state) {
+                        is FullScanOrchestrator.FullScanState.Progress -> _progress.value = state
+                        is FullScanOrchestrator.FullScanState.Result -> {
+                            _report.value = state.report
+                            _isScanning.value = false
+                            loadHistory()
+                            trace.stop()
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                _isScanning.value = false
+                trace.stop()
             }
         }
     }
