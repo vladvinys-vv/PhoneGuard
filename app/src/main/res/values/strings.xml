@@ -236,4 +236,26 @@
     <string name="onboarding_description">Ваш личный ассистент безопасности. Активируйте защиту, чтобы начать.</string>
     <string name="onboarding_get_started">Начать</string>
 
+    <!-- Consent & Compliance -->
+    <string name="consent_title">Разрешения и конфиденциальность</string>
+    <string name="consent_description">Для работы PhoneGuard необходимы следующие разрешения. Вы можете изменить их позже в настройках.</string>
+    <string name="consent_camera">Камера — для фото при неудачных попытках и защиты от подглядывания</string>
+    <string name="consent_sms">SMS — для удалённых команд и оповещений</string>
+    <string name="consent_phone">Телефон — для обнаружения смены SIM</string>
+    <string name="consent_location">Геолокация — для отслеживания устройства</string>
+    <string name="consent_notifications">Уведомления — для статуса защиты</string>
+    <string name="consent_accept">Принять и продолжить</string>
+    <string name="consent_decline">Отклонить</string>
+    <string name="delete_all_data">Удалить все данные</string>
+    <string name="delete_all_data_description">Это действие удалит все логи, историю и настройки. Его нельзя отменить.</string>
+    <string name="data_deleted">Данные удалены</string>
+    <string name="battery_optimization_title">Оптимизация батареи</string>
+    <string name="battery_optimization_description">Отключите оптимизацию батареи для PhoneGuard, чтобы защита работала в фоне.</string>
+    <string name="open_battery_settings">Открыть настройки батареи</string>
+    <string name="scheduled_scan">Запланированное сканирование</string>
+    <string name="schedule_scan_description">Автоматически запускать сканирование раз в неделю</string>
+    <string name="analytics_consent_title">Аналитика</string>
+    <string name="analytics_consent_description">Отправлять анонимную статистику для улучшения приложения</string>
+    <string name="analytics_enabled">Аналитика включена</string>
+
 </resources>
