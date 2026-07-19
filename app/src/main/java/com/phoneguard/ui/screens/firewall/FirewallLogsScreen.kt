@@ -10,9 +10,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.phoneguard.R
 import com.phoneguard.model.FirewallLog
 import java.text.SimpleDateFormat
 import java.util.*
@@ -29,16 +31,16 @@ fun FirewallLogsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Firewall Logs") },
+                title = { Text(stringResource(R.string.firewall_logs_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, contentDescription = "Back") {
+                    IconButton(onClick = onBack, contentDescription = stringResource(R.string.back)) {
                         Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
                     if (logs.isNotEmpty()) {
                         Text(
-                            "${logs.size} entries",
+                            stringResource(R.string.log_entries_count, logs.size),
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(end = 16.dp)
                         )
@@ -54,7 +56,7 @@ fun FirewallLogsScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No blocked connections yet", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.no_blocked_connections), style = MaterialTheme.typography.bodyLarge)
             }
         } else {
             LazyColumn(
@@ -98,15 +100,15 @@ fun FirewallLogItem(log: FirewallLog, sdf: SimpleDateFormat) {
                 Badge {
                     Text(
                         when (log.connectionType) {
-                            FirewallLog.ConnectionType.WIFI -> "Wi-Fi"
-                            FirewallLog.ConnectionType.MOBILE -> "Mobile"
-                            else -> "Unknown"
+                            FirewallLog.ConnectionType.WIFI -> stringResource(R.string.connection_type_wifi)
+                            FirewallLog.ConnectionType.MOBILE -> stringResource(R.string.connection_type_mobile)
+                            else -> stringResource(R.string.connection_type_unknown)
                         }
                     )
                 }
             }
             Text(
-                "${log.ipAddress ?: log.domainName ?: "unknown"}",
+                "${log.ipAddress ?: log.domainName ?: stringResource(R.string.unknown)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

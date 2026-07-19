@@ -198,7 +198,7 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (item.category == VaultItemCategory.IMAGE) {
-                    IconButton(onClick = { /* preview placeholder */ }, contentDescription = "Preview") {
+                    IconButton(onClick = { /* preview placeholder */ }, contentDescription = stringResource(R.string.preview)) {
                         Icon(Icons.Default.Visibility, contentDescription = null)
                     }
                 }

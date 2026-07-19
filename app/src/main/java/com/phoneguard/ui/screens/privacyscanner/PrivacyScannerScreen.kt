@@ -191,7 +191,7 @@ fun PrivacyScannerDetailScreen(
             TopAppBar(
                 title = { Text(app?.appName ?: stringResource(R.string.app_name)) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack, contentDescription = "Back") {
+                    IconButton(onClick = onNavigateBack, contentDescription = stringResource(R.string.back)) {
                         Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 }

@@ -124,8 +124,8 @@ class PhoneGuardVpnService : VpnService() {
 
         val blockedCount = logCount
         return Notification.Builder(this, VPN_CHANNEL_ID)
-            .setContentTitle("PhoneGuard Firewall Active")
-            .setContentText("Blocking unwanted traffic... ($blockedCount blocked)")
+            .setContentTitle(getString(R.string.firewall_active))
+            .setContentText(getString(R.string.firewall_blocking_traffic, blockedCount))
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

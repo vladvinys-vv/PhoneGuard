@@ -153,7 +153,7 @@ fun SettingsScreen(
             // Privacy Policy
             SettingsLinkCard(
                 title = stringResource(R.string.privacy_policy),
-                description = "Read our privacy policy",
+                description = stringResource(R.string.read_privacy_policy),
                 icon = Icons.Default.Policy,
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://phoneguard.app/privacy"))
@@ -164,7 +164,7 @@ fun SettingsScreen(
             // Terms of Service
             SettingsLinkCard(
                 title = stringResource(R.string.terms_of_service),
-                description = "Read our terms of service",
+                description = stringResource(R.string.read_terms_of_service),
                 icon = Icons.Default.Info,
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://phoneguard.app/terms"))
@@ -177,7 +177,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(text = stringResource(R.string.about), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(text = "PhoneGuard v1.0.0", style = MaterialTheme.typography.bodyMedium)
-                    Text(text = "Your personal security assistant", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = stringResource(R.string.about_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(text = stringResource(R.string.version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

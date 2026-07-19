@@ -47,10 +47,10 @@ class CallScreeningServiceImpl : CallScreeningService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Call Blocker",
+                getString(R.string.call_blocker_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Notifications for blocked calls"
+                description = getString(R.string.call_blocker_channel_description)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -67,8 +67,8 @@ class CallScreeningServiceImpl : CallScreeningService() {
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Call blocked")
-            .setContentText("Blocked: $phoneNumber")
+            .setContentTitle(getString(R.string.call_blocked_title))
+            .setContentText(getString(R.string.blocked_number, phoneNumber))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setAutoCancel(true)

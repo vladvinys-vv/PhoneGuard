@@ -36,7 +36,7 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
                 title = { Text(stringResource(R.string.full_scan)) },
                 actions = {
                     if (!isScanning) {
-                        IconButton(onClick = { viewModel.startScan() }, contentDescription = "Start Scan") {
+                        IconButton(onClick = { viewModel.startScan() }, contentDescription = stringResource(R.string.scan_now)) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null)
                         }
                     }
@@ -91,7 +91,7 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
                     ScanDetailScreen(scan = scan, onBack = { navController.popBackStack() })
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Scan not found")
+                        Text(stringResource(R.string.scan_not_found))
                     }
                 }
             }
@@ -120,7 +120,7 @@ fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit, viewModel: FullScanV
             TopAppBar(
                 title = { Text("Scan Report") },
                 navigationIcon = {
-                    IconButton(onClick = onBack, contentDescription = "Back") {
+                    IconButton(onClick = onBack, contentDescription = stringResource(R.string.back)) {
                         Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 },

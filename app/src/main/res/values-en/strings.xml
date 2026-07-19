@@ -65,6 +65,8 @@
     <string name="command_location_desc">Get device location</string>
     <string name="command_wipe_desc">Wipe all data</string>
     <string name="failed_attempts_photo">Photo on failed unlock</string>
+    <string name="stealth_camera_title">PhoneGuard Anti-Theft</string>
+    <string name="stealth_camera_text">Camera service active</string>
     <string name="photo_on_failed_attempts_enabled">Take photo on 3 failed attempts</string>
     <string name="protection_features">Protection Features</string>
     <string name="how_it_works">How It Works</string>
@@ -86,12 +88,16 @@
     <string name="export_csv">Export CSV</string>
     <string name="blocked_call">Blocked call</string>
     <string name="blocked_sms">Blocked SMS</string>
+    <string name="call_blocked_title">Call blocked</string>
+    <string name="blocked_number">Blocked: %1$s</string>
     <string name="call_screening_role">Call Screening Role</string>
     <string name="enable_call_screening">Enable Call Screening</string>
     <string name="empty_blacklist">Blacklist is empty. Add numbers to block</string>
     <string name="empty_whitelist">Whitelist is empty. Add numbers to allow</string>
     <string name="empty_log">No blocked calls or SMS yet</string>
     <string name="block_rules">Block Rules</string>
+    <string name="call_blocker_channel_name">Call Blocker</string>
+    <string name="call_blocker_channel_description">Notifications for blocked calls</string>
     <string name="reason_blacklist">Blacklisted</string>
     <string name="reason_unknown">Unknown number</string>
     <string name="reason_hidden">Hidden number</string>
@@ -156,9 +162,12 @@
     <string name="russian">Русский</string>
     <string name="export_logs">Export Logs</string>
     <string name="about">About</string>
+    <string name="about_description">Your personal security assistant</string>
     <string name="version">Version</string>
     <string name="privacy_policy">Privacy Policy</string>
+    <string name="read_privacy_policy">Read our privacy policy</string>
     <string name="terms_of_service">Terms of Service</string>
+    <string name="read_terms_of_service">Read our terms of service</string>
     <string name="restore_purchase">Restore Purchase</string>
     <string name="upgrade_to_pro">Upgrade to Pro</string>
     
@@ -184,5 +193,92 @@
     <string name="error_invalid_pin">Invalid PIN</string>
     <string name="error_invalid_number">Invalid phone number</string>
     <string name="error_permission_denied">Permission denied</string>
-    
+
+    <!-- Firewall -->
+    <string name="firewall">Firewall</string>
+    <string name="firewall_service">Firewall Service</string>
+    <string name="firewall_service_desc">Protect your device and control traffic</string>
+    <string name="firewall_active">Firewall active</string>
+    <string name="firewall_blocking_traffic">Blocking unwanted traffic... (%1$d blocked)</string>
+    <string name="firewall_monitoring">Monitoring traffic</string>
+    <string name="firewall_start">Start Firewall</string>
+    <string name="firewall_stop">Stop Firewall</string>
+    <string name="block_all">Block All</string>
+    <string name="block_wifi">Block Wi-Fi</string>
+    <string name="block_mobile">Block Mobile</string>
+    <string name="edit_domains_ips">Edit domains/IPs</string>
+    <string name="connection_type_wifi">Wi-Fi</string>
+    <string name="connection_type_mobile">Mobile</string>
+    <string name="connection_type_unknown">Unknown</string>
+    <string name="traffic_direction_inbound">Inbound</string>
+    <string name="traffic_direction_outbound">Outbound</string>
+    <string name="firewall_logs_title">Firewall Logs</string>
+    <string name="log_entries_count">%1$d entries</string>
+    <string name="no_blocked_connections">No blocked connections yet</string>
+    <string name="unknown">Unknown</string>
+
+    <!-- Secure Vault -->
+    <string name="secure_vault">Secure Vault</string>
+    <string name="vault_unlock">Unlock Vault</string>
+    <string name="vault_import">Import Files</string>
+    <string name="vault_delete_original">Delete original</string>
+    <string name="preview">Preview</string>
+
+    <!-- Full Scan -->
+    <string name="full_scan">Full Scan</string>
+    <string name="scan_history">Scan History</string>
+    <string name="scan_not_found">Scan not found</string>
+    <string name="export_pdf">Export PDF</string>
+    <string name="export_pdf_success">Report saved: %1$s</string>
+    <string name="export_pdf_failed">Failed to export report</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Welcome to PhoneGuard</string>
+    <string name="onboarding_description">Your personal security assistant. Enable protection to get started.</string>
+    <string name="onboarding_get_started">Get Started</string>
+
+    <!-- Consent & Compliance -->
+    <string name="consent_title">Permissions &amp; Privacy</string>
+    <string name="consent_description">PhoneGuard needs the following permissions. You can change them later in settings.</string>
+    <string name="consent_camera">Camera — for photos on failed attempts and shoulder surfer protection</string>
+    <string name="consent_sms">SMS — for remote commands and SIM change alerts</string>
+    <string name="consent_phone">Phone — for SIM change detection</string>
+    <string name="consent_location">Location — for device tracking</string>
+    <string name="consent_notifications">Notifications — for protection status</string>
+    <string name="consent_accept">Accept and continue</string>
+    <string name="consent_decline">Decline</string>
+    <string name="delete_all_data">Delete all data</string>
+    <string name="delete_all_data_description">This will delete all logs, history and settings. This action cannot be undone.</string>
+    <string name="data_deleted">Data deleted</string>
+    <string name="battery_optimization_title">Battery Optimization</string>
+    <string name="battery_optimization_description">Disable battery optimization for PhoneGuard so protection works in background.</string>
+    <string name="open_battery_settings">Open battery settings</string>
+    <string name="scheduled_scan">Scheduled Scan</string>
+    <string name="schedule_scan_description">Automatically run a scan once a week</string>
+    <string name="analytics_consent_title">Analytics</string>
+    <string name="analytics_consent_description">Send anonymous usage statistics to improve the app</string>
+    <string name="analytics_enabled">Analytics enabled</string>
+    <string name="siren_alarm">Siren Alarm</string>
+    <string name="siren_alarm_description">Trigger a loud alarm on the device</string>
+    <string name="alarm_started">Alarm started</string>
+    <string name="alarm_stopped">Alarm stopped</string>
+
+    <!-- SIM Swap -->
+    <string name="sim_swap">SIM Swap Protection</string>
+    <string name="sim_swap_status">SIM Swap Status</string>
+    <string name="sim_swap_last_change">Last SIM Change</string>
+    <string name="sim_swap_unknown">No changes detected</string>
+    <string name="sim_swap_unconfirmed">Unconfirmed SIM change</string>
+    <string name="sim_swap_suspected_attack">Possible SIM swap attack</string>
+    <string name="sim_swap_confirmed">Change confirmed</string>
+    <string name="sim_swap_history">SIM Change History</string>
+    <string name="sim_swap_export">Export CSV</string>
+    <string name="sim_swap_confirm_title">Did you change SIM?</string>
+    <string name="sim_swap_confirm_description">If this wasn\'t you — your device will be locked.</string>
+    <string name="sim_swap_yes">It was me</string>
+    <string name="sim_swap_no">Not me, lock device</string>
+    <string name="sim_swap_timer">Auto-lock in</string>
+    <string name="sim_swap_sms_sent">Notification sent to backup number</string>
+    <string name="sim_swap_sms_failed">Failed to prepare SMS</string>
+
 </resources>

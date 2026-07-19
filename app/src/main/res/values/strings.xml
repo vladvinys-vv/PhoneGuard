@@ -65,6 +65,8 @@
     <string name="command_location_desc">Получить местоположение устройства</string>
     <string name="command_wipe_desc">Удалить все данные</string>
     <string name="failed_attempts_photo">Фото при неудачных попытках</string>
+    <string name="stealth_camera_title">PhoneGuard Антивор</string>
+    <string name="stealth_camera_text">Служба камеры активна</string>
     <string name="photo_on_failed_attempts_enabled">Делать фото при 3 неудачных попытках</string>
     <string name="shoulder_surfer">Защита от подглядывания</string>
     <string name="shoulder_surfer_description">Камера анализирует окружение и обнаруживает посторонних за экраном</string>
@@ -92,12 +94,16 @@
     <string name="export_csv">Экспорт CSV</string>
     <string name="blocked_call">Заблокированный звонок</string>
     <string name="blocked_sms">Заблокированная SMS</string>
+    <string name="call_blocked_title">Звонок заблокирован</string>
+    <string name="blocked_number">Заблокирован: %1$s</string>
     <string name="call_screening_role">Роль проверки звонков</string>
     <string name="enable_call_screening">Включить проверку звонков</string>
     <string name="empty_blacklist">Чёрный список пуст. Добавьте номера для блокировки</string>
     <string name="empty_whitelist">Белый список пуст. Добавьте номера для разрешения</string>
     <string name="empty_log">Пока нет заблокированных звонков или SMS</string>
     <string name="block_rules">Правила блокировки</string>
+    <string name="call_blocker_channel_name">Блокировщик звонков</string>
+    <string name="call_blocker_channel_description">Уведомления о заблокированных звонках</string>
     <string name="reason_blacklist">В чёрном списке</string>
     <string name="reason_unknown">Неизвестный номер</string>
     <string name="reason_hidden">Скрытый номер</string>
@@ -162,9 +168,12 @@
     <string name="russian">Русский</string>
     <string name="export_logs">Экспорт логов</string>
     <string name="about">О приложении</string>
+    <string name="about_description">Ваш личный ассистент безопасности</string>
     <string name="version">Версия</string>
     <string name="privacy_policy">Политика конфиденциальности</string>
+    <string name="read_privacy_policy">Ознакомьтесь с нашей политикой конфиденциальности</string>
     <string name="terms_of_service">Условия использования</string>
+    <string name="read_terms_of_service">Ознакомьтесь с нашими условиями использования</string>
     <string name="restore_purchase">Восстановить покупку</string>
     <string name="upgrade_to_pro">Обновить до Pro</string>
     
@@ -196,12 +205,14 @@
     <string name="firewall_service">Сервис брандмауэра</string>
     <string name="firewall_service_desc">Защита вашего устройства и контроль трафика</string>
     <string name="firewall_active">Брандмауэр активен</string>
+    <string name="firewall_blocking_traffic">Блокировка трафика… (%1$d заблокировано)</string>
     <string name="firewall_monitoring">Мониторинг трафика</string>
     <string name="firewall_start">Включить брандмауэр</string>
     <string name="firewall_stop">Выключить брандмауэр</string>
     <string name="block_all">Заблокировать всё</string>
     <string name="block_wifi">Блокировать Wi-Fi</string>
     <string name="block_mobile">Блокировать мобильные данные</string>
+    <string name="edit_domains_ips">Редактировать домены/IP</string>
 
     <!-- Secure Vault -->
     <string name="secure_vault">Защищённое хранилище</string>
@@ -212,6 +223,7 @@
     <!-- Full Scan -->
     <string name="full_scan">Полное сканирование</string>
     <string name="scan_history">История сканирований</string>
+    <string name="scan_not_found">Сканирование не найдено</string>
 
     <!-- SIM Swap -->
     <string name="sim_swap">Защита от SIM-swap</string>
@@ -264,5 +276,15 @@
     <string name="siren_alarm_description">Запустить громкий сигнал на устройстве</string>
     <string name="alarm_started">Сигнализация запущена</string>
     <string name="alarm_stopped">Сигнализация остановлена</string>
+    <string name="preview">Просмотр</string>
+    <string name="connection_type_wifi">Wi-Fi</string>
+    <string name="connection_type_mobile">Мобильные данные</string>
+    <string name="connection_type_unknown">Неизвестно</string>
+    <string name="traffic_direction_inbound">Входящий</string>
+    <string name="traffic_direction_outbound">Исходящий</string>
+    <string name="unknown">Неизвестно</string>
+    <string name="firewall_logs_title">Журнал брандмауэра</string>
+    <string name="log_entries_count">%1$d записей</string>
+    <string name="no_blocked_connections">Пока нет заблокированных подключений</string>
 
 </resources>

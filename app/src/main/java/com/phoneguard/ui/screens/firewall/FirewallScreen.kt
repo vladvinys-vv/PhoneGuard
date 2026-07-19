@@ -312,12 +312,12 @@ private fun AppFirewallItem(
                     onRuleChanged(newRule)
                     showDomainDialog = false
                 }) {
-                    Text("Save")
+                    Text(stringResource(R.string.save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDomainDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -336,7 +336,7 @@ private fun AppFirewallItem(
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick = { showDomainDialog = true }, contentDescription = "Edit domains/IPs") {
+                IconButton(onClick = { showDomainDialog = true }, contentDescription = stringResource(R.string.edit_domains_ips)) {
                     Icon(Icons.Default.Edit, contentDescription = null)
                 }
                 FilterChip(

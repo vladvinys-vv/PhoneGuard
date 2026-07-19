@@ -79,8 +79,8 @@ class StealthCameraService : LifecycleService() {
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("PhoneGuard Anti-Theft")
-            .setContentText("Camera service running")
+            .setContentTitle(getString(R.string.stealth_camera_title))
+            .setContentText(getString(R.string.stealth_camera_text))
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
             .build()
