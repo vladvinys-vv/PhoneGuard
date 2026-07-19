@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.fullscan.FullScanOrchestrator
 import com.phoneguard.model.FullScanReport
 import com.phoneguard.model.ScanHistory
+import com.phoneguard.util.BatteryOptimizationHelper
 import com.phoneguard.util.PdfExportHelper
 import com.phoneguard.util.PerformanceMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,7 +20,8 @@ import javax.inject.Inject
 class FullScanViewModel @Inject constructor(
     private val orchestrator: FullScanOrchestrator,
     private val performanceMonitor: PerformanceMonitor,
-    private val pdfExportHelper: PdfExportHelper
+    private val pdfExportHelper: PdfExportHelper,
+    private val batteryOptimizationHelper: BatteryOptimizationHelper
 ) : ViewModel() {
 
     private val _isScanning = MutableStateFlow(false)
@@ -50,7 +52,8 @@ class FullScanViewModel @Inject constructor(
     fun startScan() {
         if (_isScanning.value) return
         val now = System.currentTimeMillis()
-        if (now - _lastScanTimestamp.value < TimeUnit.HOURS.toMillis(6)) {
+        val adaptiveInterval = batteryOptimizationHelper.getAdaptiveScanInterval()
+        if (now - _lastScanTimestamp.value < adaptiveInterval) {
             return
         }
         _isScanning.value = true

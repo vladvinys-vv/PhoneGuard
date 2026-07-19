@@ -111,10 +111,6 @@ fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit, viewModel: FullScanV
             val message = context.getString(R.string.export_pdf_success, path)
             snackbarHostState.showSnackbar(message)
             viewModel.clearExportResult()
-        } ?: run {
-            if (viewModel.exportPdfResult.value == null && exportResult == null) {
-                // no change
-            }
         }
     }
 

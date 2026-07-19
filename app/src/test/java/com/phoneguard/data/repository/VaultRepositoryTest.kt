@@ -1,8 +1,9 @@
 package com.phoneguard.data.repository
 
 import app.cash.turbine.test
-import com.phoneguard.data.local.AppDatabase
+import com.phoneguard.data.local.VaultDao
 import com.phoneguard.model.VaultItem
+import com.phoneguard.vault.EncryptionManager
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -22,17 +23,24 @@ class VaultRepositoryTest {
 
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var repository: VaultRepository
-    private val appDatabase: AppDatabase = mockk()
+    private val vaultDao: VaultDao = mockk()
+    private val encryptionManager: EncryptionManager = mockk()
 
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
-        every { appDatabase.vaultDao() } returns mockk {
-            every { getAllItems() } returns flowOf(emptyList())
-            coEvery { insertItem(any()) } returns 1L
-            coEvery { deleteItem(any()) } returns Unit
-        }
-        repository = VaultRepository(appDatabase)
+        every { vaultDao.getAllItems() } returns flowOf(emptyList())
+        coEvery { vaultDao.insertItem(any()) } returns 1L
+        coEvery { vaultDao.deleteItem(any()) } returns Unit
+        coEvery { encryptionManager.encryptFileToVault(any(), any()) } returns VaultItem(
+            fileName = "test.jpg",
+            fileSize = 1024,
+            mimeType = "image/jpeg",
+            encryptionKeyAlias = "key",
+            category = com.phoneguard.model.VaultItemCategory.IMAGE
+        )
+        coEvery { encryptionManager.deleteVaultFile(any()) } returns Unit
+        repository = VaultRepository(vaultDao, encryptionManager)
     }
 
     @After

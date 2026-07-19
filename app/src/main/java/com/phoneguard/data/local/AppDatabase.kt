@@ -185,6 +185,7 @@ class AppDatabaseProvider @Inject constructor(
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE `vault_items` ADD COLUMN `category` TEXT NOT NULL DEFAULT 'OTHER'")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_vault_items_category` ON `vault_items` (`category`)")
+            db.execSQL("UPDATE `vault_items` SET `category` = 'IMAGE' WHERE `isImage` = 1")
         }
     }
 

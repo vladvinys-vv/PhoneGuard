@@ -4,8 +4,12 @@ import app.cash.turbine.test
 import com.phoneguard.fullscan.FullScanOrchestrator
 import com.phoneguard.model.FullScanReport
 import com.phoneguard.model.ScanHistory
+import com.phoneguard.util.BatteryOptimizationHelper
+import com.phoneguard.util.PerformanceMonitor
+import com.phoneguard.util.PdfExportHelper
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -27,13 +31,17 @@ class FullScanViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var viewModel: FullScanViewModel
     private val orchestrator: FullScanOrchestrator = mockk()
+    private val performanceMonitor: PerformanceMonitor = mockk()
+    private val pdfExportHelper: PdfExportHelper = mockk()
+    private val batteryOptimizationHelper: BatteryOptimizationHelper = mockk()
 
     @Before
     fun setup() {
         Dispatchers.setMain(dispatcher)
         coEvery { orchestrator.getAllScans() } returns flowOf(emptyList())
         coEvery { orchestrator.getLatestScanSummary() } returns (null to null)
-        viewModel = FullScanViewModel(orchestrator)
+        every { batteryOptimizationHelper.getAdaptiveScanInterval() } returns TimeUnit.HOURS.toMillis(6)
+        viewModel = FullScanViewModel(orchestrator, performanceMonitor, pdfExportHelper, batteryOptimizationHelper)
     }
 
     @After

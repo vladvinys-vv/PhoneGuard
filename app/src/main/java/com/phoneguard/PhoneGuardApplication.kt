@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.phoneguard.util.CrashHandler
 import com.phoneguard.worker.DataCleanupWorker
+import com.phoneguard.worker.ScheduledFullScanWorker
 import dagger.hilt.android.HiltAndroidApp
 import java.util.concurrent.TimeUnit
 
@@ -33,12 +34,13 @@ class PhoneGuardApplication : Application() {
         }
         CrashHandler().install()
         scheduleDataCleanup()
+        scheduleScheduledFullScan()
     }
 
     private fun scheduleDataCleanup() {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-            .setRequiresCharging(false)
+            .setRequiresBatteryNotLow(true)
             .build()
 
         val cleanupRequest = PeriodicWorkRequestBuilder<DataCleanupWorker>(1, TimeUnit.DAYS)
@@ -47,8 +49,25 @@ class PhoneGuardApplication : Application() {
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "data_cleanup",
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             cleanupRequest
+        )
+    }
+
+    private fun scheduleScheduledFullScan() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val scanRequest = PeriodicWorkRequestBuilder<ScheduledFullScanWorker>(7, TimeUnit.DAYS)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "scheduled_full_scan",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            scanRequest
         )
     }
 }
