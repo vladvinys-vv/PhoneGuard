@@ -44,6 +44,24 @@ android {
         }
     }
 
+    flavorDimensions "environment"
+    productFlavors {
+        staging {
+            dimension "environment"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+            manifestPlaceholders = [
+                appLabel: "PhoneGuard Staging"
+            ]
+        }
+        production {
+            dimension "environment"
+            manifestPlaceholders = [
+                appLabel: "PhoneGuard"
+            ]
+        }
+    }
+
     signingConfigs {
         release {
             def keystorePropertiesFile = rootProject.file("keystore.properties")

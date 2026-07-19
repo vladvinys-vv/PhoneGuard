@@ -132,7 +132,7 @@
 ### 7.1. Конфигурация
 - [ ] Создать `google-services.json` для Firebase (требует реального проекта Firebase)
 - [x] Настроить signing config через `local.properties` / env variables / keystore.properties
-- [ ] Создать separate `app-{flavor}` если нужны staging/production окружения
+- [x] Создать separate `app-{flavor}` если нужны staging/production окружения (staging/production flavors добавлены)
 - [x] Настроить `gradle.properties` для production: `org.gradle.jvmargs=-Xmx4g`, parallel, caching, configuration-cache
 
 ### 7.2. Сторинг
@@ -189,7 +189,7 @@
 - [x] VPN имеет четкую MVP-маркировку и fallback
 - [x] Все основные сценарии покрыты UI-тестами
 - [x] Производительность оптимизирована (индексы, cleanup worker)
-- [ ] Батарея: фоновые задачи не сажат заряд
+- [x] Батарея: фоновые задачи не сажат заряд (BatteryOptimizationHelper, WorkManager constraints, adaptive intervals)
 
 ### Nice to Have (P2)
 - [x] Темная тема

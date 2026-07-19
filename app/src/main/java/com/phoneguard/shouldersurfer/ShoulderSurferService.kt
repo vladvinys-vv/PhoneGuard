@@ -22,6 +22,7 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.phoneguard.R
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.util.BatteryOptimizationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -35,6 +36,9 @@ class ShoulderSurferService : LifecycleService() {
 
     @Inject
     lateinit var preferencesManager: PreferencesManager
+
+    @Inject
+    lateinit var batteryOptimizationHelper: BatteryOptimizationHelper
 
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var analysisJob: Job? = null
@@ -140,7 +144,7 @@ class ShoulderSurferService : LifecycleService() {
 
     private fun startDetection() {
         if (analysisJob?.isActive == true) return
-        adaptiveIntervalMs = getAdaptiveInterval()
+        adaptiveIntervalMs = batteryOptimizationHelper.getAdaptiveShoulderSurferInterval()
 
         analysisJob = lifecycleScope.launch {
             try {
@@ -173,25 +177,6 @@ class ShoulderSurferService : LifecycleService() {
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start camera", e)
             }
-        }
-    }
-
-    private fun getAdaptiveInterval(): Long {
-        val batteryLevel = getBatteryLevel()
-        return when {
-            batteryLevel <= 10 -> 8000L
-            batteryLevel <= 20 -> 5000L
-            batteryLevel <= 50 -> 4000L
-            else -> 2000L
-        }
-    }
-
-    private fun getBatteryLevel(): Int {
-        return try {
-            val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-            batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-        } catch (_: Exception) {
-            100
         }
     }
 

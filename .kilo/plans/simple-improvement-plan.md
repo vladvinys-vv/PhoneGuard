@@ -78,4 +78,8 @@
 - [x] Play Store listing template
 - [x] Changelog template
 - [x] Manual testing checklist
+- [x] Build flavors (staging/production)
+- [x] Battery optimization helper with adaptive intervals
+- [x] WorkManager battery constraints
+- [x] Release documentation template
 

@@ -41,10 +41,12 @@ This document tracks features that are planned but not yet fully implemented.
 - **Memory Testing**: LeakCanary added as debug dependency.
 
 ## Release
-- **Firebase Config**: Add `google-services.json` for Firebase Analytics and Crashlytics (requires real Firebase project).
+- **Firebase Config**: Add `google-services.json` for Firebase Analytics and Crashlytics (requires manual Firebase project setup).
 - **Play Store Assets**: Screenshots, description, keywords, changelog (templates created in `docs/`).
 - **Privacy Policy**: Created (`docs/PRIVACY_POLICY.md`).
 - **Support Email**: Configure support contact.
+- **Build Flavors**: staging/production flavors added to `build.gradle`.
+- **Battery Optimization**: `BatteryOptimizationHelper` + WorkManager constraints + adaptive Shoulder Surfer intervals.
 
 ## Completed
 - [x] Bottom navigation
@@ -112,3 +114,7 @@ This document tracks features that are planned but not yet fully implemented.
 - [x] Play Store listing template
 - [x] Changelog template
 - [x] Manual testing checklist
+- [x] Build flavors (staging/production)
+- [x] Battery optimization helper
+- [x] WorkManager battery constraints
+- [x] Release documentation template
