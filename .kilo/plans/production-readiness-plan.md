@@ -203,6 +203,9 @@
 - [x] Accessibility audit: contentDescription для всех IconButton
 - [x] Product flavors (staging/production)
 - [x] Release документация
+- [x] Улучшенный PdfExportHelper с многостраничным layout и structured report
+- [x] FirewallRulesManager: вынес кэши правил/UID из VPN-сервиса в отдельный singleton
+- [x] CI: раздельные lint/unit-test/build джобы в GitHub Actions
 
 ## Оставшиеся ручные шаги (не требуют кода)
 1. Создать Firebase проект и добавить `google-services.json`
