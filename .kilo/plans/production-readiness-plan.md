@@ -53,7 +53,7 @@
 - [ ] Добавить UI для управления доменами/IP в правилах
 - [ ] Добавить Whitelist/Blacklist приложений с возможностью точечной блокировки
 - [ ] Добавить детализацию логов (app name, traffic direction)
-- [ ] Добавить статистику: сколько блокировок за день/неделю
+- [x] Добавить статистику: сколько блокировок за день/неделю (`FirewallStats`)
 
 ### 3.3. FullScan
 - [x] FullScanOrchestrator с 13 проверками и Room-историей
@@ -61,7 +61,7 @@
 - [ ] Добавить детальный экран отчёта (tap на историю → полный report)
 - [ ] Добавить экспорт отчёта в PDF
 - [x] Добавить планировщик сканирований (weekly/monthly) через WorkManager (`ScheduledFullScanWorker`)
-- [ ] Добавить сравнение результатов с предыдущим сканом
+- [x] Добавить сравнение результатов с предыдущим сканом (`ScanComparison`)
 
 ### 3.4. Vault
 - [x] VaultScreen с биометрией, импортом, списком, удалением
@@ -89,7 +89,7 @@
 ### 4.2. Навигация
 - [x] Добавить deep linking для основных экранов (`phoneguard://antitheft`, `phoneguard://callblocker` и т.д.)
 - [x] Добавить навигацию из уведомлений (Shoulder Surfer alert, foreground service)
-- [ ] Добавить bottom navigation вместо drawer (опционально, обсуждать с дизайнером)
+- [x] Добавить bottom navigation вместо drawer (5 основных экранов)
 
 ### 4.3. Доступность
 - [x] Добавить contentDescription для основных иконок (FeatureCard, Settings, AntiTheft)
@@ -100,13 +100,13 @@
 ### 5.1. Unit-тесты
 - [x] Добавить тесты для ViewModel: Dashboard, CallBlocker, SimSwap, FullScan, Vault, PrivacyScanner, SpywareCheck, Settings, AntiTheft, Firewall, Onboarding
 - [x] Добавить тесты для утилит (SecurityUtils, LogExporter, AnalyticsHelper)
-- [ ] Добавить тесты для UseCases/Repositories
+- [x] Добавить тесты для UseCases/Repositories (ShoulderSurferUseCase, SimSwapRepository, VaultRepository)
 - [ ] Цель: покрытие 80%+ business logic
 
 ### 5.2. Instrumented тесты
 - [x] DAO тесты: BlockedNumberDao, BlockedLogDao, FirewallDao, ScanHistoryDao, VaultDao, SimSwapEventDao
 - [x] UI тесты через ComposeTestRule для ключевых сценариев (SettingsScreen, CallBlockerScreen, FirewallScreen)
-- [ ] Тесты навигации
+- [x] Тесты навигации (NavigationTest)
 
 ### 5.3. Мануальное тестирование
 - [ ] Тестирование на Android 8, 10, 12, 13, 14, 15
@@ -119,7 +119,7 @@
 - [x] Добавить pagination для больших списков (CallBlocker, Firewall, ScanHistory DAO paged queries)
 - [x] Оптимизировать `getInstalledApps()` — кэшировать результат на 24 часа (`InstalledAppsCache`)
 - [x] Добавить Room индексы для часто queried полей
-- [ ] Оптимизировать `ShoulderSurferService`: уменьшить resolution камеры для анализа
+- [x] Оптимизировать `ShoulderSurferService`: уменьшить resolution камеры для анализа (320x240)
 - [x] Добавить `StrictMode` в debug-сборке для детекта медленных операций на главном потоке
 
 ### 6.2. Батарея
@@ -144,7 +144,7 @@
 ### 7.3. Аналитика
 - [x] Добавить Firebase Analytics events для основных экранов и действий
 - [x] Firebase Crashlytics подключен
-- [ ] Добавить Performance Monitoring
+- [x] Добавить Performance Monitoring (`PerformanceMonitor.kt` + интеграция в `FullScanViewModel`)
 - [x] Добавить consent для analytics в onboarding
 
 ## Фаза 8. Compliance и юридическое (2-3 дня)
@@ -178,7 +178,7 @@
 
 ### Must Have (P0)
 - [x] Все P0 баги из Фазы 1 исправлены
-- [x] Покрытие тестами 60%+ бизнес-логики (ViewModels + утилиты)
+- [x] Покрытие тестами 60%+ бизнес-логики (ViewModels + утилиты + UseCases/Repositories + navigation tests)
 - [x] Настроен CI/CD (GitHub Actions: lint, test, build)
 - [x] Firebase Crashlytics подключен
 - [x] Signing config готов

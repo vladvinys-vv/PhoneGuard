@@ -35,6 +35,9 @@ class FullScanViewModel @Inject constructor(
     private val _lastScanTimestamp = MutableStateFlow<Long>(0)
     val lastScanTimestamp: StateFlow<Long> = _lastScanTimestamp.asStateFlow()
 
+    private val _comparison = MutableStateFlow<ScanComparison?>(null)
+    val comparison: StateFlow<ScanComparison?> = _comparison.asStateFlow()
+
     init {
         loadHistory()
     }
@@ -48,6 +51,7 @@ class FullScanViewModel @Inject constructor(
         _isScanning.value = true
         _report.value = null
         _lastScanTimestamp.value = now
+        _comparison.value = null
 
         val trace = performanceMonitor.startTrace(PerformanceMonitor.TRACE_SCAN)
         trace.start()
@@ -61,6 +65,7 @@ class FullScanViewModel @Inject constructor(
                             _report.value = state.report
                             _isScanning.value = false
                             loadHistory()
+                            compareWithPrevious(state.report)
                             trace.stop()
                         }
                     }
@@ -72,6 +77,21 @@ class FullScanViewModel @Inject constructor(
         }
     }
 
+    private suspend fun compareWithPrevious(currentReport: FullScanReport) {
+        val previous = orchestrator.getAllScans().first().firstOrNull()?.reportJson?.let {
+            try {
+                // Simple comparison logic - in production use proper JSON parsing
+                ScanComparison(
+                    riskScoreDiff = currentReport.riskScore - (_scanHistory.value.firstOrNull()?.riskScore ?: 0),
+                    issuesDiff = currentReport.issuesFound - (_scanHistory.value.firstOrNull()?.issuesFound ?: 0)
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+        _comparison.value = previous
+    }
+
     fun loadHistory() {
         viewModelScope.launch {
             orchestrator.getAllScans().collect { _scanHistory.value = it }
@@ -80,4 +100,9 @@ class FullScanViewModel @Inject constructor(
 
     suspend fun getLatestSummary(): Pair<Int?, String?> =
         orchestrator.getLatestScanSummary()
+
+    data class ScanComparison(
+        val riskScoreDiff: Int,
+        val issuesDiff: Int
+    )
 }

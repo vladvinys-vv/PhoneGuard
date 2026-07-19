@@ -23,7 +23,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+
+data class FirewallStats(
+    val todayBlocks: Int = 0,
+    val topBlockedPackage: String? = null
+)
 
 @HiltViewModel
 class FirewallViewModel @Inject constructor(
@@ -47,12 +53,29 @@ class FirewallViewModel @Inject constructor(
     private val _hasMoreLogs = MutableStateFlow(false)
     val hasMoreLogs: StateFlow<Boolean> = _hasMoreLogs.asStateFlow()
 
+    private val _stats = MutableStateFlow(FirewallStats())
+    val stats: StateFlow<FirewallStats> = _stats.asStateFlow()
+
     private val logPageSize = 20
     private val logOffset = MutableStateFlow(0)
 
     init {
         loadApps()
         loadLogs()
+        loadStats()
+    }
+
+    private fun loadStats() {
+        viewModelScope.launch {
+            val today = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
+            val logs = repository.getAllLogs().first()
+            val todayBlocks = logs.count { it.timestamp > today }
+            val topPackage = logs.groupingBy { it.packageName }.eachCount().maxByOrNull { it.value }?.key
+            _stats.value = FirewallStats(
+                todayBlocks = todayBlocks,
+                topBlockedPackage = topPackage
+            )
+        }
     }
 
     private fun loadApps() {

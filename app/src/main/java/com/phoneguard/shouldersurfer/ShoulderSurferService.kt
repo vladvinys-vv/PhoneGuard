@@ -151,6 +151,8 @@ class ShoulderSurferService : LifecycleService() {
                 val preview = Preview.Builder().build()
                 val imageAnalyzer = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetResolution(android.util.Size(320, 240))
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                     .build()
                     .also { it.setAnalyzer(cameraExecutor, ::analyzeImage) }
 

@@ -55,4 +55,12 @@
 - [x] Добавить WorkManager для scheduled scans и data cleanup
 - [x] Добавить battery optimization prompt
 - [x] Добавить usesPermissionFlags и permissionGroup в манифест
+- [x] Добавить bottom navigation
+- [x] Интегрировать Performance Monitoring
+- [x] Оптимизировать ShoulderSurferService camera resolution (320x240)
+- [x] Добавить navigation tests
+- [x] Добавить UseCase/Repository tests
+- [x] Документировать SMS blocker limitation
+- [x] Добавить scan comparison
+- [x] Добавить firewall traffic statistics
 

@@ -8,10 +8,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navDeepLink
 import com.phoneguard.R
@@ -48,58 +50,51 @@ fun PhoneGuardNavHost(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    val bottomNavItems = listOf(
+        Screen.Dashboard,
+        Screen.AntiTheft,
+        Screen.CallBlocker,
+        Screen.Firewall,
+        Screen.Settings
+    )
 
-    val navigateToRoute: (String) -> Unit = { route ->
-        navController.navigate(route) {
-            popUpTo(Screen.Dashboard.route) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
+    val showBottomBar = bottomNavItems.any { it.route == currentRoute }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            DrawerContent(
-                currentRoute = currentRoute,
-                onNavigateTo = navigateToRoute,
-                onCloseDrawer = { scope.launch { drawerState.close() } }
-            )
-        },
-        gesturesEnabled = true,
-        modifier = modifier
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            scope.launch {
-                                if (drawerState.isClosed) drawerState.open()
-                                else drawerState.close()
+    Scaffold(
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar {
+                    bottomNavItems.forEach { screen ->
+                        val selected = currentRoute == screen.route
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    imageVector = screen.icon,
+                                    contentDescription = stringResource(screen.title)
+                                )
+                            },
+                            label = { Text(stringResource(screen.title)) },
+                            selected = selected,
+                            onClick = {
+                                if (currentRoute != screen.route) {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(Screen.Dashboard.route) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
                             }
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Открыть меню"
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
+                        )
+                    }
+                }
             }
-        ) { innerPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = Screen.Dashboard.route,
-                modifier = Modifier.padding(innerPadding)
-            ) {
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Dashboard.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
                 composable(Screen.Dashboard.route) {
                     DashboardScreen(
                         viewModel = hiltViewModel(),
