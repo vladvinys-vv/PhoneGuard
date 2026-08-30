@@ -5,14 +5,23 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.fullscan.FullScanOrchestrator
 import com.phoneguard.model.FullScanReport
 import com.phoneguard.model.ScanHistory
+import com.phoneguard.util.BatteryOptimizationHelper
+import com.phoneguard.util.PdfExportHelper
+import com.phoneguard.util.PerformanceMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltViewModel
 class FullScanViewModel @Inject constructor(
-    private val orchestrator: FullScanOrchestrator
+    private val orchestrator: FullScanOrchestrator,
+    private val performanceMonitor: PerformanceMonitor,
+    private val pdfExportHelper: PdfExportHelper,
+    private val batteryOptimizationHelper: BatteryOptimizationHelper
 ) : ViewModel() {
 
     private val _isScanning = MutableStateFlow(false)
@@ -27,27 +36,68 @@ class FullScanViewModel @Inject constructor(
     private val _scanHistory = MutableStateFlow<List<ScanHistory>>(emptyList())
     val scanHistory: StateFlow<List<ScanHistory>> = _scanHistory.asStateFlow()
 
+    private val _lastScanTimestamp = MutableStateFlow<Long>(0)
+    val lastScanTimestamp: StateFlow<Long> = _lastScanTimestamp.asStateFlow()
+
+    private val _comparison = MutableStateFlow<ScanComparison?>(null)
+    val comparison: StateFlow<ScanComparison?> = _comparison.asStateFlow()
+
+    private val _exportPdfResult = MutableStateFlow<String?>(null)
+    val exportPdfResult: StateFlow<String?> = _exportPdfResult.asStateFlow()
+
     init {
         loadHistory()
     }
 
     fun startScan() {
         if (_isScanning.value) return
+        val now = System.currentTimeMillis()
+        val adaptiveInterval = batteryOptimizationHelper.getAdaptiveScanInterval()
+        if (now - _lastScanTimestamp.value < adaptiveInterval) {
+            return
+        }
         _isScanning.value = true
         _report.value = null
+        _lastScanTimestamp.value = now
+        _comparison.value = null
+
+        val trace = performanceMonitor.startTrace(PerformanceMonitor.TRACE_SCAN)
+        trace.start()
 
         viewModelScope.launch {
-            orchestrator.runFullScan().collect { state ->
-                when (state) {
-                    is FullScanOrchestrator.FullScanState.Progress -> _progress.value = state
-                    is FullScanOrchestrator.FullScanState.Result -> {
-                        _report.value = state.report
-                        _isScanning.value = false
-                        loadHistory()
+            try {
+                orchestrator.runFullScan().collect { state ->
+                    when (state) {
+                        is FullScanOrchestrator.FullScanState.Progress -> _progress.value = state
+                        is FullScanOrchestrator.FullScanState.Result -> {
+                            _report.value = state.report
+                            _isScanning.value = false
+                            loadHistory()
+                            compareWithPrevious(state.report)
+                            trace.stop()
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                _isScanning.value = false
+                trace.stop()
             }
         }
+    }
+
+    private suspend fun compareWithPrevious(currentReport: FullScanReport) {
+        val previous = orchestrator.getAllScans().first().firstOrNull()?.reportJson?.let {
+            try {
+                // Simple comparison logic - in production use proper JSON parsing
+                ScanComparison(
+                    riskScoreDiff = currentReport.riskScore - (_scanHistory.value.firstOrNull()?.riskScore ?: 0),
+                    issuesDiff = currentReport.issuesFound - (_scanHistory.value.firstOrNull()?.issuesFound ?: 0)
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+        _comparison.value = previous
     }
 
     fun loadHistory() {
@@ -58,4 +108,24 @@ class FullScanViewModel @Inject constructor(
 
     suspend fun getLatestSummary(): Pair<Int?, String?> =
         orchestrator.getLatestScanSummary()
+
+    fun exportPdf(scan: ScanHistory) {
+        viewModelScope.launch {
+            val file = pdfExportHelper.exportScanReport(scan)
+            if (file != null) {
+                _exportPdfResult.value = file.absolutePath
+            } else {
+                _exportPdfResult.value = null
+            }
+        }
+    }
+
+    fun clearExportResult() {
+        _exportPdfResult.value = null
+    }
+
+    data class ScanComparison(
+        val riskScoreDiff: Int,
+        val issuesDiff: Int
+    )
 }

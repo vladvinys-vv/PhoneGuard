@@ -27,9 +27,21 @@ interface FirewallDao {
     @Query("SELECT * FROM firewall_logs ORDER BY timestamp DESC LIMIT 500")
     fun getAllLogs(): Flow<List<FirewallLog>>
 
+    @Query("SELECT * FROM firewall_logs ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
+    suspend fun getPagedLogs(limit: Int, offset: Int): List<FirewallLog>
+
+    @Query("SELECT COUNT(*) FROM firewall_logs")
+    suspend fun getLogsCount(): Int
+
     @Insert
     suspend fun insertLog(log: FirewallLog)
 
     @Query("DELETE FROM firewall_logs")
     suspend fun clearLogs()
+
+    @Query("DELETE FROM firewall_rules")
+    suspend fun clearRules()
+
+    @Query("DELETE FROM firewall_logs WHERE timestamp < :cutoff")
+    suspend fun deleteLogsOlderThan(cutoff: Long)
 }

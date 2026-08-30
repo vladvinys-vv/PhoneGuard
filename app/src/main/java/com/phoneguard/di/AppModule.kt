@@ -1,8 +1,6 @@
 package com.phoneguard.di
 
 import android.content.Context
-import com.phoneguard.data.local.AppDatabase
-import com.phoneguard.data.local.AppDatabaseProvider
 import com.phoneguard.data.local.SimSwapEventDao
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.simswap.SimSwapDetector
@@ -22,19 +20,13 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideAppDatabase(provider: AppDatabaseProvider): AppDatabase {
-        return provider.database
-    }
-
-    @Provides
-    @Singleton
     fun providePreferencesManager(@ApplicationContext context: Context): PreferencesManager {
         return PreferencesManager(context)
     }
 
     @Provides
     @Singleton
-    fun provideSimSwapEventDao(database: AppDatabase): SimSwapEventDao = database.simSwapEventDao()
+    fun provideSimSwapEventDao(database: com.phoneguard.data.local.AppDatabase): SimSwapEventDao = database.simSwapEventDao()
 
     @Provides
     @Singleton

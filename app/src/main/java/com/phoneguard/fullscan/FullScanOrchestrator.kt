@@ -41,6 +41,9 @@ class FullScanOrchestrator @Inject constructor(
         data class Result(val report: FullScanReport, val scanHistoryId: Long) : FullScanState()
     }
 
+    @Volatile
+    private var isScanning = false
+
     private fun buildReport(
         root: RootDetectionCheck.RootCheckResult,
         integrity: SystemIntegrityCheck.IntegrityResult,
@@ -205,70 +208,79 @@ class FullScanOrchestrator @Inject constructor(
     }
 
     fun runFullScan(): Flow<FullScanState> = flow {
+        if (isScanning) {
+            emit(FullScanState.Progress(0, 13, "Сканирование уже выполняется...", isFinished = true))
+            return@flow
+        }
+        isScanning = true
         val totalSteps = 13
-        emit(FullScanState.Progress(1, totalSteps, "Проверка root-доступа..."))
-        val rootResult = withContext(Dispatchers.IO) { rootDetectionCheck.performCheck() }
+        try {
+            emit(FullScanState.Progress(1, totalSteps, "Проверка root-доступа..."))
+            val rootResult = withContext(Dispatchers.IO) { rootDetectionCheck.performCheck() }
 
-        emit(FullScanState.Progress(2, totalSteps, "Проверка целостности системы..."))
-        val integrityResult = withContext(Dispatchers.IO) { systemIntegrityCheck.performCheck() }
+            emit(FullScanState.Progress(2, totalSteps, "Проверка целостности системы..."))
+            val integrityResult = withContext(Dispatchers.IO) { systemIntegrityCheck.performCheck() }
 
-        emit(FullScanState.Progress(3, totalSteps, "Сканирование файловой системы..."))
-        val fileScanResult = withContext(Dispatchers.IO) { fileSystemScanCheck.performScan() }
+            emit(FullScanState.Progress(3, totalSteps, "Сканирование файловой системы..."))
+            val fileScanResult = withContext(Dispatchers.IO) { fileSystemScanCheck.performScan() }
 
-        emit(FullScanState.Progress(4, totalSteps, "Проверка опций разработчика..."))
-        val devOptionsResult = withContext(Dispatchers.IO) { developerOptionsCheck.performCheck() }
+            emit(FullScanState.Progress(4, totalSteps, "Проверка опций разработчика..."))
+            val devOptionsResult = withContext(Dispatchers.IO) { developerOptionsCheck.performCheck() }
 
-        emit(FullScanState.Progress(5, totalSteps, "Проверка обновлений безопасности..."))
-        val patchResult = withContext(Dispatchers.IO) { securityPatchCheck.performCheck() }
+            emit(FullScanState.Progress(5, totalSteps, "Проверка обновлений безопасности..."))
+            val patchResult = withContext(Dispatchers.IO) { securityPatchCheck.performCheck() }
 
-        emit(FullScanState.Progress(6, totalSteps, "Проверка Accessibility-сервисов..."))
-        val accessibilityResult = withContext(Dispatchers.IO) { accessibilityServiceCheck.performCheck() }
+            emit(FullScanState.Progress(6, totalSteps, "Проверка Accessibility-сервисов..."))
+            val accessibilityResult = withContext(Dispatchers.IO) { accessibilityServiceCheck.performCheck() }
 
-        emit(FullScanState.Progress(7, totalSteps, "Проверка overlay-атак..."))
-        val overlayResult = withContext(Dispatchers.IO) { overlayAttackCheck.performCheck() }
+            emit(FullScanState.Progress(7, totalSteps, "Проверка overlay-атак..."))
+            val overlayResult = withContext(Dispatchers.IO) { overlayAttackCheck.performCheck() }
 
-        emit(FullScanState.Progress(8, totalSteps, "Анализ злоупотребления разрешениями..."))
-        val permissionAbuseResult = withContext(Dispatchers.IO) { permissionAbuseCheck.performCheck() }
+            emit(FullScanState.Progress(8, totalSteps, "Анализ злоупотребления разрешениями..."))
+            val permissionAbuseResult = withContext(Dispatchers.IO) { permissionAbuseCheck.performCheck() }
 
-        emit(FullScanState.Progress(9, totalSteps, "Поиск скрытых приложений..."))
-        val hiddenAppsResult = withContext(Dispatchers.IO) { hiddenAppsCheck.performCheck() }
+            emit(FullScanState.Progress(9, totalSteps, "Поиск скрытых приложений..."))
+            val hiddenAppsResult = withContext(Dispatchers.IO) { hiddenAppsCheck.performCheck() }
 
-        emit(FullScanState.Progress(10, totalSteps, "Проверка Device Admin..."))
-        val deviceAdminResult = withContext(Dispatchers.IO) { deviceAdminAbuseCheck.performCheck() }
+            emit(FullScanState.Progress(10, totalSteps, "Проверка Device Admin..."))
+            val deviceAdminResult = withContext(Dispatchers.IO) { deviceAdminAbuseCheck.performCheck() }
 
-        emit(FullScanState.Progress(11, totalSteps, "Анализ приложений и разрешений..."))
-        val privacyApps = withContext(Dispatchers.IO) { privacyScannerRepository.getInstalledApps().first() }
+            emit(FullScanState.Progress(11, totalSteps, "Анализ приложений и разрешений..."))
+            val privacyApps = withContext(Dispatchers.IO) { privacyScannerRepository.getInstalledApps().first() }
 
-        emit(FullScanState.Progress(12, totalSteps, "Поиск подозрительной активности..."))
-        val spywareApps = withContext(Dispatchers.IO) { spywareCheckRepository.scanForSpyware().first() }
+            emit(FullScanState.Progress(12, totalSteps, "Поиск подозрительной активности..."))
+            val spywareApps = withContext(Dispatchers.IO) { spywareCheckRepository.scanForSpyware().first() }
 
-        emit(FullScanState.Progress(13, totalSteps, "Анализ сети и правил фаервола..."))
-        val firewallDeferred = withContext(Dispatchers.IO) { async { firewallRepository.allRules.first() } }
-        val logsDeferred = withContext(Dispatchers.IO) { async { firewallRepository.allLogs.first() } }
-        val firewallRules = firewallDeferred.await()
-        val firewallLogs = logsDeferred.await()
+            emit(FullScanState.Progress(13, totalSteps, "Анализ сети и правил фаервола..."))
+            val firewallDeferred = withContext(Dispatchers.IO) { async { firewallRepository.allRules.first() } }
+            val logsDeferred = withContext(Dispatchers.IO) { async { firewallRepository.allLogs.first() } }
+            val firewallRules = firewallDeferred.await()
+            val firewallLogs = logsDeferred.await()
 
-        val phishingResult = withContext(Dispatchers.IO) { phishingUrlChecker.checkRecentMessages() }
+            val phishingResult = withContext(Dispatchers.IO) { phishingUrlChecker.checkRecentMessages() }
 
-        val report = buildReport(
-            root = rootResult,
-            integrity = integrityResult,
-            fileScan = fileScanResult,
-            devOptions = devOptionsResult,
-            patch = patchResult,
-            accessibility = accessibilityResult,
-            overlays = overlayResult,
-            permissionAbuse = permissionAbuseResult,
-            hiddenApps = hiddenAppsResult,
-            deviceAdmins = deviceAdminResult,
-            privacyApps = privacyApps,
-            spywareApps = spywareApps,
-            firewallRules = firewallRules,
-            firewallLogs = firewallLogs,
-            phishingResult = phishingResult
-        )
-        val historyId = withContext(Dispatchers.IO) { saveScanHistory(report) }
-        emit(FullScanState.Progress(totalSteps, totalSteps, "Сканирование завершено", isFinished = true))
-        emit(FullScanState.Result(report, historyId))
+            val report = buildReport(
+                root = rootResult,
+                integrity = integrityResult,
+                fileScan = fileScanResult,
+                devOptions = devOptionsResult,
+                patch = patchResult,
+                accessibility = accessibilityResult,
+                overlays = overlayResult,
+                permissionAbuse = permissionAbuseResult,
+                hiddenApps = hiddenAppsResult,
+                deviceAdmins = deviceAdminResult,
+                privacyApps = privacyApps,
+                spywareApps = spywareApps,
+                firewallRules = firewallRules,
+                firewallLogs = firewallLogs,
+                phishingResult = phishingResult
+            )
+            val historyId = withContext(Dispatchers.IO) { saveScanHistory(report) }
+            emit(FullScanState.Progress(totalSteps, totalSteps, "Сканирование завершено", isFinished = true))
+            emit(FullScanState.Result(report, historyId))
+        } finally {
+            isScanning = false
+        }
     }
 }

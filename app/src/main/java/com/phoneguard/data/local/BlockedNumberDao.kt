@@ -29,4 +29,13 @@ interface BlockedNumberDao {
 
     @Query("DELETE FROM blocked_numbers WHERE id = :id")
     suspend fun deleteBlockedNumberById(id: Long)
+
+    @Query("DELETE FROM blocked_numbers")
+    suspend fun deleteAll()
+
+    @Query("SELECT * FROM blocked_numbers ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
+    suspend fun getPagedBlockedNumbers(limit: Int, offset: Int): List<BlockedNumber>
+
+    @Query("SELECT COUNT(*) FROM blocked_numbers")
+    suspend fun getBlockedNumbersCount(): Int
 }

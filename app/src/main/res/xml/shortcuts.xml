@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="antitheft"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/anti_theft"
+        android:shortcutLongLabel="@string/anti_theft"
+        android:targetClass="com.phoneguard.ui.MainActivity">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.phoneguard"
+            android:targetClass="com.phoneguard.ui.MainActivity"
+            android:data="phoneguard://antitheft" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="callblocker"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/call_sms_blocker"
+        android:shortcutLongLabel="@string/call_sms_blocker"
+        android:targetClass="com.phoneguard.ui.MainActivity">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.phoneguard"
+            android:targetClass="com.phoneguard.ui.MainActivity"
+            android:data="phoneguard://callblocker" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="firewall"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/firewall"
+        android:shortcutLongLabel="@string/firewall"
+        android:targetClass="com.phoneguard.ui.MainActivity">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.phoneguard"
+            android:targetClass="com.phoneguard.ui.MainActivity"
+            android:data="phoneguard://firewall" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="vault"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:shortcutShortLabel="@string/secure_vault"
+        android:shortcutLongLabel="@string/secure_vault"
+        android:targetClass="com.phoneguard.ui.MainActivity">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.phoneguard"
+            android:targetClass="com.phoneguard.ui.MainActivity"
+            android:data="phoneguard://vault" />
+    </shortcut>
+
+</shortcuts>

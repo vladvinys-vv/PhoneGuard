@@ -64,23 +64,20 @@ class PhoneGuardVpnService : VpnService() {
     @Inject
     lateinit var firewallRepository: FirewallRepository
 
+    @Inject
+    lateinit var rulesManager: FirewallRulesManager
+
     private var vpnInterface: ParcelFileDescriptor? = null
     private var vpnJob: Job? = null
     private val vpnScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /** Кэш правил: packageName → FirewallRule */
-    private val rulesCache = mutableMapOf<String, FirewallRule>()
-
-    /** Кэш UID → packageName */
-    private val uidPackageCache = mutableMapOf<Int, String>()
+    // Pre-allocated buffers to reduce GC pressure
+    private val ipHeaderBuffer = ByteArray(60)
+    private val packetBuffer = ByteArray(65535)
 
     /** Rate limiter для логов */
     private var logCount = 0
     private var logWindowStart = 0L
-
-    // Pre-allocated buffers to reduce GC pressure
-    private val ipHeaderBuffer = ByteArray(60)
-    private val packetBuffer = ByteArray(65535)
 
     override fun onCreate() {
         super.onCreate()
@@ -124,8 +121,8 @@ class PhoneGuardVpnService : VpnService() {
 
         val blockedCount = logCount
         return Notification.Builder(this, VPN_CHANNEL_ID)
-            .setContentTitle("PhoneGuard Firewall Active")
-            .setContentText("Blocking unwanted traffic... ($blockedCount blocked)")
+            .setContentTitle(getString(R.string.firewall_active))
+            .setContentText(getString(R.string.firewall_blocking_traffic, blockedCount))
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -138,53 +135,31 @@ class PhoneGuardVpnService : VpnService() {
             return
         }
 
-        try {
-            // Load rules cache
-            runBlocking {
-                val rules = firewallRepository.allRules.first()
-                rulesCache.clear()
-                rules.forEach { rulesCache[it.packageName] = it }
+        vpnJob = vpnScope.launch {
+            try {
+                rulesManager.loadRules()
+                rulesManager.loadInstalledApps(packageManager)
+                Log.d(TAG, "Loaded ${rulesManager.getRulesSnapshot().size} rules, ${rulesManager.getPackageNameForUid(0)?.let { "installed apps" } ?: "installed apps"}")
 
-                // Build UID → packageName cache
-                uidPackageCache.clear()
-                val pm = packageManager
-                val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getInstalledApplications(
-                        android.content.pm.PackageManager.ApplicationInfoFlags.of(0)
-                    )
+                val builder = Builder()
+                    .addAddress(TUN_ADDRESS, 32)
+                    .addRoute(TUN_NETWORK, TUN_PREFIX)
+                    .setMtu(TUN_MTU)
+                    .setSession("PhoneGuard Firewall")
+                    .addDnsServer("8.8.8.8")
+                    .addDnsServer("1.1.1.1")
+
+                vpnInterface = builder.establish()
+                if (vpnInterface != null) {
+                    startForeground(VPN_NOTIFICATION_ID, getNotification())
+                    Log.d(TAG, "VPN started, TUN interface created")
+                    runVpnLoop()
                 } else {
-                    @Suppress("DEPRECATION")
-                    pm.getInstalledApplications(0)
+                    Log.e(TAG, "Failed to establish VPN interface")
                 }
-                installedApps.forEach { app ->
-                    uidPackageCache[app.uid] = app.packageName
-                }
-                Log.d(TAG, "Loaded ${rulesCache.size} rules, ${uidPackageCache.size} apps")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start VPN", e)
             }
-
-            // Build VPN interface
-            val builder = Builder()
-                .addAddress(TUN_ADDRESS, 32)
-                .addRoute(TUN_NETWORK, TUN_PREFIX)
-                .setMtu(TUN_MTU)
-                .setSession("PhoneGuard Firewall")
-                .addDnsServer("8.8.8.8")
-                .addDnsServer("1.1.1.1")
-
-            // На Android 10+ можно заблокировать определённые приложения на уровне VPN
-            // Но мы управляем на уровне пакетов, поэтому не используем
-            // allowedApplications / disallowedApplications
-
-            vpnInterface = builder.establish()
-            if (vpnInterface != null) {
-                startForeground(VPN_NOTIFICATION_ID, getNotification())
-                Log.d(TAG, "VPN started, TUN interface created")
-                runVpnLoop()
-            } else {
-                Log.e(TAG, "Failed to establish VPN interface")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start VPN", e)
         }
     }
 
@@ -241,44 +216,50 @@ class PhoneGuardVpnService : VpnService() {
      * 5. Block or forward
      */
     private suspend fun handlePacket(packet: ByteArray, output: FileOutputStream) {
+        try {
+            doHandlePacket(packet, output)
+        } catch (e: Exception) {
+            Log.w(TAG, "Packet handling failed, forwarding packet", e)
+            try {
+                output.write(packet)
+            } catch (_: Exception) {}
+        }
+    }
+
+    private suspend fun doHandlePacket(packet: ByteArray, output: FileOutputStream) {
         if (packet.size < 20) {
-            // Too small for IP header, forward
             output.write(packet)
             return
         }
 
-        // IPv4 version + header length
         val versionAndIHL = packet[0].toInt() and 0xFF
         val version = (versionAndIHL shr 4) and 0x0F
         val headerLen = (versionAndIHL and 0x0F) * 4
 
         if (version != 4 || headerLen < 20 || headerLen > packet.size) {
-            // Not IPv4 or invalid header, forward
             output.write(packet)
             return
         }
 
-        val totalLen = ((packet[2].toInt() and 0xFF) shl 8) or (packet[3].toInt() and 0xFF)
         val protocol = packet[9].toInt() and 0xFF
 
-        // Destination IP
-        val destIp = packet[16].toInt() and 0xFF to 0 or
-                     packet[17].toInt() and 0xFF to 8 or
-                     packet[18].toInt() and 0xFF to 16 or
-                     packet[19].toInt() and 0xFF to 24
+        val destIpBytes = byteArrayOf(
+            packet[16], packet[17], packet[18], packet[19]
+        )
+        val destIpStr = try {
+            InetAddress.getByAddress(destIpBytes).hostAddress ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
 
-        val destIpStr = InetAddress.getByAddress(
-            byteArrayOf(
-                packet[16], packet[17], packet[18], packet[19]
-            )
-        ).hostAddress ?: "unknown"
-
-        // Source IP
-        val srcIpStr = InetAddress.getByAddress(
-            byteArrayOf(
-                packet[12], packet[13], packet[14], packet[15]
-            )
-        ).hostAddress ?: "unknown"
+        val srcIpBytes = byteArrayOf(
+            packet[12], packet[13], packet[14], packet[15]
+        )
+        val srcIpStr = try {
+            InetAddress.getByAddress(srcIpBytes).hostAddress ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
 
         var destPort = 0
         var srcPort = 0
@@ -286,20 +267,16 @@ class PhoneGuardVpnService : VpnService() {
         if (headerLen + 4 <= packet.size) {
             when (protocol) {
                 6 -> { // TCP
-                    if (headerLen + 4 <= packet.size) {
-                        srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
-                                  (packet[headerLen + 1].toInt() and 0xFF)
-                        destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
-                                   (packet[headerLen + 3].toInt() and 0xFF)
-                    }
+                    srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
+                              (packet[headerLen + 1].toInt() and 0xFF)
+                    destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
+                               (packet[headerLen + 3].toInt() and 0xFF)
                 }
                 17 -> { // UDP
-                    if (headerLen + 4 <= packet.size) {
-                        srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
-                                  (packet[headerLen + 1].toInt() and 0xFF)
-                        destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
-                                   (packet[headerLen + 3].toInt() and 0xFF)
-                    }
+                    srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
+                              (packet[headerLen + 1].toInt() and 0xFF)
+                    destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
+                               (packet[headerLen + 3].toInt() and 0xFF)
                 }
                 1 -> { // ICMP — always allow
                     output.write(packet)
@@ -308,27 +285,23 @@ class PhoneGuardVpnService : VpnService() {
             }
         }
 
-        // Определяем UID через ConnectionManager
         val uid = getUidForConnection(destIpStr, destPort, protocol)
         if (uid == null) {
-            // Не можем определить UID — форвардим
             output.write(packet)
             return
         }
 
-        val pkg = uidPackageCache[uid]
+        val pkg = rulesManager.getPackageNameForUid(uid)
         if (pkg == null) {
-            // Пакет от системного процесса или неизвестного UID
             output.write(packet)
             return
         }
 
-        val rule = rulesCache[pkg]
+        val rule = rulesManager.getRuleForPackage(pkg)
         val shouldBlock = shouldBlockPacket(rule, destIpStr, destPort)
 
         if (shouldBlock) {
             logBlock(pkg, destIpStr, destPort, protocol)
-            // Drop packet (don't write to output)
         } else {
             output.write(packet)
         }
@@ -384,19 +357,18 @@ class PhoneGuardVpnService : VpnService() {
         val connectionType = if (isOnWifi()) FirewallLog.ConnectionType.WIFI
         else FirewallLog.ConnectionType.MOBILE
 
-        val protoName = when (protocol) {
-            6 -> "TCP"
-            17 -> "UDP"
-            else -> "IP"
-        }
+        val trafficDirection = FirewallLog.TrafficDirection.OUTBOUND
+
+        val appName = resolveAppName(packageName)
 
         val log = FirewallLog(
             packageName = packageName,
-            appName = packageName, // Will be resolved by UI
+            appName = appName,
             ipAddress = "$destIp:$destPort",
             domainName = null,
             timestamp = System.currentTimeMillis(),
-            connectionType = connectionType
+            connectionType = connectionType,
+            trafficDirection = trafficDirection
         )
 
         firewallRepository.insertLog(log)
@@ -409,7 +381,16 @@ class PhoneGuardVpnService : VpnService() {
             } catch (_: Exception) {}
         }
 
-        Log.d(TAG, "BLOCKED: $packageName → $destIp:$destPort ($protoName)")
+        Log.d(TAG, "BLOCKED: $packageName → $destIp:$destPort")
+    }
+
+    private fun resolveAppName(packageName: String): String {
+        return try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            packageManager.getApplicationLabel(appInfo).toString()
+        } catch (e: Exception) {
+            packageName
+        }
     }
 
     /**
@@ -448,5 +429,29 @@ class PhoneGuardVpnService : VpnService() {
         super.onDestroy()
         stopVpn()
         vpnScope.cancel()
+    }
+
+    /**
+     * Fallback: block app network access via NetworkCapabilities on Android 10+.
+     * This does not require root and works without a full VPN implementation.
+     */
+    fun blockAppNetworkAccess(packageName: String, block: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val uid = packageManager.getPackageUid(packageName, 0)
+            val builder = NetworkCapabilities.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                .setOwnerUid(uid)
+            if (block) {
+                builder.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+            }
+            val caps = builder.build()
+            cm.bindProcessToNetwork(null)
+            cm.updateCapabilitiesForProcess(caps)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update network capabilities for $packageName", e)
+        }
     }
 }

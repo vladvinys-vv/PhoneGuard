@@ -27,7 +27,8 @@ fun DashboardScreen(
     onNavigateToCallBlocker: () -> Unit,
     onNavigateToPrivacyScanner: () -> Unit,
     onNavigateToSpywareCheck: () -> Unit,
-    onNavigateToFullScan: () -> Unit
+    onNavigateToFullScan: () -> Unit,
+    onNavigateToSimSwap: () -> Unit
 ) {
     val score by viewModel.securityScore.collectAsState()
     val fullScanSummary by viewModel.fullScanSummary.collectAsState()
@@ -59,14 +60,14 @@ fun DashboardScreen(
             onSpywareClick = onNavigateToSpywareCheck
         )
 
-        SimSwapStatusCard()
+        SimSwapStatusCard(onClick = onNavigateToSimSwap)
     }
 }
 
 @Composable
-fun SimSwapStatusCard() {
+fun SimSwapStatusCard(onClick: () -> Unit) {
     Card(
-        onClick = {},
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
@@ -217,21 +218,21 @@ fun SecurityFeatureCards(
         
         FeatureCard(
             title = stringResource(R.string.call_sms_blocker),
-            score = 75,
+            score = score.callBlocker,
             icon = androidx.compose.material.icons.Icons.Default.Block,
             onClick = onCallBlockerClick
         )
         
         FeatureCard(
             title = stringResource(R.string.privacy_scanner),
-            score = 60,
+            score = score.privacy,
             icon = androidx.compose.material.icons.Icons.Default.VisibilityOff,
             onClick = onPrivacyClick
         )
         
         FeatureCard(
             title = stringResource(R.string.spyware_check),
-            score = 50,
+            score = score.spyware,
             icon = androidx.compose.material.icons.Icons.Default.Search,
             onClick = onSpywareClick
         )

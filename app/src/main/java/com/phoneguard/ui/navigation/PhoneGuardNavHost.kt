@@ -8,19 +8,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navDeepLink
 import com.phoneguard.R
-import com.phoneguard.ui.screens.*
 import com.phoneguard.ui.screens.antitheft.AntiTheftScreen
 import com.phoneguard.ui.screens.callblocker.CallBlockerScreen
 import com.phoneguard.ui.screens.dashboard.DashboardScreen
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel
 import com.phoneguard.ui.screens.firewall.FirewallScreen
+import com.phoneguard.ui.screens.privacyscanner.PrivacyScannerScreen
+import com.phoneguard.ui.screens.settings.SettingsScreen
+import com.phoneguard.ui.screens.spywarecheck.SpywareCheckScreen
 import com.phoneguard.ui.screens.vault.VaultScreen
 import com.phoneguard.ui.screens.simswap.SimSwapConfirmationScreen
 import com.phoneguard.ui.screens.simswap.SimSwapHistoryScreen
@@ -46,58 +50,51 @@ fun PhoneGuardNavHost(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    val bottomNavItems = listOf(
+        Screen.Dashboard,
+        Screen.AntiTheft,
+        Screen.CallBlocker,
+        Screen.Firewall,
+        Screen.Settings
+    )
 
-    val navigateToRoute: (String) -> Unit = { route ->
-        navController.navigate(route) {
-            popUpTo(Screen.Dashboard.route) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
+    val showBottomBar = bottomNavItems.any { it.route == currentRoute }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            DrawerContent(
-                currentRoute = currentRoute,
-                onNavigateTo = navigateToRoute,
-                onCloseDrawer = { scope.launch { drawerState.close() } }
-            )
-        },
-        gesturesEnabled = true,
-        modifier = modifier
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            scope.launch {
-                                if (drawerState.isClosed) drawerState.open()
-                                else drawerState.close()
+    Scaffold(
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar {
+                    bottomNavItems.forEach { screen ->
+                        val selected = currentRoute == screen.route
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    imageVector = screen.icon,
+                                    contentDescription = stringResource(screen.title)
+                                )
+                            },
+                            label = { Text(stringResource(screen.title)) },
+                            selected = selected,
+                            onClick = {
+                                if (currentRoute != screen.route) {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(Screen.Dashboard.route) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
                             }
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Открыть меню"
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
+                        )
+                    }
+                }
             }
-        ) { innerPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = Screen.Dashboard.route,
-                modifier = Modifier.padding(innerPadding)
-            ) {
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Dashboard.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
                 composable(Screen.Dashboard.route) {
                     DashboardScreen(
                         viewModel = hiltViewModel(),
@@ -105,31 +102,56 @@ fun PhoneGuardNavHost(
                         onNavigateToCallBlocker = { navController.navigate(Screen.CallBlocker.route) },
                         onNavigateToPrivacyScanner = { navController.navigate(Screen.PrivacyScanner.route) },
                         onNavigateToSpywareCheck = { navController.navigate(Screen.SpywareCheck.route) },
-                        onNavigateToFullScan = { navController.navigate(Screen.FullScan.route) }
+                        onNavigateToFullScan = { navController.navigate(Screen.FullScan.route) },
+                        onNavigateToSimSwap = { navController.navigate("simswap_history") }
                     )
                 }
-                composable(Screen.AntiTheft.route) {
+                composable(
+                    route = Screen.AntiTheft.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://antitheft" })
+                ) {
                     AntiTheftScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.CallBlocker.route) {
+                composable(
+                    route = Screen.CallBlocker.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://callblocker" })
+                ) {
                     CallBlockerScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.PrivacyScanner.route) {
-                    PrivacyScannerScreen()
+                composable(
+                    route = Screen.PrivacyScanner.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://privacy" })
+                ) {
+                    PrivacyScannerScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.SpywareCheck.route) {
-                    SpywareCheckScreen()
+                composable(
+                    route = Screen.SpywareCheck.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://spyware" })
+                ) {
+                    SpywareCheckScreen(viewModel = hiltViewModel())
                 }
-                composable(Screen.Settings.route) {
-                    SettingsScreen()
+                composable(
+                    route = Screen.Settings.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://settings" })
+                ) {
+                    SettingsScreen(settingsViewModel = hiltViewModel())
                 }
-                composable(Screen.Firewall.route) {
+                composable(
+                    route = Screen.Firewall.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://firewall" })
+                ) {
                     FirewallScreen()
                 }
-                composable(Screen.SecureVault.route) {
+                composable(
+                    route = Screen.SecureVault.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://vault" })
+                ) {
                     VaultScreen()
                 }
-                composable(Screen.FullScan.route) {
+                composable(
+                    route = Screen.FullScan.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://fullscan" })
+                ) {
                     FullScanScreen()
                 }
                 composable("simswap") {

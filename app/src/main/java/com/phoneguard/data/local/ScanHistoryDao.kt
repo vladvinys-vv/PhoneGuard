@@ -22,4 +22,16 @@ interface ScanHistoryDao {
 
     @Query("DELETE FROM scan_history WHERE id = :id")
     suspend fun deleteScan(id: Long)
+
+    @Query("DELETE FROM scan_history WHERE timestamp < :cutoff")
+    suspend fun deleteOlderThan(cutoff: Long)
+
+    @Query("DELETE FROM scan_history")
+    suspend fun deleteAll()
+
+    @Query("SELECT * FROM scan_history ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
+    suspend fun getPagedScans(limit: Int, offset: Int): List<ScanHistory>
+
+    @Query("SELECT COUNT(*) FROM scan_history")
+    suspend fun getScansCount(): Int
 }

@@ -32,6 +32,19 @@ class PreferencesManager(private val context: Context) {
         private val KEY_SIM_SWAP_CONFIRMED = booleanPreferencesKey("sim_swap_confirmed")
         private val KEY_SIM_SWAP_UNCONFIRMED = booleanPreferencesKey("sim_swap_unconfirmed")
         private val KEY_SENSITIVE_APPS_GUARD_ENABLED = booleanPreferencesKey("sensitive_apps_guard_enabled")
+
+        // Shoulder Surfer
+        private val KEY_SHOULDER_SURFER_ENABLED = booleanPreferencesKey("shoulder_surfer_enabled")
+
+        // Theme
+        private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
+
+        // Onboarding
+        private val KEY_FIRST_LAUNCH = booleanPreferencesKey("first_launch")
+        private val KEY_CONSENT_DONE = booleanPreferencesKey("consent_done")
+
+        // Scheduled scan
+        private val KEY_SCHEDULED_SCAN_ENABLED = booleanPreferencesKey("scheduled_scan_enabled")
     }
 
     // PIN Hash
@@ -88,7 +101,8 @@ class PreferencesManager(private val context: Context) {
     }
 
     // Pro status
-    // TODO: re-enable if publishing to Play with monetization
+    // Note: Pro features are currently unlocked for personal/internal use.
+    // Re-enable monetization check before publishing to Play Store.
     val isPro: Flow<Boolean> = flow { emit(true) }
 
     suspend fun setPro(isPro: Boolean) {
@@ -140,5 +154,46 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setSensitiveAppsGuardEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SENSITIVE_APPS_GUARD_ENABLED] = enabled }
+    }
+
+    // Shoulder Surfer
+    val isShoulderSurferEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_SHOULDER_SURFER_ENABLED] ?: false }
+
+    suspend fun setShoulderSurferEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SHOULDER_SURFER_ENABLED] = enabled }
+    }
+
+    // Theme
+    val isDarkTheme: Flow<Boolean> = context.dataStore.data.map { it[KEY_DARK_THEME] ?: false }
+
+    suspend fun setDarkTheme(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_DARK_THEME] = enabled }
+    }
+
+    // Language
+    private val KEY_LANGUAGE = stringPreferencesKey("app_language")
+    val language: Flow<String> = context.dataStore.data.map { it[KEY_LANGUAGE] ?: "ru" }
+
+    suspend fun setLanguage(lang: String) {
+        context.dataStore.edit { it[KEY_LANGUAGE] = lang }
+    }
+
+    // Onboarding
+    val isFirstLaunch: Flow<Boolean> = context.dataStore.data.map { it[KEY_FIRST_LAUNCH] ?: true }
+    val isConsentDone: Flow<Boolean> = context.dataStore.data.map { it[KEY_CONSENT_DONE] ?: false }
+
+    suspend fun setFirstLaunchDone() {
+        context.dataStore.edit { it[KEY_FIRST_LAUNCH] = false }
+    }
+
+    suspend fun setConsentDone() {
+        context.dataStore.edit { it[KEY_CONSENT_DONE] = true }
+    }
+
+    // Scheduled scan
+    val isScheduledScanEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_SCHEDULED_SCAN_ENABLED] ?: false }
+
+    suspend fun setScheduledScanEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SCHEDULED_SCAN_ENABLED] = enabled }
     }
 }

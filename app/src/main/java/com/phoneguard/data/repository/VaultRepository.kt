@@ -33,9 +33,8 @@ class VaultRepository @Inject constructor(
         vaultDao.deleteItem(item)
     }
 
-    suspend fun decryptFileFromVault(item: VaultItem): File = withContext(Dispatchers.IO) {
+    suspend fun decryptFileFromVault(item: VaultItem): File? = withContext(Dispatchers.IO) {
         encryptionManager.decryptFileFromVault(item)
-            ?: throw IllegalStateException("Не удалось расшифровать файл: ${item.fileName}")
     }
 
     fun decryptItem(item: VaultItem): File? = encryptionManager.decryptFileFromVault(item)

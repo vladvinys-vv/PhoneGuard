@@ -5,10 +5,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +42,14 @@ fun CallBlockerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(stringResource(R.string.call_sms_blocker)) })
+            TopAppBar(
+                title = { Text(stringResource(R.string.call_sms_blocker)) },
+                actions = {
+                    IconButton(onClick = { /* Room flows are reactive; refresh is implicit */ }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                    }
+                }
+            )
         },
         floatingActionButton = {
             if (selectedTab < 2) {
@@ -143,19 +155,49 @@ fun NumberListSection(
 ) {
     if (numbers.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(emptyText)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = if (isWhitelist) Icons.Default.Phone else Icons.Default.Block,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         return
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         items(numbers) { number ->
+            var showDeleteDialog by remember { mutableStateOf(false) }
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("Удалить номер?") },
+                    text = { Text("Это действие нельзя отменить.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onDelete(number)
+                            showDeleteDialog = false
+                        }) {
+                            Text("Удалить")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteDialog = false }) {
+                            Text("Отмена")
+                        }
+                    }
+                )
+            }
             ListItem(
                 headlineContent = { Text(number.phoneNumber) },
                 supportingContent = number.name?.let { { Text(it) } },
                 trailingContent = {
-                    IconButton(onClick = { onDelete(number) }) {
-                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_number))
+                    IconButton(onClick = { showDeleteDialog = true }, contentDescription = stringResource(R.string.delete_number)) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
                     }
                 }
             )
@@ -172,7 +214,16 @@ fun LogListSection(
 ) {
     if (logs.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(emptyText)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.List,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         return
     }

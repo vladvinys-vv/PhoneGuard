@@ -5,6 +5,7 @@ plugins {
     id 'dagger.hilt.android.plugin'
     id 'kotlin-parcelize'
     id 'org.jetbrains.kotlin.plugin.compose'
+    id 'com.google.firebase.crashlytics'
 }
 
 android {
@@ -22,6 +23,13 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+
+        // Room schema export location
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments += mapOf("room.schemaLocation" to "$projectDir/schemas".toString())
+            }
+        }
     }
 
     buildTypes {
@@ -29,18 +37,54 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug {
+            applicationIdSuffix ".debug"
         }
     }
-    
+
+    flavorDimensions "environment"
+    productFlavors {
+        staging {
+            dimension "environment"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+            manifestPlaceholders = [
+                appLabel: "PhoneGuard Staging"
+            ]
+        }
+        production {
+            dimension "environment"
+            manifestPlaceholders = [
+                appLabel: "PhoneGuard"
+            ]
+        }
+    }
+
+    signingConfigs {
+        release {
+            def keystorePropertiesFile = rootProject.file("keystore.properties")
+            def keystoreProperties = new Properties()
+            if (keystorePropertiesFile.exists()) {
+                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+            }
+            storeFile file(keystoreProperties['storeFile'] ?: System.getenv("KEYSTORE_PATH") ?: "keystore.jks")
+            storePassword keystoreProperties['storePassword'] ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias keystoreProperties['keyAlias'] ?: System.getenv("KEY_ALIAS") ?: ""
+            keyPassword keystoreProperties['keyPassword'] ?: System.getenv("KEY_PASSWORD") ?: ""
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    
+
     kotlinOptions {
         jvmTarget = '17'
     }
-    
+
     buildFeatures {
         compose true
         buildConfig true
@@ -82,6 +126,7 @@ dependencies {
     implementation "androidx.room:room-runtime:$rootProject.ext.room_version"
     implementation "androidx.room:room-ktx:$rootProject.ext.room_version"
     kapt "androidx.room:room-compiler:$rootProject.ext.room_version"
+    implementation "net.zetetic:android-database-sqlcipher:4.5.4"
     // Force newer kotlinx-metadata-jvm for Room kapt compatibility with Kotlin 2.1
     kapt "org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.7.0"
     
@@ -111,7 +156,16 @@ dependencies {
 
     // Google Play Services Location (for Fused Location)
     implementation "com.google.android.gms:play-services-location:21.3.0"
-    
+
+    // ML Kit Face Detection (for shoulder surfer detection)
+    implementation "com.google.android.gms:play-services-mlkit-face-detection:17.1.0"
+
+    // Firebase Crashlytics
+    implementation platform("com.google.firebase:firebase-bom:33.1.0")
+    implementation "com.google.firebase:firebase-crashlytics"
+    implementation "com.google.firebase:firebase-analytics"
+    implementation "com.google.firebase:firebase-performance"
+
     // Testing
     testImplementation "junit:junit:$rootProject.ext.junit_version"
     androidTestImplementation "androidx.test.ext:junit:1.2.1"
@@ -120,10 +174,13 @@ dependencies {
     androidTestImplementation "androidx.compose.ui:ui-test-junit4"
     debugImplementation "androidx.compose.ui:ui-tooling"
     debugImplementation "androidx.compose.ui:ui-test-manifest"
+    debugImplementation "com.squareup.leakcanary:leakcanary-android:2.14"
     
     // Mocking
     testImplementation "io.mockk:mockk:$rootProject.ext.mockk_version"
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$rootProject.ext.coroutines_version"
+    testImplementation "app.cash.turbine:turbine:1.2.0"
+    testImplementation "org.robolectric:robolectric:$rootProject.ext.roboversion"
 }
 
 kapt {

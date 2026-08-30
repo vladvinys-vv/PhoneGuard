@@ -16,8 +16,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +34,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.FirewallRule
+import com.phoneguard.model.FirewallLog
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.core.graphics.drawable.toBitmap
@@ -41,6 +46,7 @@ fun FirewallScreen(
 ) {
     val context = LocalContext.current
     val apps by viewModel.apps.collectAsState()
+    val logs by viewModel.allLogs.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
 
     val vpnLauncher = rememberLauncherForActivityResult(
@@ -52,7 +58,12 @@ fun FirewallScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.firewall)) }
+                title = { Text(stringResource(R.string.firewall)) },
+                actions = {
+                    IconButton(onClick = { viewModel.loadApps() }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                    }
+                }
             )
         }
     ) { padding ->
@@ -61,6 +72,39 @@ fun FirewallScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
+            // MVP Limitation Notice
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Column {
+                        Text(
+                            text = "MVP режим",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Фаерволл работает в ограниченном режиме. Блокировка на уровне приложений не обеспечивает 100% защиту без root-доступа.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
             // Vpn Toggle
             Card(
                 modifier = Modifier
@@ -91,15 +135,15 @@ fun FirewallScreen(
                     Button(
                         onClick = {
                             if (isVpnActive) {
-                        viewModel.stopVpn()
-                    } else {
-                        val vpnIntent = viewModel.prepareVpn()
-                        if (vpnIntent != null) {
-                            vpnLauncher.launch(vpnIntent)
-                        } else {
-                            viewModel.onVpnPrepared()
-                        }
-                    }
+                                viewModel.stopVpn()
+                            } else {
+                                val vpnIntent = viewModel.prepareVpn()
+                                if (vpnIntent != null) {
+                                    vpnLauncher.launch(vpnIntent)
+                                } else {
+                                    viewModel.onVpnPrepared()
+                                }
+                            }
                         }
                     ) {
                         Text(
@@ -116,10 +160,25 @@ fun FirewallScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.no_apps_found),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
-                LazyColumn {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     items(apps) { app ->
                         AppFirewallItem(
                             appInfo = app,
@@ -131,151 +190,214 @@ fun FirewallScreen(
                     }
                 }
             }
-        }
-    }
-}
 
-@Composable
-fun AppFirewallItem(
-    appInfo: AppInfo,
-    onRuleChanged: (FirewallRule) -> Unit
-) {
-    val defaultRule = FirewallRule(
-        packageName = appInfo.packageName,
-        appName = appInfo.appName
-    )
-    val rule = appInfo.rule ?: defaultRule
-
-    var blockAll by remember { mutableStateOf(rule.blockAll) }
-    var blockWifi by remember { mutableStateOf(rule.blockWifi) }
-    var blockMobile by remember { mutableStateOf(rule.blockMobile) }
-    var allowWifiOnly by remember { mutableStateOf(rule.allowWifiOnly) }
-    var allowMobileOnly by remember { mutableStateOf(rule.allowMobileOnly) }
-    var blockBackground by remember { mutableStateOf(rule.blockBackground) }
-
-    fun updateRule() {
-        onRuleChanged(
-            rule.copy(
-                blockAll = blockAll,
-                blockWifi = blockWifi,
-                blockMobile = blockMobile,
-                allowWifiOnly = allowWifiOnly,
-                allowMobileOnly = allowMobileOnly,
-                blockBackground = blockBackground,
-                updatedAt = System.currentTimeMillis()
-            )
-        )
-    }
-
-    ListItem(
-        leadingContent = {
-            Image(
-                bitmap = appInfo.icon.toBitmap().asImageBitmap(),
-                contentDescription = appInfo.appName,
-                modifier = Modifier.size(48.dp)
-            )
-        },
-        headlineContent = { Text(appInfo.appName) },
-        supportingContent = {
-            Column {
+            // Recent Logs
+            if (logs.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    appInfo.packageName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "Recent Blocks",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp)
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 200.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    FilterChip(
-                        selected = blockAll,
-                        onClick = {
-                            blockAll = !blockAll
-                            if (blockAll) {
-                                blockWifi = true
-                                blockMobile = true
-                                allowWifiOnly = false
-                                allowMobileOnly = false
-                                blockBackground = false
+                    items(logs.take(20)) { log ->
+                        ListItem(
+                            headlineContent = { Text(log.appName) },
+                            supportingContent = {
+                                Text("${log.ipAddress ?: log.domainName} • ${log.trafficDirection.name} • ${log.connectionType.name}")
                             }
-                            updateRule()
-                        },
-                        label = { Text("Block All") },
-                        leadingIcon = if (blockAll) {
-                            { Icon(Icons.Default.CheckCircle, contentDescription = null) }
-                        } else null
-                    )
-                    FilterChip(
-                        selected = blockWifi,
-                        onClick = {
-                            blockWifi = !blockWifi
-                            if (blockWifi) allowWifiOnly = false
-                            updateRule()
-                        },
-                        label = { Text("Wi-Fi") },
-                        leadingIcon = if (blockWifi) {
-                            { Icon(Icons.Default.Wifi, contentDescription = null) }
-                        } else null,
-                        enabled = !blockAll
-                    )
-                    FilterChip(
-                        selected = blockMobile,
-                        onClick = {
-                            blockMobile = !blockMobile
-                            if (blockMobile) allowMobileOnly = false
-                            updateRule()
-                        },
-                        label = { Text("Mobile") },
-                        leadingIcon = if (blockMobile) {
-                            { Icon(Icons.Default.Info, contentDescription = null) }
-                        } else null,
-                        enabled = !blockAll
-                    )
-                }
-                // Additional modes
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    FilterChip(
-                        selected = allowWifiOnly,
-                        onClick = {
-                            allowWifiOnly = !allowWifiOnly
-                            if (allowWifiOnly) {
-                                blockWifi = false
-                                allowMobileOnly = false
-                            }
-                            updateRule()
-                        },
-                        label = { Text("Wi-Fi Only") },
-                        enabled = !blockAll
-                    )
-                    FilterChip(
-                        selected = allowMobileOnly,
-                        onClick = {
-                            allowMobileOnly = !allowMobileOnly
-                            if (allowMobileOnly) {
-                                blockMobile = false
-                                allowWifiOnly = false
-                            }
-                            updateRule()
-                        },
-                        label = { Text("Mobile Only") },
-                        enabled = !blockAll
-                    )
-                    FilterChip(
-                        selected = blockBackground,
-                        onClick = {
-                            blockBackground = !blockBackground
-                            updateRule()
-                        },
-                        label = { Text("No Background") },
-                        enabled = !blockAll
-                    )
+                        )
+                        Divider()
+                    }
                 }
             }
         }
     )
 }
+
+@Composable
+private fun AppFirewallItem(
+    appInfo: com.phoneguard.ui.screens.firewall.AppInfo,
+    onRuleChanged: (com.phoneguard.model.FirewallRule) -> Unit
+) {
+    var rule by remember { mutableStateOf(appInfo.rule) }
+    var showDomainDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val blockWifi = rule?.blockWifi ?: false
+    val blockMobile = rule?.blockMobile ?: false
+    val blockAll = rule?.blockAll ?: false
+    val allowWifiOnly = rule?.allowWifiOnly ?: false
+    val allowMobileOnly = rule?.allowMobileOnly ?: false
+    val blockBackground = rule?.blockBackground ?: false
+
+    fun updateRule() {
+        val newRule = (rule ?: com.phoneguard.model.FirewallRule(
+            packageName = appInfo.packageName,
+            appName = appInfo.appName,
+            blockWifi = false,
+            blockMobile = false,
+            blockAll = false,
+            blockVpn = false,
+            blockBackground = false,
+            blockedDomains = "[]",
+            blockedIps = "[]",
+            allowByDefault = true,
+            allowWifiOnly = false,
+            allowMobileOnly = false,
+            updatedAt = System.currentTimeMillis()
+        )).copy(
+            blockWifi = blockWifi,
+            blockMobile = blockMobile,
+            blockAll = blockAll,
+            allowWifiOnly = allowWifiOnly,
+            allowMobileOnly = allowMobileOnly,
+            blockBackground = blockBackground,
+            updatedAt = System.currentTimeMillis()
+        )
+        rule = newRule
+        onRuleChanged(newRule)
+    }
+
+    if (showDomainDialog) {
+        var domainsText by remember { mutableStateOf(rule?.blockedDomains?.removeSurrounding("[", "]")?.replace("\"", "") ?: "") }
+        var ipsText by remember { mutableStateOf(rule?.blockedIps?.removeSurrounding("[", "]")?.replace("\"", "") ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showDomainDialog = false },
+            title = { Text("Block domains/IPs") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = domainsText,
+                        onValueChange = { domainsText = it },
+                        label = { Text("Domains (comma separated)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = ipsText,
+                        onValueChange = { ipsText = it },
+                        label = { Text("IPs (comma separated)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newRule = (rule ?: com.phoneguard.model.FirewallRule(
+                        packageName = appInfo.packageName,
+                        appName = appInfo.appName,
+                        blockWifi = false,
+                        blockMobile = false,
+                        blockAll = false,
+                        blockVpn = false,
+                        blockBackground = false,
+                        blockedDomains = "[]",
+                        blockedIps = "[]",
+                        allowByDefault = true,
+                        allowWifiOnly = false,
+                        allowMobileOnly = false,
+                        updatedAt = System.currentTimeMillis()
+                    )).copy(
+                        blockedDomains = domainsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toString(),
+                        blockedIps = ipsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toString(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    rule = newRule
+                    onRuleChanged(newRule)
+                    showDomainDialog = false
+                }) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDomainDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    ListItem(
+        modifier = Modifier.fillMaxWidth(),
+        headlineContent = { Text(appInfo.appName) },
+        supportingContent = { Text(appInfo.packageName) },
+        leadingContent = {
+            Icon(
+                painter = rememberVectorPainter(Icons.Default.Security),
+                contentDescription = null,
+                modifier = Modifier.size(40.dp)
+            )
+        },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick = { showDomainDialog = true }, contentDescription = stringResource(R.string.edit_domains_ips)) {
+                    Icon(Icons.Default.Edit, contentDescription = null)
+                }
+                FilterChip(
+                    selected = blockAll,
+                    onClick = {
+                        val newBlockAll = !blockAll
+                        if (newBlockAll) {
+                            onRuleChanged(
+                                com.phoneguard.model.FirewallRule(
+                                    packageName = appInfo.packageName,
+                                    appName = appInfo.appName,
+                                    blockWifi = true,
+                                    blockMobile = true,
+                                    blockAll = true,
+                                    blockVpn = false,
+                                    blockBackground = true,
+                                    blockedDomains = "[]",
+                                    blockedIps = "[]",
+                                    allowByDefault = false,
+                                    allowWifiOnly = false,
+                                    allowMobileOnly = false,
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                            )
+                        } else {
+                            updateRule()
+                        }
+                    },
+                    label = { Text("Block All") },
+                    leadingIcon = if (blockAll) {
+                        { Icon(Icons.Default.CheckCircle, contentDescription = null) }
+                    } else null
+                )
+                FilterChip(
+                    selected = blockWifi,
+                    onClick = {
+                        blockWifi = !blockWifi
+                        if (blockWifi) allowWifiOnly = false
+                        updateRule()
+                    },
+                    label = { Text("Wi-Fi") },
+                    leadingIcon = if (blockWifi) {
+                        { Icon(Icons.Default.Wifi, contentDescription = null) }
+                    } else null,
+                    enabled = !blockAll
+                )
+                FilterChip(
+                    selected = blockMobile,
+                    onClick = {
+                        blockMobile = !blockMobile
+                        if (blockMobile) allowMobileOnly = false
+                        updateRule()
+                    },
+                    label = { Text("Mobile") },
+                    leadingIcon = if (blockMobile) {
+                        { Icon(Icons.Default.Info, contentDescription = null) }
+                    } else null,
+                    enabled = !blockAll
+                )
+            }
+        }
+    )
+}
+

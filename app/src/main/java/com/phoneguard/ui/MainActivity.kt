@@ -6,19 +6,50 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.ui.navigation.PhoneGuardNavHost
+import com.phoneguard.ui.screens.onboarding.ConsentScreen
+import com.phoneguard.ui.screens.onboarding.OnboardingScreen
 import com.phoneguard.ui.theme.PhoneGuardTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var preferencesManager: PreferencesManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            PhoneGuardTheme {
+            val isDarkTheme by preferencesManager.isDarkTheme.collectAsState(initial = false)
+            val isFirstLaunch by preferencesManager.isFirstLaunch.collectAsState(initial = true)
+            val isConsentDone by preferencesManager.isConsentDone.collectAsState(initial = false)
+            PhoneGuardTheme(darkTheme = isDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    PhoneGuardNavHost()
+                    when {
+                        isFirstLaunch -> {
+                            OnboardingScreen(onCompleted = {
+                                // State will update automatically via isFirstLaunch collectAsState
+                            })
+                        }
+                        !isConsentDone -> {
+                            ConsentScreen(
+                                onAccept = {
+                                    preferencesManager.setConsentDone()
+                                },
+                                onDecline = {
+                                    preferencesManager.setConsentDone()
+                                }
+                            )
+                        }
+                        else -> {
+                            PhoneGuardNavHost()
+                        }
+                    }
                 }
             }
         }

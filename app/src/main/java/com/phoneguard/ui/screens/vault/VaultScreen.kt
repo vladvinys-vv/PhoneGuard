@@ -1,27 +1,31 @@
 package com.phoneguard.ui.screens.vault
 
 import android.net.Uri
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.VaultItem
+import com.phoneguard.model.VaultItemCategory
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -32,7 +36,21 @@ fun VaultScreen(
 ) {
     val isUnlocked by viewModel.isUnlocked.collectAsState()
     val items by viewModel.allItems.collectAsState()
+    val importError by viewModel.importError.collectAsState()
     val context = LocalContext.current
+    val view = LocalView.current
+
+    LaunchedEffect(isUnlocked) {
+        val window = (view.context as? android.app.Activity)?.window
+        if (isUnlocked) {
+            window?.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -43,9 +61,15 @@ fun VaultScreen(
     }
 
     Scaffold(
+        scaffoldState = scaffoldState,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.secure_vault)) }
+                title = { Text(stringResource(R.string.secure_vault)) },
+                actions = {
+                    IconButton(onClick = { /* Room flows are reactive */ }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                    }
+                }
             )
         },
         floatingActionButton = {
@@ -89,6 +113,13 @@ fun VaultScreen(
                 }
             }
         } else {
+            importError?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
             if (items.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -116,8 +147,30 @@ fun VaultScreen(
 
 @Composable
 fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     val dateStr = remember(item.createdAt) { sdf.format(Date(item.createdAt)) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Удалить файл?") },
+            text = { Text("Это действие нельзя отменить.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(item)
+                    showDeleteDialog = false
+                }) {
+                    Text("Удалить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 
     ListItem(
         headlineContent = { Text(item.fileName) },
@@ -128,12 +181,30 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
                         androidx.compose.ui.platform.LocalContext.current,
                         item.fileSize
                     )
-                }"
+                } • ${item.category.name}"
+            )
+        },
+        leadingContent = {
+            Icon(
+                imageVector = when (item.category) {
+                    VaultItemCategory.IMAGE -> Icons.Default.Image
+                    VaultItemCategory.VIDEO -> Icons.Default.PlayArrow
+                    VaultItemCategory.DOCUMENT -> Icons.Default.Description
+                    VaultItemCategory.OTHER -> Icons.Default.InsertDriveFile
+                },
+                contentDescription = item.category.name
             )
         },
         trailingContent = {
-            IconButton(onClick = { onDelete(item) }) {
-                Icon(Icons.Default.Delete, contentDescription = "Удалить")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (item.category == VaultItemCategory.IMAGE) {
+                    IconButton(onClick = { /* preview placeholder */ }, contentDescription = stringResource(R.string.preview)) {
+                        Icon(Icons.Default.Visibility, contentDescription = null)
+                    }
+                }
+                IconButton(onClick = { showDeleteDialog = true }, contentDescription = "Удалить") {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                }
             }
         }
     )

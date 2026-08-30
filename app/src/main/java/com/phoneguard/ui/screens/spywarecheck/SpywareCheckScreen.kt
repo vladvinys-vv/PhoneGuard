@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -33,8 +34,8 @@ fun SpywareCheckScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.spyware_check)) },
                 actions = {
-                    IconButton(onClick = { viewModel.scanForSpyware() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.scan_now))
+                    IconButton(onClick = { viewModel.scanForSpyware() }, contentDescription = stringResource(R.string.scan_now)) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
                     }
                 }
             )
@@ -181,7 +182,7 @@ fun IndicatorSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         if (apps.isEmpty()) {
-            Text(stringResource(R.string.no_apps_found), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.no_apps_found), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
         } else {
             apps.forEach { app ->
                 ListItem(
@@ -199,7 +200,7 @@ fun IndicatorSection(
                         Text(indicators)
                     },
                     leadingContent = {
-                        androidx.compose.material3.Icon(Icons.Default.Refresh, contentDescription = null)
+                        androidx.compose.material3.Icon(Icons.Default.Refresh, contentDescription = app.appName)
                     },
                     onClick = { onAppClick(app) }
                 )

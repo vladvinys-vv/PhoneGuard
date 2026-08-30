@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.firewall.PhoneGuardVpnService
 import com.phoneguard.model.FirewallRule
+import com.phoneguard.util.InstalledAppsCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -22,12 +23,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+
+data class FirewallStats(
+    val todayBlocks: Int = 0,
+    val topBlockedPackage: String? = null
+)
 
 @HiltViewModel
 class FirewallViewModel @Inject constructor(
     private val repository: FirewallRepository,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val installedAppsCache: InstalledAppsCache
 ) : ViewModel() {
 
     val allRules = repository.allRules
@@ -39,15 +47,42 @@ class FirewallViewModel @Inject constructor(
     private val _isVpnActive = MutableStateFlow(false)
     val isVpnActive: StateFlow<Boolean> = _isVpnActive.asStateFlow()
 
+    private val _logsPage = MutableStateFlow<List<com.phoneguard.model.FirewallLog>>(emptyList())
+    val logsPage: StateFlow<List<com.phoneguard.model.FirewallLog>> = _logsPage.asStateFlow()
+
+    private val _hasMoreLogs = MutableStateFlow(false)
+    val hasMoreLogs: StateFlow<Boolean> = _hasMoreLogs.asStateFlow()
+
+    private val _stats = MutableStateFlow(FirewallStats())
+    val stats: StateFlow<FirewallStats> = _stats.asStateFlow()
+
+    private val logPageSize = 20
+    private val logOffset = MutableStateFlow(0)
+
     init {
         loadApps()
+        loadLogs()
+        loadStats()
+    }
+
+    private fun loadStats() {
+        viewModelScope.launch {
+            val today = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
+            val logs = repository.getAllLogs().first()
+            val todayBlocks = logs.count { it.timestamp > today }
+            val topPackage = logs.groupingBy { it.packageName }.eachCount().maxByOrNull { it.value }?.key
+            _stats.value = FirewallStats(
+                todayBlocks = todayBlocks,
+                topBlockedPackage = topPackage
+            )
+        }
     }
 
     private fun loadApps() {
         viewModelScope.launch {
             val apps = withContext(Dispatchers.IO) {
+                val installedApps = installedAppsCache.getInstalledApps()
                 val pm = context.packageManager
-                val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
                 installedApps
                     .filter { it.flags and ApplicationInfo.FLAG_SYSTEM == 0 }
                     .map { appInfo ->
@@ -63,6 +98,21 @@ class FirewallViewModel @Inject constructor(
             }
             _apps.value = apps
         }
+    }
+
+    private fun loadLogs() {
+        viewModelScope.launch {
+            val logs = repository.getPagedLogs(logPageSize, logOffset.value)
+            val total = repository.getLogsCount()
+            _logsPage.value = logs
+            _hasMoreLogs.value = (logOffset.value + logs.size) < total
+        }
+    }
+
+    fun loadMoreLogs() {
+        if (!_hasMoreLogs.value) return
+        logOffset.value += logPageSize
+        loadLogs()
     }
 
     fun upsertRule(rule: FirewallRule) {

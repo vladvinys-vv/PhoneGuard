@@ -65,6 +65,8 @@
     <string name="command_location_desc">Geräteposition abrufen</string>
     <string name="command_wipe_desc">Alle Daten löschen</string>
     <string name="failed_attempts_photo">Foto bei fehlgeschlagenem Entsperren</string>
+    <string name="stealth_camera_title">PhoneGuard Diebstahlschutz</string>
+    <string name="stealth_camera_text">Kameradienst aktiv</string>
     <string name="photo_on_failed_attempts_enabled">Foto bei 3 fehlgeschlagenen Versuchen aufnehmen</string>
     <string name="protection_features">Schutzfunktionen</string>
     <string name="how_it_works">Wie es funktioniert</string>
@@ -86,12 +88,16 @@
     <string name="export_csv">CSV exportieren</string>
     <string name="blocked_call">Blockierter Anruf</string>
     <string name="blocked_sms">Blockierte SMS</string>
+    <string name="call_blocked_title">Anruf blockiert</string>
+    <string name="blocked_number">Blockiert: %1$s</string>
     <string name="call_screening_role">Anrufscreening-Rolle</string>
     <string name="enable_call_screening">Anrufscreening aktivieren</string>
     <string name="empty_blacklist">Schwarze Liste ist leer. Nummern zum Blockieren hinzufügen</string>
     <string name="empty_whitelist">Weiße Liste ist leer. Nummern zum Zulassen hinzufügen</string>
     <string name="empty_log">Noch keine blockierten Anrufe oder SMS</string>
     <string name="block_rules">Blockierungsregeln</string>
+    <string name="call_blocker_channel_name">Anrufblocker</string>
+    <string name="call_blocker_channel_description">Benachrichtigungen für blockierte Anrufe</string>
     <string name="reason_blacklist">Auf schwarzer Liste</string>
     <string name="reason_unknown">Unbekannte Nummer</string>
     <string name="reason_hidden">Versteckte Nummer</string>
@@ -139,9 +145,12 @@
     <string name="russian">Russisch</string>
     <string name="export_logs">Protokolle exportieren</string>
     <string name="about">Über</string>
+    <string name="about_description">Dein persönlicher Sicherheitsassistent</string>
     <string name="version">Version</string>
     <string name="privacy_policy">Datenschutzrichtlinie</string>
+    <string name="read_privacy_policy">Lesen Sie unsere Datenschutzrichtlinie</string>
     <string name="terms_of_service">Nutzungsbedingungen</string>
+    <string name="read_terms_of_service">Lesen Sie unsere Nutzungsbedingungen</string>
     <string name="restore_purchase">Kauf wiederherstellen</string>
     <string name="upgrade_to_pro">Auf Pro upgraden</string>
     
@@ -154,5 +163,92 @@
     <string name="unlock_pro">Pro freischalten</string>
     <string name="one_time_purchase">Einmaliger Kauf</string>
     <string name="no_subscription">Kein Abonnement</string>
-    
+
+    <!-- Firewall -->
+    <string name="firewall">Firewall</string>
+    <string name="firewall_service">Firewall-Dienst</string>
+    <string name="firewall_service_desc">Schützt dein Gerät und kontrolliert den Datenverkehr</string>
+    <string name="firewall_active">Firewall aktiv</string>
+    <string name="firewall_blocking_traffic">Blockiere unerwünschten Datenverkehr... (%1$d blockiert)</string>
+    <string name="firewall_monitoring">Überwachung des Datenverkehrs</string>
+    <string name="firewall_start">Firewall starten</string>
+    <string name="firewall_stop">Firewall stoppen</string>
+    <string name="block_all">Alle blockieren</string>
+    <string name="block_wifi">WLAN blockieren</string>
+    <string name="block_mobile">Mobiles Internet blockieren</string>
+    <string name="edit_domains_ips">Domains/IPs bearbeiten</string>
+    <string name="connection_type_wifi">WLAN</string>
+    <string name="connection_type_mobile">Mobil</string>
+    <string name="connection_type_unknown">Unbekannt</string>
+    <string name="traffic_direction_inbound">Eingehend</string>
+    <string name="traffic_direction_outbound">Ausgehend</string>
+    <string name="firewall_logs_title">Firewall-Protokoll</string>
+    <string name="log_entries_count">%1$d Einträge</string>
+    <string name="no_blocked_connections">Noch keine blockierten Verbindungen</string>
+    <string name="unknown">Unbekannt</string>
+
+    <!-- Secure Vault -->
+    <string name="secure_vault">Sicherer Tresor</string>
+    <string name="vault_unlock">Tresor öffnen</string>
+    <string name="vault_import">Dateien importieren</string>
+    <string name="vault_delete_original">Original löschen</string>
+    <string name="preview">Vorschau</string>
+
+    <!-- Full Scan -->
+    <string name="full_scan">Vollscan</string>
+    <string name="scan_history">Scan-Verlauf</string>
+    <string name="scan_not_found">Scan nicht gefunden</string>
+    <string name="export_pdf">PDF exportieren</string>
+    <string name="export_pdf_success">Bericht gespeichert: %1$s</string>
+    <string name="export_pdf_failed">Bericht konnte nicht exportiert werden</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Willkommen bei PhoneGuard</string>
+    <string name="onboarding_description">Dein persönlicher Sicherheitsassistent. Aktiviere den Schutz, um loszulegen.</string>
+    <string name="onboarding_get_started">Loslegen</string>
+
+    <!-- Consent & Compliance -->
+    <string name="consent_title">Berechtigungen &amp; Datenschutz</string>
+    <string name="consent_description">PhoneGuard benötigt die folgenden Berechtigungen. Du kannst sie später in den Einstellungen ändern.</string>
+    <string name="consent_camera">Kamera — für Fotos bei fehlgeschlagenen Versuchen und zum Schutz vor neugierigen Blicken</string>
+    <string name="consent_sms">SMS — für Fernbefehle und SIM-Wechsel-Benachrichtigungen</string>
+    <string name="consent_phone">Telefon — zur Erkennung von SIM-Wechseln</string>
+    <string name="consent_location">Standort — zur Geräteverfolgung</string>
+    <string name="consent_notifications">Benachrichtigungen — für den Schutzstatus</string>
+    <string name="consent_accept">Akzeptieren und fortfahren</string>
+    <string name="consent_decline">Ablehnen</string>
+    <string name="delete_all_data">Alle Daten löschen</string>
+    <string name="delete_all_data_description">Dadurch werden alle Protokolle, der Verlauf und die Einstellungen gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.</string>
+    <string name="data_deleted">Daten gelöscht</string>
+    <string name="battery_optimization_title">Akku-Optimierung</string>
+    <string name="battery_optimization_description">Deaktiviere die Akku-Optimierung für PhoneGuard, damit der Schutz im Hintergrund funktioniert.</string>
+    <string name="open_battery_settings">Akku-Einstellungen öffnen</string>
+    <string name="scheduled_scan">Geplanter Scan</string>
+    <string name="schedule_scan_description">Automatisch einmal pro Woche einen Scan durchführen</string>
+    <string name="analytics_consent_title">Analyse</string>
+    <string name="analytics_consent_description">Sende anonyme Nutzungsstatistiken zur Verbesserung der App</string>
+    <string name="analytics_enabled">Analyse aktiviert</string>
+    <string name="siren_alarm">Sirenenalarm</string>
+    <string name="siren_alarm_description">Einen lauten Alarm auf dem Gerät auslösen</string>
+    <string name="alarm_started">Alarm gestartet</string>
+    <string name="alarm_stopped">Alarm gestoppt</string>
+
+    <!-- SIM Swap -->
+    <string name="sim_swap">SIM-Swap-Schutz</string>
+    <string name="sim_swap_status">SIM-Swap-Status</string>
+    <string name="sim_swap_last_change">Letzter SIM-Wechsel</string>
+    <string name="sim_swap_unknown">Keine Änderungen festgestellt</string>
+    <string name="sim_swap_unconfirmed">Unbestätigter SIM-Wechsel</string>
+    <string name="sim_swap_suspected_attack">Möglicher SIM-Swap-Angriff</string>
+    <string name="sim_swap_confirmed">Wechsel bestätigt</string>
+    <string name="sim_swap_history">SIM-Wechsel-Verlauf</string>
+    <string name="sim_swap_export">CSV exportieren</string>
+    <string name="sim_swap_confirm_title">Haben Sie die SIM gewechselt?</string>
+    <string name="sim_swap_confirm_description">Wenn nicht Sie es waren — wird Ihr Gerät gesperrt.</string>
+    <string name="sim_swap_yes">Ich war es</string>
+    <string name="sim_swap_no">Nicht ich, sperren</string>
+    <string name="sim_swap_timer">Auto-Sperre in</string>
+    <string name="sim_swap_sms_sent">Benachrichtigung an Reservenummer gesendet</string>
+    <string name="sim_swap_sms_failed">SMS konnte nicht vorbereitet werden</string>
+
 </resources>

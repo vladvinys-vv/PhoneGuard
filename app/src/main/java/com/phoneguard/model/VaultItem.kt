@@ -12,5 +12,5 @@ data class VaultItem(
     val mimeType: String,
     val encryptionKeyAlias: String,
     val createdAt: Long = System.currentTimeMillis(),
-    val isImage: Boolean = false
+    val category: VaultItemCategory = VaultItemCategory.OTHER
 )
