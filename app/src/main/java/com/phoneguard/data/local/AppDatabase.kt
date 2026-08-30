@@ -202,13 +202,7 @@ class AppDatabaseProvider @Inject constructor(
     )
         .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
         .openHelperFactory { config ->
-            val passphrase = databaseKeyManager.getDatabasePassphrase()
-            val factory = SupportFactory(passphrase)
-            SupportSQLiteOpenHelper.Configuration.builder(config.context)
-                .name(config.name)
-                .callback(config.callback)
-                .build()
-                .let { factory.create(it) }
+            SupportFactory(databaseKeyManager.getDatabasePassphrase()).create(config)
         }
         .build()
 }

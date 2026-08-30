@@ -84,14 +84,6 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE"
-        android:usesPermissionFlags="neverForLocation" />
-
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_LOCATION"
-        android:usesPermissionFlags="neverForLocation" />
-
     <permission
         android:name="com.phoneguard.permission.CALL_SCREENING"
         android:permissionGroup="android.permission-group.PHONE"
@@ -197,7 +189,7 @@
         <!-- SIM Swap Receiver -->
         <receiver
             android:name=".simswap.SimSwapReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SIM_STATE_CHANGED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -207,7 +199,7 @@
         <!-- New Package Receiver -->
         <receiver
             android:name=".spywarecheck.PackageAddedReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.PACKAGE_ADDED" />
                 <data android:scheme="package" />
