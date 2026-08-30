@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+local.properties
+*.iml
+
+# Android Studio
+.idea/
+captures/
+*.hprof
+
+# Keystore
+*.keystore
+*.jks
+keystore.properties
+
+# Firebase (add your own google-services.json)
+google-services.json
+
+# Misc
+*.log
+*.tmp
+.DS_Store
