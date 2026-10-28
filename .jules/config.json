@@ -1,0 +1,15 @@
+{
+  "project_name": "PhoneGuard",
+  "language": "kotlin",
+  "framework": "android",
+  "setup_commands": [
+    "./gradlew --version"
+  ],
+  "test_commands": [
+    "./gradlew test"
+  ],
+  "lint_commands": [
+    "./gradlew lint"
+  ],
+  "agent_instructions": ".jules/rules.md"
+}
