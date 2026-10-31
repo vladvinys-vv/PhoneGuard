@@ -212,7 +212,11 @@ def check_r_references(defined: dict[str, set[str]]) -> list[str]:
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True)
+    """Запуск без трейсбеков: отсутствие прав и прочие OSError превращаются в понятный лог."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as exc:
+        return subprocess.CompletedProcess(cmd, 126, "", f"{type(exc).__name__}: {exc}")
 
 
 def main() -> int:
@@ -232,6 +236,12 @@ def main() -> int:
         return self_test()
 
     aapt2 = find_aapt2(args.aapt2)
+    if aapt2 is not None and not os.access(aapt2, os.X_OK):
+        print(
+            f"aapt2_check: файл найден, но не исполняемый: {aapt2}\n"
+            f"  исправление: chmod +x '{aapt2}'"
+        )
+        return 1
     if aapt2 is None:
         print(
             "aapt2_check: пропущено — aapt2 не найден "

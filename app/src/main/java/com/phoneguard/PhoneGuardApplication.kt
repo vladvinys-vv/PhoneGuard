@@ -27,7 +27,8 @@ class PhoneGuardApplication : Application(), Configuration.Provider {
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
-        net.sqlcipher.database.SQLiteDatabase.loadLibs(this)
+        // SQLCipher-ядро лежит в AAR как libsqlcipher.so; loadLibs() был в старом API.
+        System.loadLibrary("sqlcipher")
     }
 
     @Inject

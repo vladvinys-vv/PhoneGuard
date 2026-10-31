@@ -9,7 +9,7 @@ Android-приложение для защиты устройства: полн�
 и шифрованный сейф с биометрией.
 
 ## Key Knowledge
-- **Tech stack:** Kotlin 2.1.0, Jetpack Compose (Material 3), Hilt 2.55, Room 2.6.1 + SQLCipher,
+- **Tech stack:** Kotlin 2.1.0, Jetpack Compose (Material 3), Hilt 2.55, Room 2.7.2 + SQLCipher for Android,
   WorkManager, Coroutines; Gradle 8.9, AGP 8.5.2, JDK 17, `minSdk 26`, `compileSdk`/`targetSdk` 35,
   flavor'ы `staging` / `production`.
 - **Architecture:** `model` → `data/repository` (Room/DataStore) → `ui/screens` (Compose + ViewModel),
@@ -26,8 +26,9 @@ Android-приложение для защиты устройства: полн�
 - **Сейф:** AES-256-GCM через Android Keystore, биометрия, `FLAG_SECURE`, лимит файла 50 МБ.
 
 ## Verification
-Без Android SDK доступны `./tools/check_all.sh` (аудит, синхронизация строк, компилятор Kotlin,
-опционально tree-sitter) и `python3 tools/kotlin_frontend_check.py --android-jar <jar>`.
+Без Android SDK доступны `./tools/check_all.sh` (проверка Gradle-скриптов, аудит, синхронизация
+строк, компилятор Kotlin, aapt2, опционально tree-sitter) и
+`python3 tools/kotlin_frontend_check.py --android-jar <jar>`.
 `./tools/fetch_android_jar.sh` достаёт `android.jar` из GitHub-зеркала, если `dl.google.com`
 недоступен. Сборка и тесты — `./gradlew assembleProductionDebug testDebugUnitTest lintDebug`
 (в CI: `.github/workflows/android-ci.yml`).

@@ -7,7 +7,7 @@ Facts here must match the code; the authoritative docs are `README.md`,
 ## Project
 - Android native security app: full device scan, phone check, local VPN firewall,
   anti-theft SMS commands, call/SMS blocking, encrypted biometric vault.
-- Stack: Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.6.1 + SQLCipher,
+- Stack: Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.7.2 + SQLCipher for Android,
   WorkManager, Coroutines. `minSdk 26`, `compileSdk`/`targetSdk 35`, JDK 17,
   Gradle 8.9 (Groovy DSL), AGP 8.5.2, flavors `staging` / `production`.
 - Everything that can run offline does; UI strings live in `values`, `values-en`,
@@ -15,8 +15,11 @@ Facts here must match the code; the authoritative docs are `README.md`,
 
 ## Commands (run from the repository root)
 - All checks available without Android SDK: `./tools/check_all.sh`
-  (`static_audit.py`, `sync_strings.py --check`, optionally `kotlin_frontend_check.py`
-  and `kotlin_analysis.py`).
+  (`gradle_check.py` — Groovy DSL/Kotlin-DSL-ошибки, версии плагинов и зависимостей,
+  `static_audit.py`, `sync_strings.py --check`, optionally `kotlin_frontend_check.py`,
+  `aapt2_check.py` and `kotlin_analysis.py`).
+- Gradle scripts only: `python3 tools/gradle_check.py` — runs first, because a DSL mistake
+  fails every task at configuration time with an unrelated Groovy stacktrace.
 - Strings: `python3 tools/sync_strings.py` (writes) / `--check` (reports only).
   After editing strings run the check and commit the result.
 - Compiler check: `python3 tools/kotlin_frontend_check.py` — needs `kotlinc` 2.1+ and

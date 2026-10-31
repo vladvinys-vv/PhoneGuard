@@ -3,6 +3,25 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **CI проверяет 16 КБ-выравнивание релизного APK.** Новый шаг `zipalign -c -P 16 -v 4` в
+  `codemagic.yaml` и в GH-job `build-release` (пропускается, если APK или `zipalign` недоступны).
+  Это фактическая проверка требования Play, а не только наличие библиотеки в зависимостях.
+- **Codemagic: кэш Gradle** (`~/.gradle/caches`, `~/.gradle/wrapper`) — повторные сборки не
+  перекачивают зависимости, что важно при лимите `max_build_duration: 120`.
+- **`tools/gradle_check.py`: проверки зависимостей.** Пары «рантайм ↔ обработчик» с обязательным
+  совпадением версий (`hilt-android`/`hilt-android-compiler`, `room-runtime`/`room-compiler`,
+  `hilt-work`/`hilt-compiler`), предупреждения о предрелизных версиях, о явных версиях
+  compose-артефактов при подключённом `compose-bom` и о закрытом
+  `net.zetetic:android-database-sqlcipher` (нет поддержки 16 КБ страниц → блокер Play при
+  `targetSdk 35`). Версии из `$rootProject.ext.*` резолвятся в реальные значения.
+- **`tools/gradle_check.py` — проверка конфигурации Gradle.** Ловит ошибки, которые Gradle
+  показывает только при запуске и всегда одним и тем же многоэкранным стектрейсом Groovy:
+  функции Kotlin stdlib в `.gradle` (`mapOf`, `listOf`, `val`, `.let { }`), `rootProject.ext.X`
+  без объявления, `id 'plugin'` без classpath, расхождение версий `kotlin-gradle-plugin` и
+  `compose-compiler-gradle-plugin`, AGP против Gradle wrapper'а и `compileSdk`, нарушение
+  `minSdk ≤ targetSdk ≤ compileSdk`, рассогласование `sourceCompatibility`/`jvmTarget`,
+  отсутствующий proguard-файл, дубликаты зависимостей, отсутствие `android.useAndroidX`.
+  Запускается первым в `./tools/check_all.sh`, в GH-job `static-checks` и в `codemagic.yaml`.
 - **`tools/webhook_notify.py` / `tools/webhook_listen.py` — уведомления о сборке.** Один скрипт на
   Codemagic, GitHub Actions и локальную сборку: payload `build.finished` (статус, ветка, коммит,
   build id/url, артефакты из `CM_ARTIFACT_LINKS`), подпись `X-PhoneGuard-Signature: sha256=…`
@@ -185,6 +204,24 @@
   не вызывался ниоткуда.
 
 ### Changed
+- **Зависимости приведены к актуальным стабильным версиям** (существование версий проверено по
+  публичному коду на GitHub: `androidx.room:room-runtime:2.7.2` — 756 файлов,
+  `net.zetetic:sqlcipher-android:4.19.1` — 68 файлов):
+  - **Room 2.6.1 → 2.7.2.** 2.6.1 выпущен под Kotlin 1.9, а проект на Kotlin 2.1: его kapt-обработчик
+    не читает metadata 2.1, а пин `kotlinx-metadata-jvm:0.7.0` («Force newer … for Kotlin 2.1»)
+    этого не решает — 0.7.0 понимает только metadata 1.9. Пин удалён, Room обновлён до версии
+    с поддержкой Kotlin 2.x.
+  - **SQLCipher: `android-database-sqlcipher:4.5.4` → `net.zetetic:sqlcipher-android:4.19.1`.**
+    Старый артефакт закрыт (2023) и не поддерживает 16 КБ страницы памяти → Play не примет обновление
+    с `targetSdk 35`. Новый пакет — `net.zetetic.database.sqlcipher`: `SupportFactory` →
+    `SupportOpenHelperFactory`, `SQLiteDatabase.loadLibs(this)` → `System.loadLibrary("sqlcipher")`,
+    `androidx.sqlite:sqlite:2.7.0` добавлен как compile-зависимость библиотеки. Keep-правила R8
+    расширены на новый пакет.
+  - **`androidx.security:security-crypto` 1.1.0-alpha06 → 1.1.0** и **`androidx.biometric`
+    1.2.0-alpha05 → 1.1.0** — обе стабильные, используемые API (`EncryptedFile`, `MasterKey`,
+    `BiometricPrompt`, `BiometricManager.Authenticators`) в них есть.
+  - **`material3` без явной версии** — её задаёт `compose-bom:2024.12.01` (1.3.1); явная версия
+    отключала управление BOM (на это ругается `gradle_check.py`).
 - **Конфигурация Gradle приведена в порядок.** Удалён устаревший `android.enableAapt2` (в AGP 8
   не используется), добавлены `android.suppressUnsupportedCompileSdk=35` (осознанное использование
   compileSdk 35 на AGP 8.5.2) и `org.gradle.configuration-cache.problems=warn` — проблемы кэша
@@ -194,6 +231,27 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **R8/ProGuard: подписи обобщённых типов и JSR-305.** В `app/proguard-rules.pro` не было
+  `-keepattributes Signature` (Gson/Room не восстанавливают generic-поля после обфускации —
+  падение уже в рантайме) и `-dontwarn javax.annotation.**` (R8 считает отсутствующие
+  compileOnly-аннотации ошибкой и валит `assembleProductionRelease`). Добавлена проверка
+  синтаксиса правил в `gradle_check.py`: неизвестная директива (опечатка `-dontwarns`) ловится
+  заранее, тело `-keep … { … }` при этом не разбирается.
+- **`aapt2_check.py` падал трейсбеком, если `aapt2` без права на исполнение.** Теперь
+  `run()` превращает `OSError` в понятный лог, а отсутствие `+x` сообщается отдельно
+  (`chmod +x '<путь>'`) вместо `PermissionError` из `subprocess`.
+- **Codemagic падал на `Lint`: `mapOf(...)` из Kotlin stdlib в Groovy DSL.**
+  `app/build.gradle` вызывал `arguments += mapOf("room.schemaLocation" to …)` — такого метода в
+  Groovy нет, поэтому конфигурация проекта падала с `MissingMethodException`, и вместе с ней
+  **любая** задача: `lintDebug`, `testDebugUnitTest`, сборки. Заменено на литерал Map
+  (`arguments = ["room.schemaLocation": projectDir.absolutePath + "/schemas"]`). Заодно
+  `app/build.gradle` приведён к каноническому Groovy-виду (`= ` вместо method-call для свойств:
+  `minSdk`, `targetSdk`, `versionCode`, `minifyEnabled`, `shrinkResources`, `compose`,
+  `abortOnError`, `correctErrorTypes`, `vectorDrawables.useSupportLibrary`), а `flavorDimensions`
+  оставлен вызовом метода — у него нет сеттера в публичном API AGP.
+- **`gradlew` перестал врать при сетевом сбое.** Добавлены `set -eu`, `curl -f --retry`,
+  проверка распаковки и понятное сообщение вместо `unzip: cannot find zipfile`; чистка задачи
+  `clean` переведена с устаревшего `buildDir` на `layout.buildDirectory` (Gradle 9).
 - **Ложное падение `aapt2_check` в Codemagic: `'specialUse' is incompatible with attribute
   foregroundServiceType`.** Причина — не манифест, а выбор `android.jar`: платформы
   сортировались лексикографически, поэтому `platforms/android-9` считался «новее»
