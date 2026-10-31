@@ -37,6 +37,11 @@
 (`static_audit.py` и строки) прогоняются в CI-job `static-checks`, компиляторная проверка — в
 `kotlin-frontend`; сборка и тесты — в `lint`, `unit-test`, `build-debug`, `build-release`.
 
+Если job'ы падают за 1–2 секунды **без запущенных шагов**, это не YAML: GitHub в этом случае
+пишет в аннотации check-run «The job was not started because your account is locked due to a
+billing issue». Проверить: `gh api repos/<owner>/<repo>/check-runs/<id>/annotations`. Лечится
+на стороне GitHub (Billing & plans), а не в репозитории.
+
 ## Конвенции
 
 ### Строки и локализация
