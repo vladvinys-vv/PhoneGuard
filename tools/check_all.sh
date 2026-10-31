@@ -11,6 +11,11 @@ failed=0
 
 step() { printf '\n=== %s ===\n' "$1"; }
 
+step "gradle_check.py"
+# Конфигурация Gradle: ошибка здесь валит lint/тесты/сборку ещё до компиляции
+# (так падал mapOf() из Kotlin stdlib в Groovy-скрипте).
+python3 tools/gradle_check.py || failed=1
+
 step "static_audit.py"
 python3 tools/static_audit.py || failed=1
 

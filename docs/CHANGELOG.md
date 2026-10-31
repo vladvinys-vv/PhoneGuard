@@ -3,6 +3,14 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **`tools/gradle_check.py` — проверка конфигурации Gradle.** Ловит ошибки, которые Gradle
+  показывает только при запуске и всегда одним и тем же многоэкранным стектрейсом Groovy:
+  функции Kotlin stdlib в `.gradle` (`mapOf`, `listOf`, `val`, `.let { }`), `rootProject.ext.X`
+  без объявления, `id 'plugin'` без classpath, расхождение версий `kotlin-gradle-plugin` и
+  `compose-compiler-gradle-plugin`, AGP против Gradle wrapper'а и `compileSdk`, нарушение
+  `minSdk ≤ targetSdk ≤ compileSdk`, рассогласование `sourceCompatibility`/`jvmTarget`,
+  отсутствующий proguard-файл, дубликаты зависимостей, отсутствие `android.useAndroidX`.
+  Запускается первым в `./tools/check_all.sh`, в GH-job `static-checks` и в `codemagic.yaml`.
 - **`tools/webhook_notify.py` / `tools/webhook_listen.py` — уведомления о сборке.** Один скрипт на
   Codemagic, GitHub Actions и локальную сборку: payload `build.finished` (статус, ветка, коммит,
   build id/url, артефакты из `CM_ARTIFACT_LINKS`), подпись `X-PhoneGuard-Signature: sha256=…`
@@ -194,6 +202,18 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **Codemagic падал на `Lint`: `mapOf(...)` из Kotlin stdlib в Groovy DSL.**
+  `app/build.gradle` вызывал `arguments += mapOf("room.schemaLocation" to …)` — такого метода в
+  Groovy нет, поэтому конфигурация проекта падала с `MissingMethodException`, и вместе с ней
+  **любая** задача: `lintDebug`, `testDebugUnitTest`, сборки. Заменено на литерал Map
+  (`arguments = ["room.schemaLocation": projectDir.absolutePath + "/schemas"]`). Заодно
+  `app/build.gradle` приведён к каноническому Groovy-виду (`= ` вместо method-call для свойств:
+  `minSdk`, `targetSdk`, `versionCode`, `minifyEnabled`, `shrinkResources`, `compose`,
+  `abortOnError`, `correctErrorTypes`, `vectorDrawables.useSupportLibrary`), а `flavorDimensions`
+  оставлен вызовом метода — у него нет сеттера в публичном API AGP.
+- **`gradlew` перестал врать при сетевом сбое.** Добавлены `set -eu`, `curl -f --retry`,
+  проверка распаковки и понятное сообщение вместо `unzip: cannot find zipfile`; чистка задачи
+  `clean` переведена с устаревшего `buildDir` на `layout.buildDirectory` (Gradle 9).
 - **Ложное падение `aapt2_check` в Codemagic: `'specialUse' is incompatible with attribute
   foregroundServiceType`.** Причина — не манифест, а выбор `android.jar`: платформы
   сортировались лексикографически, поэтому `platforms/android-9` считался «новее»

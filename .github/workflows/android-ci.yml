@@ -29,6 +29,11 @@ jobs:
       - name: Strings are in sync with tools/sync_strings.py
         run: python3 tools/sync_strings.py --check
 
+      # Ошибки конфигурации Gradle (Kotlin-DSL в Groovy, версии плагинов, ext) валят
+      # любую задачу ещё до компиляции — проверяем до тяжёлых job'ов.
+      - name: Gradle scripts check
+        run: python3 tools/gradle_check.py
+
   # Настоящий компилятор Kotlin без Android SDK: видит то, чего не видит regex-аудит.
   kotlin-frontend:
     name: Kotlin frontend check
