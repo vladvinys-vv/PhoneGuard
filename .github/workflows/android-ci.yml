@@ -135,3 +135,20 @@ jobs:
           name: PhoneGuard-production-release
           path: app/build/outputs/apk/production/release/*.apk
           retention-days: 30
+
+  # Отправка статуса сборки на внешний webhook (docs/CI_WEBHOOKS.md).
+  # Секреты WEBHOOK_URL / WEBHOOK_SECRET задаются в Settings → Secrets → Actions;
+  # без них шаг просто печатает, что уведомление пропущено.
+  notify:
+    name: Webhook notification
+    runs-on: ubuntu-latest
+    needs: [static-checks, kotlin-frontend, lint, unit-test, build-debug, build-release]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send build status
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          BUILD_STATUS: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+        run: python3 tools/webhook_notify.py --status "$BUILD_STATUS"

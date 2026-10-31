@@ -197,6 +197,17 @@ python3 tools/kotlin_analysis.py
 дать ложное срабатывание. Такие случаи вносятся в `tools/kotlin_analysis_allow.txt` с пояснением,
 почему вызов безопасен.
 
+### `tools/webhook_notify.py` / `tools/webhook_listen.py`
+
+Уведомление о завершении сборки во внешний сервис: Codemagic (`publishing.scripts`),
+GitHub Actions (job `notify`) и локально. Payload `build.finished` (статус, ветка, коммит,
+build id/url, артефакты), подпись `X-PhoneGuard-Signature: sha256=…` (HMAC-SHA256 по
+`WEBHOOK_SECRET`), 3 попытки с backoff. Без `WEBHOOK_URL` шаг ничего не делает, при ошибке
+доставки сборка не падает (`--strict` — наоборот). `webhook_listen.py` — локальный приёмник
+с проверкой подписи. Полная схема, настройка секретов и входящий trigger-webhook —
+[`docs/CI_WEBHOOKS.md`](CI_WEBHOOKS.md).
+
+
 ## Тесты
 
 - **JVM (`app/src/test`)**: JUnit4 + MockK + Turbine + Robolectric. Для Android-API берём

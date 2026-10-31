@@ -132,6 +132,7 @@ python3 tools/sync_strings.py            # идемпотентная синхр
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор (с android.jar — строже)
 python3 tools/aapt2_check.py             # опционально: ресурсы и манифест через aapt2 (как Gradle)
 python3 tools/kotlin_analysis.py         # опционально: парсер Kotlin (нужен tree-sitter)
+python3 tools/webhook_notify.py --dry-run # опционально: payload уведомления о сборке (docs/CI_WEBHOOKS.md)
 ```
 
 `static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
@@ -153,6 +154,11 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 | `kotlin-frontend` | ставит Kotlin 2.1.0 + `platforms;android-35`/`build-tools`, прогоняет `kotlin_frontend_check.py` (с настоящим `android.jar`) и `aapt2_check.py` (ресурсы + манифест) |
 | `lint`, `unit-test` | `lintDebug`, `testDebugUnitTest` (отчёты тестов выгружаются при падении) |
 | `build-debug`, `build-release` | `assembleProductionDebug`, `assembleProductionRelease` (APK как артефакт) |
+| `notify` | отправляет итог сборки на внешний webhook (`tools/webhook_notify.py`, `if: always()`) |
+
+Codemagic (`codemagic.yaml`) делает то же самое плюс `publishing.scripts` с уведомлением о
+статусе и `triggering` на push/PR/теги. Настройка обоих направлений webhook'ов —
+[`docs/CI_WEBHOOKS.md`](docs/CI_WEBHOOKS.md).
 
 ## Документация
 
@@ -164,6 +170,7 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 | [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md) | ручные сценарии проверки на устройствах |
 | [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) | политика конфиденциальности (что и где хранится) |
 | [`docs/PLAY_STORE_LISTING.md`](docs/PLAY_STORE_LISTING.md) | тексты для магазина |
+| [`docs/CI_WEBHOOKS.md`](docs/CI_WEBHOOKS.md) | входящие (trigger) и исходящие (notify) webhook'и CI, подпись HMAC, локальная проверка |
 
 ## Модель безопасности
 

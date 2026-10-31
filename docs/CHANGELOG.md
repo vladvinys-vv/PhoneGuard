@@ -3,8 +3,22 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **`tools/webhook_notify.py` / `tools/webhook_listen.py` — уведомления о сборке.** Один скрипт на
+  Codemagic, GitHub Actions и локальную сборку: payload `build.finished` (статус, ветка, коммит,
+  build id/url, артефакты из `CM_ARTIFACT_LINKS`), подпись `X-PhoneGuard-Signature: sha256=…`
+  (HMAC-SHA256), 3 попытки с backoff, `--dry-run`, `--strict`, `--mark-success`. Ошибка доставки не
+  роняет сборку, отсутствие `WEBHOOK_URL` — no-op. `webhook_listen.py` — локальный приёмник с
+  проверкой подписи. Проверено end-to-end: `HTTP 200`, `подпись: верна`.
+- **`codemagic.yaml`:** `triggering` (push/PR/теги `v*`, `main`/`master`, `cancel_previous_builds`),
+  шаг `Mark build successful` (маркер `~/.phoneguard-build-success`, потому что publishing-скрипты
+  выполняются и при падении) и `publishing.scripts` с `webhook_notify.py`; секреты
+  `WEBHOOK_URL`/`WEBHOOK_SECRET` задаются переменными приложения (без обязательной
+  переменной-группы, иначе сборка падала бы на чистом форке).
+- **GitHub Actions:** job `notify` (`if: always()`, статус по `needs.*.result`).
+- **`docs/CI_WEBHOOKS.md`:** таблица «входящий trigger / исходящий notify», схема payload, проверка
+  подписи на Python/Node, настройка Codemagic и GitHub, локальный сценарий проверки.
 - **`tools/kotlin_frontend_check.py` — проверка настоящим компилятором.** Запускает `kotlinc 2.1`
-  на всех 212 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
+  на всех 209 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
   вызванные отсутствующими библиотеками (`-Xrender-internal-diagnostic-names` + список ожидаемых
   имён с пояснениями). Найдено и исправлено 7 ошибок компиляции, которые не видел регексп-аудит
   (см. Fixed). Без `kotlinc` скрипт завершается с кодом 0 и подсказкой, как его получить.
@@ -79,7 +93,7 @@
   а повторное открытие обрабатывается в `onNewIntent`. Работает и снаружи:
   `adb shell am start -a android.intent.action.VIEW -d phoneguard://settings`.
 - **`tools/kotlin_analysis.py`** — разбор Kotlin настоящим парсером (tree-sitter, зависимость
-  опциональная): синтаксис всех 212 `.kt` и поиск вызовов `suspend`-функций вне suspend-контекста.
+  опциональная): синтаксис всех 209 `.kt` и поиск вызовов `suspend`-функций вне suspend-контекста.
   Проверкой найден реальный баг сборки (см. Fixed). Ложные срабатывания из-за одноимённых функций
   перечислены в `tools/kotlin_analysis_allow.txt` с пояснениями.
 - **`tools/static_audit.py`: две новые проверки.** «Уникальность id уведомлений» (был конфликт
@@ -180,6 +194,8 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **`.pyc` больше не в репозитории.** `tools/__pycache__/*.pyc` были закоммичены (и менялись при
+  каждом запуске проверок) — удалены из индекса, в `.gitignore` добавлены `__pycache__/` и `*.py[cod]`.
 - **Найдено компилятором с `android.jar` (три реальные ошибки):**
   - `SimSwapDetector`: `Geocoder.getFromLocation()` возвращает `List<Address>?` — результат
     присваивался в non-null `List<Address>` (NPE, который молча съедал внешний `catch`, и адрес
