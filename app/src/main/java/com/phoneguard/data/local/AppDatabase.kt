@@ -14,7 +14,7 @@ import com.phoneguard.model.VaultItem
 import com.phoneguard.model.ScanHistory
 import com.phoneguard.util.DatabaseKeyManager
 import dagger.hilt.android.qualifiers.ApplicationContext
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -238,7 +238,7 @@ class AppDatabaseProvider @Inject constructor(
                 Log.w(TAG, "Ключ БД недоступен — пересоздаём локальную базу", e)
                 databaseKeyManager.resetWithNewPassphrase()
             }
-            SupportFactory(passphrase).create(config)
+            SupportOpenHelperFactory(passphrase).create(config)
         }
         .build()
 }

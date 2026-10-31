@@ -87,7 +87,9 @@
 -keep class androidx.navigation.compose.** { *; }
 -dontwarn androidx.navigation.compose.**
 
-# SQLCipher
+# SQLCipher (net.zetetic.database.sqlcipher) + старый пакет на случай переходного периода
+-keep class net.zetetic.database.sqlcipher.** { *; }
+-dontwarn net.zetetic.database.sqlcipher.**
 -keep class net.sqlcipher.** { *; }
 -dontwarn net.sqlcipher.**
 

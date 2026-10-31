@@ -5,7 +5,7 @@ Android-приложение для защиты устройства: пров�
 Всё, что можно, работает офлайн: база, логи и диагностика остаются на устройстве.
 
 - **Платформа:** Android 8.0+ (`minSdk 26`), `compileSdk`/`targetSdk 35`
-- **Стек:** Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.6.1 + SQLCipher, WorkManager, Coroutines
+- **Стек:** Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.7.2 + SQLCipher for Android, WorkManager, Coroutines
 - **Сборка:** Gradle 8 (Groovy DSL), AGP 8.5.2, JDK 17
 
 ## Возможности
@@ -32,7 +32,7 @@ Android-приложение для защиты устройства: пров�
 | Подписи APK | [apk-parser](https://github.com/hsiafan/apk-parser) `2.6.10` | Цепочка сертификатов, алгоритм подписи, срок действия — `PackageManager` этого не отдаёт | Apache-2.0 |
 | Threat intelligence | [URLhaus](https://urlhaus.abuse.ch/) + [OpenPhish](https://openphish.com/) через OkHttp | Проверка доменов из подозрительных SMS. Наружу уходит **только имя хоста**; выключено по умолчанию | free for non-commercial use |
 | Сеть | [OkHttp](https://square.github.io/okhttp/) `4.12.0` | HTTP-клиент для threat intel (+ `logging-interceptor` в debug) | Apache-2.0 |
-| БД | Room + [SQLCipher](https://github.com/sqlcipher/android-database-sqlcipher) `4.5.4` | Локальная зашифрованная база (версия схемы 8, миграции 1→8) | Apache-2.0 / BSD |
+| БД | Room `2.7.2` + [SQLCipher for Android](https://github.com/sqlcipher/sqlcipher-android) `4.19.1` | Локальная зашифрованная база (версия схемы 8, миграции 1→8). Native-библиотеки собраны с поддержкой 16 КБ страниц (требование Play для `targetSdk 35`) | Apache-2.0 / BSD |
 | Файлы сейфа | AndroidX Security Crypto | AES-256-GCM для файлов | Apache-2.0 |
 | Геолокация | Google Play Services Location | Последняя известная точка для анти-вора | proprietary SDK |
 | Детектор подглядывания | ML Kit face detection | Определение второго лица в кадре | proprietary SDK |

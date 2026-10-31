@@ -146,7 +146,7 @@ dependencies {
     implementation "androidx.compose.ui:ui"
     implementation "androidx.compose.ui:ui-graphics"
     implementation "androidx.compose.ui:ui-tooling-preview"
-    implementation "androidx.compose.material3:material3:$rootProject.ext.material3_version"
+    implementation "androidx.compose.material3:material3"  // версия из compose-bom
     implementation "androidx.compose.material:material-icons-extended"
 
     // Lifecycle
@@ -167,9 +167,12 @@ dependencies {
     implementation "androidx.room:room-runtime:$rootProject.ext.room_version"
     implementation "androidx.room:room-ktx:$rootProject.ext.room_version"
     kapt "androidx.room:room-compiler:$rootProject.ext.room_version"
-    implementation "net.zetetic:android-database-sqlcipher:4.5.4"
-    // Force newer kotlinx-metadata-jvm for Room kapt compatibility with Kotlin 2.1
-    kapt "org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.7.0"
+    // SQLCipher for Android (преемник закрытого android-database-sqlcipher): пакет
+    // net.zetetic.database.sqlcipher, native-библиотеки собраны с
+    // APP_SUPPORT_FLEXIBLE_PAGE_SIZES — требование Play к 16 КБ страницам при targetSdk 35.
+    // androidx.sqlite нужен как compile-зависимость библиотеки (см. её README).
+    implementation "net.zetetic:sqlcipher-android:4.19.1"
+    implementation "androidx.sqlite:sqlite:2.7.0"
 
     // JSON serialization for scan reports
     implementation "com.google.code.gson:gson:2.11.0"
@@ -198,10 +201,10 @@ dependencies {
     implementation "androidx.datastore:datastore-preferences:1.0.0"
 
     // Jetpack Security (for Secure Vault)
-    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+    implementation "androidx.security:security-crypto:1.1.0"
 
     // Biometrics (for Secure Vault unlock)
-    implementation "androidx.biometric:biometric:1.2.0-alpha05"
+    implementation "androidx.biometric:biometric:1.1.0"
 
     // CameraX (for anti-theft photos)
     def camerax_version = "1.4.1"

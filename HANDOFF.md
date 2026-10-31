@@ -20,9 +20,10 @@ except an opt-in host-name lookup (threat intelligence, off by default).
   Kotlin frontend with `platforms;android-35` → lint → unit tests → production debug/release APKs),
   `codemagic.yaml` (то же + webhook о статусе сборки), `build_release.sh`.
   `jules.yml` only validates `.jules` config.
-- Известный блокер релиза: `net.zetetic:android-database-sqlcipher:4.5.4` не поддерживает
-  16 КБ страницы памяти → Play отклонит обновление при `targetSdk 35`. План миграции —
-  `docs/RELEASE.md`.
+- 16 КБ страницы памяти: закрытый `android-database-sqlcipher:4.5.4` заменён на
+  `net.zetetic:sqlcipher-android:4.19.1` (`APP_SUPPORT_FLEXIBLE_PAGE_SIZES`), пакет
+  `net.zetetic.database.sqlcipher`, `System.loadLibrary("sqlcipher")`. Проверка —
+  `zipalign -c -P 16` (см. `docs/RELEASE.md`).
 - Known, documented limitation: domain/IP lists in the firewall are stored but not enforced
   without an upstream VPN forward (see `firewall_lists_not_enforced_note` and the firewall
   screen). Full per-app blocking is unaffected.

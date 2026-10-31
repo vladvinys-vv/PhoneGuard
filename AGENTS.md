@@ -7,7 +7,7 @@ Facts here must match the code; the authoritative docs are `README.md`,
 ## Project
 - Android native security app: full device scan, phone check, local VPN firewall,
   anti-theft SMS commands, call/SMS blocking, encrypted biometric vault.
-- Stack: Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.6.1 + SQLCipher,
+- Stack: Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.7.2 + SQLCipher for Android,
   WorkManager, Coroutines. `minSdk 26`, `compileSdk`/`targetSdk 35`, JDK 17,
   Gradle 8.9 (Groovy DSL), AGP 8.5.2, flavors `staging` / `production`.
 - Everything that can run offline does; UI strings live in `values`, `values-en`,

@@ -320,6 +320,12 @@ def check_dependencies(files: list[Path], ext: dict[str, str], errors: list[str]
                         f"{coordinate}:{number}: предрелизная версия {version} — проверьте, нет ли стабильной"
                     )
 
+    if "net.zetetic:sqlcipher-android" in dependencies and "androidx.sqlite:sqlite" not in dependencies:
+        warnings.append(
+            "`net.zetetic:sqlcipher-android` подключён без `androidx.sqlite:sqlite` — библиотека "
+            "объявляет её как compile-зависимость, но не тянет транзитивно (см. её README)"
+        )
+
     compose_bom = [
         version
         for _, _, version in dependencies.get("androidx.compose:compose-bom", [])

@@ -201,6 +201,24 @@
   не вызывался ниоткуда.
 
 ### Changed
+- **Зависимости приведены к актуальным стабильным версиям** (существование версий проверено по
+  публичному коду на GitHub: `androidx.room:room-runtime:2.7.2` — 756 файлов,
+  `net.zetetic:sqlcipher-android:4.19.1` — 68 файлов):
+  - **Room 2.6.1 → 2.7.2.** 2.6.1 выпущен под Kotlin 1.9, а проект на Kotlin 2.1: его kapt-обработчик
+    не читает metadata 2.1, а пин `kotlinx-metadata-jvm:0.7.0` («Force newer … for Kotlin 2.1»)
+    этого не решает — 0.7.0 понимает только metadata 1.9. Пин удалён, Room обновлён до версии
+    с поддержкой Kotlin 2.x.
+  - **SQLCipher: `android-database-sqlcipher:4.5.4` → `net.zetetic:sqlcipher-android:4.19.1`.**
+    Старый артефакт закрыт (2023) и не поддерживает 16 КБ страницы памяти → Play не примет обновление
+    с `targetSdk 35`. Новый пакет — `net.zetetic.database.sqlcipher`: `SupportFactory` →
+    `SupportOpenHelperFactory`, `SQLiteDatabase.loadLibs(this)` → `System.loadLibrary("sqlcipher")`,
+    `androidx.sqlite:sqlite:2.7.0` добавлен как compile-зависимость библиотеки. Keep-правила R8
+    расширены на новый пакет.
+  - **`androidx.security:security-crypto` 1.1.0-alpha06 → 1.1.0** и **`androidx.biometric`
+    1.2.0-alpha05 → 1.1.0** — обе стабильные, используемые API (`EncryptedFile`, `MasterKey`,
+    `BiometricPrompt`, `BiometricManager.Authenticators`) в них есть.
+  - **`material3` без явной версии** — её задаёт `compose-bom:2024.12.01` (1.3.1); явная версия
+    отключала управление BOM (на это ругается `gradle_check.py`).
 - **Конфигурация Gradle приведена в порядок.** Удалён устаревший `android.enableAapt2` (в AGP 8
   не используется), добавлены `android.suppressUnsupportedCompileSdk=35` (осознанное использование
   compileSdk 35 на AGP 8.5.2) и `org.gradle.configuration-cache.problems=warn` — проблемы кэша

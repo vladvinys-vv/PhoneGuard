@@ -9,7 +9,7 @@ Android-приложение для защиты устройства: полн�
 и шифрованный сейф с биометрией.
 
 ## Key Knowledge
-- **Tech stack:** Kotlin 2.1.0, Jetpack Compose (Material 3), Hilt 2.55, Room 2.6.1 + SQLCipher,
+- **Tech stack:** Kotlin 2.1.0, Jetpack Compose (Material 3), Hilt 2.55, Room 2.7.2 + SQLCipher for Android,
   WorkManager, Coroutines; Gradle 8.9, AGP 8.5.2, JDK 17, `minSdk 26`, `compileSdk`/`targetSdk` 35,
   flavor'ы `staging` / `production`.
 - **Architecture:** `model` → `data/repository` (Room/DataStore) → `ui/screens` (Compose + ViewModel),
