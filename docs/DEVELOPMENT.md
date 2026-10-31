@@ -110,7 +110,7 @@
 
 ### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
 
-Запускает **настоящий компилятор Kotlin** на всех 209 файлах без Android SDK. Компилятор не может
+Запускает **настоящий компилятор Kotlin** на всех 209 файлах. Без Android SDK он не может
 разрешить `android.*`, `androidx.*`, `kotlinx.coroutines`, Hilt и mockk, но полностью проверяет
 синтаксис, объявления, вывод типов там, где типы известны, и правила языка. Ошибки, заведомо вызванные
 отсутствующими библиотеками, отфильтрованы по внутренним именам диагностик
@@ -120,7 +120,23 @@
 export JAVA_HOME=/path/to/jdk-17
 python3 tools/kotlin_frontend_check.py          # main + test + androidTest
 python3 tools/kotlin_frontend_check.py --scope main
+
+# строже: с настоящим android.jar проверяются сигнатуры android.* API
+./tools/fetch_android_jar.sh                     # печатает путь к android.jar
+python3 tools/kotlin_frontend_check.py --android-jar "$(./tools/fetch_android_jar.sh)"
 ```
+
+С `android.jar` на classpath (флаг `--android-jar`, переменные `ANDROID_JAR` или
+`ANDROID_HOME`/`ANDROID_SDK_ROOT` — скрипт находит `platforms/android-*/android.jar` сам)
+количество «шумных» диагностик падает примерно с 10 500 до 8 100, а часть шума становится
+ошибками: если в сообщении фигурирует уже разрешённый тип `android.*`, это настоящая проблема.
+Так найдены `Geocoder.getFromLocation()` без проверки на `null` и два обращения к
+`PackageInfo.applicationInfo` без проверки на `null`.
+
+`tools/fetch_android_jar.sh` достаёт `android.jar` там, где `dl.google.com` недоступен
+(например, в изолированных песочницах): сначала смотрит кеш `~/.cache/phoneguard/android-jar`,
+затем установленный SDK, а в крайнем случае делает sparse checkout нужной платформы из
+GitHub-зеркала `Sable/android-platforms` (~26 МБ, несколько секунд).
 
 Требуется `kotlinc` 2.1+ на `PATH` (или в `KOTLINC`). Если компилятора нет, скрипт завершается с
 кодом 0 и подсказкой. В песочнице без доступа к Maven Central компилятор берётся из npm:

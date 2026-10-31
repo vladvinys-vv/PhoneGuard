@@ -28,6 +28,14 @@
   продолжается, но печатает предупреждение, что APK неподписанный.
 - **Codemagic** теперь тоже гоняет `static_audit.py` и проверку синхронизации строк до Gradle
   и выгружает отчёты lint/тестов.
+- **`tools/fetch_android_jar.sh`** — достаёт настоящий `android.jar` (кеш → установленный SDK →
+  sparse checkout GitHub-зеркала `Sable/android-platforms`, ~26 МБ за секунды). Нужен там, где
+  `dl.google.com`/`maven.google.com` закрыты.
+- **`kotlin_frontend_check.py --android-jar`** — проверка с настоящим Android SDK на classpath:
+  шумных диагностик 10 500 → 8 100, и если в сообщении фигурирует уже разрешённый тип `android.*`,
+  диагностика считается настоящей ошибкой. Новое правило сразу нашло три дефекта (см. Fixed).
+  В CI (`kotlin-frontend`) теперь устанавливается `platforms;android-35`, поэтому проверка идёт
+  в строгом режиме.
 - **`sync_strings.py --check`** — режим проверки без записи: печатает, каких ключей не хватает
   в каждой локали, и возвращает 1. CI и `tools/check_all.sh` используют его вместо
   `git diff -- app/src/main/res`, который ломался при незакоммиченных правках строк.
@@ -151,6 +159,14 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **Найдено компилятором с `android.jar` (три реальные ошибки):**
+  - `SimSwapDetector`: `Geocoder.getFromLocation()` возвращает `List<Address>?` — результат
+    присваивался в non-null `List<Address>` (NPE, который молча съедал внешний `catch`, и адрес
+    подмены SIM терялся) — добавлен `?: emptyList()`;
+  - `PrivacyScannerRepository`: `pkg.applicationInfo` (в SDK помечен nullable) разыменовывался
+    без проверки — теперь пакеты без `applicationInfo` пропускаются;
+  - `HiddenAppsCheck`: `packageInfo.applicationInfo.targetSdkVersion` — то же самое, добавлена
+    явная проверка.
 - **Подтверждение подмены SIM теперь можно получить.** `SimSwapConfirmationActivity` была объявлена
   в манифесте, но её никто не запускал, а `SimSwapDetector` только отправлял событие в
   `uiEvents` — горячий `SharedFlow` без replay, у которого в фоне (обычный случай для подмены SIM)

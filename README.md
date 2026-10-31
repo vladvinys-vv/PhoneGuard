@@ -136,7 +136,8 @@ python3 tools/kotlin_analysis.py         # опционально: парсер 
 `static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
 миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_frontend_check.py` прогоняет все
-209 файлов через настоящий компилятор Kotlin (без Android SDK) и отсекает ошибки, вызванные
+209 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
+`tools/fetch_android_jar.sh`) и отсекает ошибки, вызванные
 отсутствующими библиотеками — им найдены семь реальных ошибок сборки, в том числе в тестах.
 `kotlin_analysis.py` дополнительно разбирает файлы парсером и ищет вызовы `suspend`-функций вне
 suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).

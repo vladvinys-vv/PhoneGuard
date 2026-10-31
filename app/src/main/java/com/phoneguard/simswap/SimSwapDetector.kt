@@ -201,7 +201,11 @@ class SimSwapDetector(
             // вечно, а вместе с ним — вся реакция на подмену SIM.
             val location = fused.awaitLastLocationOrNull() ?: return@withContext Triple(null, null, null)
             val geocoder = Geocoder(context, Locale.getDefault())
-            val addresses: List<Address> = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+            // Geocoder.getFromLocation() помечен в SDK как возвращающий null (нет сервиса
+            // геокодирования, лимит запросов): без `?: emptyList()` это NPE, который раньше
+            // молча съедал внешний catch и оставлял координаты без адреса.
+            val addresses: List<Address> =
+                geocoder.getFromLocation(location.latitude, location.longitude, 1) ?: emptyList()
             val address = addresses.firstOrNull()?.getAddressLine(0)
             Triple(location.latitude, location.longitude, address)
         } catch (e: Exception) {

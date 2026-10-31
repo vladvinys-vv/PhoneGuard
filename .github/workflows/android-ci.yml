@@ -41,12 +41,17 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35'
+
       - name: Install Kotlin 2.1.0
         run: |
           curl -sSLo kotlin.zip https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-compiler-2.1.0.zip
           unzip -q kotlin.zip -d "$RUNNER_TEMP/kotlinc"
           echo "$RUNNER_TEMP/kotlinc/kotlinc/bin" >> "$GITHUB_PATH"
 
+      # С android.jar в classpath проверяются ещё и реальные сигнатуры android.* API.
       - name: Compile all sources with the frontend
         run: python3 tools/kotlin_frontend_check.py
 

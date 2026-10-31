@@ -85,6 +85,9 @@ class HiddenAppsCheck @Inject constructor(
         }.mapNotNull { appInfo ->
             val pkg = appInfo.packageName
             val packageInfo = queryPackageInfo(pkg) ?: return@mapNotNull null
+            // PackageInfo.applicationInfo в SDK nullable — проверяем явно, иначе
+            // `packageInfo.applicationInfo.targetSdkVersion` падал бы NPE.
+            val packageAppInfo = packageInfo.applicationInfo ?: return@mapNotNull null
 
             val requested = packageInfo.requestedPermissions?.toSet().orEmpty()
             val dangerous = HiddenAppHeuristics.dangerousPermissions(requested)
@@ -117,7 +120,7 @@ class HiddenAppsCheck @Inject constructor(
                 packageName = pkg,
                 appName = appName,
                 installTime = packageInfo.firstInstallTime,
-                targetSdk = packageInfo.applicationInfo.targetSdkVersion,
+                targetSdk = packageAppInfo.targetSdkVersion,
                 riskReason = riskReason,
                 isSuspiciousName = hasSuspiciousName,
                 dangerousPermissions = dangerous.toList()

@@ -26,6 +26,11 @@ Android SDK. Этот скрипт запускает настоящий ком�
 
     npm pack kotlin-compiler@2.1.0 && tar xzf kotlin-compiler-2.1.0.tgz
     export PATH="$PWD/package/bin:$PATH"
+
+С `--android-jar` (или `ANDROID_JAR`/`ANDROID_HOME`) проверка становится строже: ошибки
+в сигнатурах `android.*` перестают быть «шумом». Так были найдены `Geocoder.getFromLocation()`
+без проверки на null и два обращения к `PackageInfo.applicationInfo` без проверки.
+Где взять android.jar без dl.google.com — см. `tools/fetch_android_jar.sh`.
 """
 
 from __future__ import annotations
@@ -108,6 +113,14 @@ ALWAYS_REAL = {
 
 DIAG_RE = re.compile(r"^(?P<path>.+?\.kt):(?P<line>\d+):(?P<col>\d+): error: \[(?P<name>[A-Z_]+)\] (?P<msg>.*)$")
 
+# С Android SDK на classpath часть «шумных» диагностик перестаёт быть шумом: если в
+# сообщении тип `android.*` уже разрешён, значит проблема не во внешней библиотеке.
+# Так были найдены два обращения к `PackageInfo.applicationInfo` без проверки на null.
+ANDROID_TYPED_REAL = [
+    # UNSAFE_CALL на полностью разрешённом android-типе — настоящий NPE-риск.
+    (re.compile(r"^UNSAFE_CALL$"), re.compile(r"nullable receiver of type 'android\.")),
+]
+
 
 def find_kotlinc() -> str | None:
     explicit = os.environ.get("KOTLINC")
@@ -121,9 +134,37 @@ def collect_sources(scope: str) -> list[str]:
     return [str(p) for root in roots for p in sorted(root.rglob("*.kt"))]
 
 
+def find_android_jar(explicit: str | None) -> str | None:
+    """android.jar из установленного SDK: явный путь → ANDROID_JAR → ANDROID_HOME/ANDROID_SDK_ROOT."""
+    if explicit:
+        return explicit if Path(explicit).is_file() else None
+    env_jar = os.environ.get("ANDROID_JAR")
+    if env_jar and Path(env_jar).is_file():
+        return env_jar
+    for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        root = os.environ.get(var)
+        if not root:
+            continue
+        platforms = Path(root) / "platforms"
+        if not platforms.is_dir():
+            continue
+        # самая новая платформа, у которой есть android.jar
+        for candidate in sorted(platforms.glob("android-*/android.jar"), reverse=True):
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope", choices=["main", "all"], default="all")
+    parser.add_argument(
+        "--android-jar",
+        default=None,
+        help="android.jar из Android SDK: снимает тысячи ложных «неразрешённых ссылок» "
+             "и проверяет реальные сигнатуры android.* API (по умолчанию берётся "
+             "из $ANDROID_JAR / $ANDROID_HOME/platforms)",
+    )
     args = parser.parse_args()
 
     kotlinc = find_kotlinc()
@@ -137,15 +178,17 @@ def main() -> int:
         print("kotlin_frontend_check: не найдено исходников")
         return 0
 
+    android_jar = find_android_jar(args.android_jar)
     with tempfile.TemporaryDirectory() as out:
         cmd = [
             kotlinc,
             "-Xrender-internal-diagnostic-names",
             "-jvm-target", "17",
             "-nowarn",
-            "-d", out,
-            *sources,
         ]
+        if android_jar:
+            cmd += ["-classpath", android_jar]
+        cmd += ["-d", out, *sources]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         log = (proc.stdout or "") + (proc.stderr or "")
 
@@ -160,13 +203,22 @@ def main() -> int:
         entry = f"{rel}:{m.group('line')}: [{name}] {m.group('msg')}"
         if name in ALWAYS_REAL or name not in EXPECTED:
             real.append(entry)
+        elif android_jar and any(
+            name_re.match(name) and msg_re.search(m.group("msg"))
+            for name_re, msg_re in ANDROID_TYPED_REAL
+        ):
+            real.append(entry)
         else:
             noise += 1
 
     for entry in real:
         print(f"error: {entry}")
+    classpath_note = (
+        f"android.jar: {android_jar}" if android_jar
+        else "нет Android SDK на classpath"
+    )
     print(f"\n{len(real)} problem(s), {noise} ожидаемых диагностик "
-          f"(нет Android SDK на classpath), {len(sources)} файлов")
+          f"({classpath_note}), {len(sources)} файлов")
     if not real:
         print("kotlin_frontend_check: ошибок, не связанных с отсутствующими зависимостями, нет")
     return 1 if real else 0

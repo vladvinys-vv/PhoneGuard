@@ -45,7 +45,10 @@ class PrivacyScannerRepository @Inject constructor(
             val installedPackages = packageManager.getInstalledPackages(PackageManager.GET_PERMISSIONS)
             installedPackages.mapNotNull { pkg ->
                 try {
-                    val appInfo = pkg.applicationInfo
+                    // PackageInfo.applicationInfo помечен в SDK как nullable: без проверки
+                    // первое же обращение (`appInfo.uid`) — потенциальный NPE на пакетах
+                    // без application-блока (часть системных и «полупустых» приложений).
+                    val appInfo = pkg.applicationInfo ?: return@mapNotNull null
                     val appName = packageManager.getApplicationLabel(appInfo).toString()
                     val appIcon = packageManager.getApplicationIcon(appInfo)
                     // Одним системным вызовом на приложение, а не на каждое разрешение:

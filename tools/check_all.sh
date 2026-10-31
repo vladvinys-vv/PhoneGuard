@@ -20,7 +20,13 @@ python3 tools/sync_strings.py --check || failed=1
 
 step "kotlin_frontend_check.py (опционально)"
 if command -v kotlinc >/dev/null 2>&1; then
-    python3 tools/kotlin_frontend_check.py || failed=1
+    # android.jar делает проверку строже; скрипт берёт его из --android-jar / $ANDROID_JAR /
+    # $ANDROID_HOME. Скачать его без dl.google.com: ./tools/fetch_android_jar.sh
+    jar_args=()
+    if [ -n "${ANDROID_JAR:-}" ]; then
+        jar_args=(--android-jar "$ANDROID_JAR")
+    fi
+    python3 tools/kotlin_frontend_check.py ${jar_args[@]+"${jar_args[@]}"} || failed=1
 else
     echo "skip: kotlinc не найден (нужен Kotlin 2.1+ и JDK 17)"
 fi
