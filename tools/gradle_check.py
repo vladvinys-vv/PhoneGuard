@@ -243,27 +243,157 @@ def check_proguard(files: list[Path], errors: list[str]) -> None:
                 errors.append(f"{path.relative_to(ROOT)}: нет файла ProGuard `{name}`")
 
 
-def check_dependencies(files: list[Path], errors: list[str], warnings: list[str]) -> None:
+DEPENDENCY_RE = re.compile(
+    r"\s*(implementation|api|kapt|ksp|testImplementation|androidTestImplementation|debugImplementation)"
+    r"\s+(?:platform\()?['\"]([\w.\-]+):([\w.\-]+):([^'\"]+)['\"]"
+)
+
+# Артефакт-рантайм -> артефакт-процессор: версии обязаны совпадать, иначе kapt падает.
+COMPILER_PAIRS = {
+    "com.google.dagger:hilt-android": "com.google.dagger:hilt-android-compiler",
+    "androidx.room:room-runtime": "androidx.room:room-compiler",
+    "androidx.hilt:hilt-work": "androidx.hilt:hilt-compiler",
+}
+
+# Известные риски зависимостей: старые артефакты, которые всё ещё собираются, но блокируют релиз.
+KNOWN_RISKS = {
+    "net.zetetic:android-database-sqlcipher": (
+        "артефакт закрыт (последняя версия 4.5.4, 2023) и не поддерживает 16 КБ страницы памяти — "
+        "нужен `net.zetetic:sqlcipher-android` (там `APP_SUPPORT_FLEXIBLE_PAGE_SIZES := true`), "
+        "иначе Play не примет обновление приложения с targetSdk 35+ (см. docs/RELEASE.md)"
+    ),
+}
+
+
+def resolve_version(raw: str, ext: dict[str, str]) -> str:
+    """`$rootProject.ext.hilt_version` -> `2.55`."""
+    match = re.search(r"ext\.(\w+)", raw)
+    if match:
+        return ext.get(match.group(1), raw)
+    return raw.strip("'\"")
+
+
+def collect_dependencies(files: list[Path], ext: dict[str, str]) -> dict[str, list[tuple[str, int, str]]]:
+    """{group:artifact: [(конфигурация, строка, версия)]} по всем Gradle-скриптам."""
+    found: dict[str, list[tuple[str, int, str]]] = {}
     for path in files:
-        seen: dict[str, tuple[str, int]] = {}
         for number, line in enumerate(read(path).splitlines(), start=1):
-            match = re.match(
-                r"\s*(implementation|api|kapt|ksp|testImplementation|androidTestImplementation|debugImplementation)\s+"
-                r"['\"]([\w.\-]+):([\w.\-]+):([^'\"]+)['\"]",
-                line,
-            )
+            match = DEPENDENCY_RE.match(line)
             if not match:
                 continue
-            configuration, group, artifact, version = match.groups()
-            coordinate = f"{group}:{artifact}"
-            previous = seen.get(coordinate)
-            if previous and previous[0] != version:
+            configuration, group, artifact, raw_version = match.groups()
+            version = resolve_version(raw_version, ext)
+            found.setdefault(f"{group}:{artifact}", []).append((configuration, number, version))
+    return found
+
+
+def check_dependencies(files: list[Path], ext: dict[str, str], errors: list[str], warnings: list[str]) -> None:
+    dependencies = collect_dependencies(files, ext)
+
+    for coordinate, entries in dependencies.items():
+        versions = {version for _, _, version in entries}
+        if len(versions) > 1:
+            warnings.append(
+                f"`{coordinate}` объявлен с разными версиями: {', '.join(sorted(versions))} "
+                f"(строки: {', '.join(str(number) for _, number, _ in entries)})"
+            )
+
+    for runtime, compiler in COMPILER_PAIRS.items():
+        if runtime not in dependencies and compiler not in dependencies:
+            continue
+        runtime_versions = {version for _, _, version in dependencies.get(runtime, [])}
+        compiler_versions = {version for _, _, version in dependencies.get(compiler, [])}
+        if runtime_versions and compiler_versions and runtime_versions != compiler_versions:
+            errors.append(
+                f"версии `{runtime}` ({', '.join(sorted(runtime_versions))}) и `{compiler}` "
+                f"({', '.join(sorted(compiler_versions))}) должны совпадать"
+            )
+
+    for coordinate, why in KNOWN_RISKS.items():
+        if coordinate in dependencies:
+            warnings.append(f"`{coordinate}`: {why}")
+    for coordinate, entries in dependencies.items():
+        if coordinate.startswith(("androidx.security:security-crypto", "androidx.biometric:biometric")):
+            for _, number, version in entries:
+                if "alpha" in version or "beta" in version:
+                    warnings.append(
+                        f"{coordinate}:{number}: предрелизная версия {version} — проверьте, нет ли стабильной"
+                    )
+
+    compose_bom = [
+        version
+        for _, _, version in dependencies.get("androidx.compose:compose-bom", [])
+    ]
+    if compose_bom:
+        for coordinate, entries in dependencies.items():
+            if not coordinate.startswith("androidx.compose") or coordinate == "androidx.compose:compose-bom":
+                continue
+            for _, number, version in entries:
                 warnings.append(
-                    f"{path.relative_to(ROOT)}:{number}: `{coordinate}` объявлен дважды с разными "
-                    f"версиями ({previous[0]} и {version})"
+                    f"{coordinate}:{number}: явная версия {version} при подключённом compose-bom "
+                    f"{compose_bom[0]} — BOM перестаёт управлять этим артефактом"
                 )
-            else:
-                seen[coordinate] = (version, number)
+
+
+PROGUARD_DIRECTIVES = {
+    "-keep", "-keepclassmembers", "-keepnames", "-keepclassmembernames",
+    "-keepclasseswithmembers", "-keepclasseswithmembernames",
+    "-dontwarn", "-dontnote", "-dontoptimize", "-dontobfuscate", "-dontshrink",
+    "-dontpreverify", "-dontcompress", "-optimizationpasses", "-optimizations",
+    "-allowaccessmodification", "-keepattributes", "-include", "-injars", "-outjars",
+    "-libraryjars", "-assumenosideeffects", "-assumenoexternalsideeffects",
+    "-assumevalues", "-whyareyoukeeping", "-verbose", "-repackageclasses",
+    "-flattenpackagehierarchy", "-adaptclassstrings", "-adaptresourcefilecontents",
+    "-adaptresourcefilenames", "-printmapping", "-printseeds", "-printusage",
+    "-applymapping", "-if", "-neverinline", "-alwaysinline", "-identifiernamestring",
+    "-keepdirectories", "-keeppackagenames", "-keepparameternames", "-renamesourcefileattribute",
+    "-dontusemixedcaseclassnames", "-dontskipnonpubliclibraryclasses",
+    "-dontskipnonpubliclibraryclassmembers", "-overloadaggressively", "-useuniqueclassmembernames",
+    "-dontusemixedcaseclassnames", "-ignorewarnings", "-dontnote", "-keepattributes",
+}
+
+PROGUARD_ATTRIBUTES = {
+    "Signature", "InnerClasses", "EnclosingMethod", "Exceptions", "SourceFile",
+    "LineNumberTable", "Deprecated", "MethodParameters", "RuntimeVisibleAnnotations",
+    "RuntimeInvisibleAnnotations", "RuntimeVisibleParameterAnnotations",
+    "RuntimeInvisibleParameterAnnotations", "AnnotationDefault", "LocalVariableTable",
+    "LocalVariableTypeTable", "*Annotation*",
+}
+
+
+def check_proguard_rules(files: list[Path], errors: list[str], warnings: list[str]) -> None:
+    """Синтаксис proguard-файлов: R8 падает на неизвестной директиве только в релизной сборке."""
+    for path in files:
+        for name in re.findall(r"proguardFiles[^\n]*?['\"]([\w./\-]+\.pro)['\"]", read(path)):
+            rules = path.parent / name
+            if not rules.exists():
+                continue
+            depth = 0
+            for number, line in enumerate(read(rules).splitlines(), start=1):
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if depth > 0:  # тело `-keep ... { … }` — директив внутри быть не может
+                    depth += stripped.count("{") - stripped.count("}")
+                    continue
+                if not stripped.startswith("-"):
+                    warnings.append(f"{rules.name}:{number}: строка вне директивы: {stripped[:60]}")
+                    continue
+                directive = stripped.split()[0]
+                if directive not in PROGUARD_DIRECTIVES:
+                    errors.append(
+                        f"{rules.name}:{number}: неизвестная директива `{directive}` — R8 упадёт "
+                        f"на релизной сборке"
+                    )
+                    continue
+                if stripped.endswith("{") and stripped.count("{") > stripped.count("}"):
+                    depth = 1
+                if directive == "-keepattributes":
+                    for attribute in re.split(r"[,\s]+", stripped[len(directive):].strip()):
+                        if attribute and attribute not in PROGUARD_ATTRIBUTES and "*" not in attribute:
+                            warnings.append(
+                                f"{rules.name}:{number}: необычный атрибут `{attribute}` в -keepattributes"
+                            )
 
 
 def check_androidx_flags(files: list[Path], errors: list[str]) -> None:
@@ -288,7 +418,8 @@ def main() -> int:
     check_versions(files, ext, errors, warnings)
     check_sdk_levels(files, errors)
     check_proguard(files, errors)
-    check_dependencies(files, errors, warnings)
+    check_proguard_rules(files, errors, warnings)
+    check_dependencies(files, ext, errors, warnings)
     check_androidx_flags(files, errors)
 
     for problem in errors:

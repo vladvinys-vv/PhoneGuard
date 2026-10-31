@@ -116,6 +116,16 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 
+# R8 сохраняет подписи обобщённых типов: без `Signature` Gson/Room не восстанавливают
+# generic-поля (`List<T>`, `Map<K,V>`) после обфускации — падение уже в рантайме.
+# `*Annotation*` нужен Retrofit-подобным и Hilt-генерируемым классам (аннотации читаются
+# рефлексией), `EnclosingMethod`/`InnerClasses` — для вложенных классов и лямбд.
+-keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
+
+# JSR-305 аннотации (`Nullable`, `Nonnull`) приходят из зависимостей как compileOnly —
+# без `-dontwarn` R8 считает их отсутствие ошибкой и валит `assembleProductionRelease`.
+-dontwarn javax.annotation.**
+
 # Optimization
 -optimizationpasses 5
 -allowaccessmodification

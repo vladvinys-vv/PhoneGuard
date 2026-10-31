@@ -3,6 +3,12 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **`tools/gradle_check.py`: проверки зависимостей.** Пары «рантайм ↔ обработчик» с обязательным
+  совпадением версий (`hilt-android`/`hilt-android-compiler`, `room-runtime`/`room-compiler`,
+  `hilt-work`/`hilt-compiler`), предупреждения о предрелизных версиях, о явных версиях
+  compose-артефактов при подключённом `compose-bom` и о закрытом
+  `net.zetetic:android-database-sqlcipher` (нет поддержки 16 КБ страниц → блокер Play при
+  `targetSdk 35`). Версии из `$rootProject.ext.*` резолвятся в реальные значения.
 - **`tools/gradle_check.py` — проверка конфигурации Gradle.** Ловит ошибки, которые Gradle
   показывает только при запуске и всегда одним и тем же многоэкранным стектрейсом Groovy:
   функции Kotlin stdlib в `.gradle` (`mapOf`, `listOf`, `val`, `.let { }`), `rootProject.ext.X`
@@ -202,6 +208,15 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **R8/ProGuard: подписи обобщённых типов и JSR-305.** В `app/proguard-rules.pro` не было
+  `-keepattributes Signature` (Gson/Room не восстанавливают generic-поля после обфускации —
+  падение уже в рантайме) и `-dontwarn javax.annotation.**` (R8 считает отсутствующие
+  compileOnly-аннотации ошибкой и валит `assembleProductionRelease`). Добавлена проверка
+  синтаксиса правил в `gradle_check.py`: неизвестная директива (опечатка `-dontwarns`) ловится
+  заранее, тело `-keep … { … }` при этом не разбирается.
+- **`aapt2_check.py` падал трейсбеком, если `aapt2` без права на исполнение.** Теперь
+  `run()` превращает `OSError` в понятный лог, а отсутствие `+x` сообщается отдельно
+  (`chmod +x '<путь>'`) вместо `PermissionError` из `subprocess`.
 - **Codemagic падал на `Lint`: `mapOf(...)` из Kotlin stdlib в Groovy DSL.**
   `app/build.gradle` вызывал `arguments += mapOf("room.schemaLocation" to …)` — такого метода в
   Groovy нет, поэтому конфигурация проекта падала с `MissingMethodException`, и вместе с ней

@@ -116,6 +116,16 @@ Gradle wrapper'а и `compileSdk` (с учётом `android.suppressUnsupportedC
 отсутствующий файл из `proguardFiles`; дубликаты зависимостей с разными версиями; отсутствие
 `android.useAndroidX=true`; `kapt`/Hilt без соответствующих плагинов.
 
+Проверяется и сам `app/proguard-rules.pro`: неизвестная директива R8 (опечатка вида `-dontwarns`)
+не видна до релизной сборки, а падает уже на `assembleProductionRelease`.
+
+Отдельно проверяются пары «рантайм ↔ обработчик» — их версии обязаны совпадать, иначе kapt падает
+на несовместимом API: `hilt-android` ↔ `hilt-android-compiler`, `room-runtime` ↔ `room-compiler`,
+`hilt-work` ↔ `hilt-compiler`. Предупреждения (не ошибки) выдаются про предрелизные версии
+(`security-crypto`, `biometric`), про явные версии compose-артефактов при подключённом
+`compose-bom` и про закрытый `net.zetetic:android-database-sqlcipher` — он не поддерживает 16 КБ
+страницы памяти, что блокирует публикацию с `targetSdk 35` (план миграции — `docs/RELEASE.md`).
+
 ```bash
 python3 tools/gradle_check.py
 python3 tools/gradle_check.py --warnings-as-errors
