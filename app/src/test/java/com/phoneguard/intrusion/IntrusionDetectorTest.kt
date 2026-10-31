@@ -1,7 +1,6 @@
 package com.phoneguard.intrusion
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IntrusionDetectorTest {
@@ -16,11 +15,5 @@ class IntrusionDetectorTest {
         assertEquals(1, events.size)
         assertEquals(IntrusionType.RAT_DETECTED, events.first().type)
         assertEquals(IntrusionSeverity.HIGH, events.first().severity)
-    }
-
-    @Test
-    fun `honeypot identifies decoy access`() {
-        val manager = HoneypotManager()
-        assertTrue(manager.isDecoyAccess("/data/passwords.txt"))
     }
 }

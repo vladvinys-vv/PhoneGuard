@@ -8,6 +8,7 @@ import com.phoneguard.data.local.BlockedLog
 import com.phoneguard.data.local.BlockedNumber
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.util.CsvImportHelper
+import com.phoneguard.util.PhoneNumberNormalizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -21,7 +22,8 @@ class CallBlockerViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
     private val appDatabase: com.phoneguard.data.local.AppDatabase,
     @ApplicationContext private val context: Context,
-    private val csvImportHelper: CsvImportHelper
+    private val csvImportHelper: CsvImportHelper,
+    private val phoneNumberNormalizer: PhoneNumberNormalizer
 ) : ViewModel() {
     private val blockedNumberDao = appDatabase.blockedNumberDao()
     private val blockedLogDao = appDatabase.blockedLogDao()
@@ -40,6 +42,9 @@ class CallBlockerViewModel @Inject constructor(
 
     private val _hasMoreWhitelist = MutableStateFlow(false)
     val hasMoreWhitelist: StateFlow<Boolean> = _hasMoreWhitelist.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     private val _hasMoreLogs = MutableStateFlow(false)
     val hasMoreLogs: StateFlow<Boolean> = _hasMoreLogs.asStateFlow()
@@ -64,8 +69,8 @@ class CallBlockerViewModel @Inject constructor(
 
     fun loadBlacklist() {
         viewModelScope.launch {
-            val items = blockedNumberDao.getPagedBlockedNumbers(pageSize, blacklistOffset.value)
-            val total = blockedNumberDao.getBlockedNumbersCount()
+            val items = blockedNumberDao.getPagedBlacklist(pageSize, blacklistOffset.value)
+            val total = blockedNumberDao.getBlacklistCount()
             _blacklistPage.value = items
             _hasMoreBlacklist.value = (blacklistOffset.value + items.size) < total
         }
@@ -73,8 +78,8 @@ class CallBlockerViewModel @Inject constructor(
 
     fun loadWhitelist() {
         viewModelScope.launch {
-            val items = blockedNumberDao.getPagedBlockedNumbers(pageSize, whitelistOffset.value)
-            val total = blockedNumberDao.getBlockedNumbersCount()
+            val items = blockedNumberDao.getPagedWhitelist(pageSize, whitelistOffset.value)
+            val total = blockedNumberDao.getWhitelistCount()
             _whitelistPage.value = items
             _hasMoreWhitelist.value = (whitelistOffset.value + items.size) < total
         }
@@ -90,10 +95,15 @@ class CallBlockerViewModel @Inject constructor(
     }
 
     fun addNumber(number: String, name: String? = null, isWhitelist: Boolean = false) {
+        val normalized = phoneNumberNormalizer.canonical(number)
+        if (normalized == null) {
+            _error.value = ERROR_INVALID_NUMBER
+            return
+        }
         viewModelScope.launch {
             blockedNumberDao.insertBlockedNumber(
                 BlockedNumber(
-                    phoneNumber = number,
+                    phoneNumber = normalized,
                     name = name,
                     isWhitelist = isWhitelist,
                     timestamp = System.currentTimeMillis()
@@ -140,9 +150,20 @@ class CallBlockerViewModel @Inject constructor(
         }
     }
 
+    fun clearError() {
+        _error.value = null
+    }
+
+    /** Валидация номера для UI (кнопка «добавить»). */
+    fun isValidNumber(number: String): Boolean = phoneNumberNormalizer.isValid(number)
+
     fun formatTimestamp(timestamp: Long): String {
         val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         return sdf.format(Date(timestamp))
+    }
+
+    companion object {
+        const val ERROR_INVALID_NUMBER = "invalid_number"
     }
 
     fun importFromCsv(uri: Uri, isWhitelist: Boolean = false) {

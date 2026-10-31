@@ -4,10 +4,10 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.phoneguard.util.PinAttemptLimiter
 import com.phoneguard.util.SecurityUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "phoneguard_prefs")
@@ -15,13 +15,38 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class PreferencesManager(private val context: Context) {
 
     companion object {
+        /** Файл-зеркало для выбранного языка (читается синхронно из Activity). */
+        const val LOCALE_PREFS = "phoneguard_locale"
+        const val LOCALE_KEY = "app_language"
+
+        private val SUPPORTED_LANGUAGES = setOf("ru", "en", "de")
+
+        /** Язык системы, если приложение его поддерживает; иначе язык по умолчанию (values/ = ru). */
+        fun defaultLanguage(): String {
+            val system = java.util.Locale.getDefault().language
+            return if (system in SUPPORTED_LANGUAGES) system else "ru"
+        }
+
+        /** Выбранный язык без корутин; `null` — использовать язык системы. */
+        fun readLanguage(context: Context): String? =
+            context.getSharedPreferences(LOCALE_PREFS, Context.MODE_PRIVATE)
+                .getString(LOCALE_KEY, null)
+
         private val KEY_PIN_HASH = stringPreferencesKey("pin_code_hash")
+
+        /** Счётчик неудачных вводов PIN и время окончания блокировки (см. [PinAttemptLimiter]). */
+        private val KEY_PIN_FAILED_ATTEMPTS = intPreferencesKey("pin_failed_attempts")
+        private val KEY_PIN_LOCKED_UNTIL = longPreferencesKey("pin_locked_until")
         private val KEY_BACKUP_NUMBER = stringPreferencesKey("backup_number")
         private val KEY_SIM_LOCK_ENABLED = booleanPreferencesKey("sim_lock_enabled")
         private val KEY_DEVICE_ADMIN_ENABLED = booleanPreferencesKey("device_admin_enabled")
         private val KEY_PHOTO_ON_FAILED_ATTEMPTS = booleanPreferencesKey("photo_on_failed_attempts")
         private val KEY_REMOTE_ALARM_ENABLED = booleanPreferencesKey("remote_alarm_enabled")
         private val KEY_IS_PRO = booleanPreferencesKey("is_pro")
+        // Чек всего телефона
+        private val KEY_DEVICE_AUDIT_SCORE = intPreferencesKey("device_audit_score")
+        private val KEY_DEVICE_AUDIT_ISSUES = intPreferencesKey("device_audit_issues")
+        private val KEY_DEVICE_AUDIT_TIME = longPreferencesKey("device_audit_time")
         private val KEY_LAST_SCAN_TIME = longPreferencesKey("last_scan_time")
         private val KEY_BLOCK_UNKNOWN = booleanPreferencesKey("block_unknown")
         private val KEY_BLOCK_HIDDEN = booleanPreferencesKey("block_hidden")
@@ -44,6 +69,12 @@ class PreferencesManager(private val context: Context) {
         // Shoulder Surfer
         private val KEY_SHOULDER_SURFER_ENABLED = booleanPreferencesKey("shoulder_surfer_enabled")
 
+        // Threat intelligence (opt-in, по умолчанию выключено)
+        private val KEY_THREAT_INTEL_ENABLED = booleanPreferencesKey("threat_intel_enabled")
+
+        /** Засеяна ли локальная база спам-номеров из `assets/spam_numbers.json`. */
+        private val KEY_SPAM_DB_SEEDED = booleanPreferencesKey("spam_db_seeded")
+
         // Theme
         private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
 
@@ -61,12 +92,54 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun savePinCode(pin: String) {
         val hashedPin = SecurityUtils.hashPin(pin)
-        context.dataStore.edit { it[KEY_PIN_HASH] = hashedPin }
+        context.dataStore.edit {
+            it[KEY_PIN_HASH] = hashedPin
+            // Новый PIN — новый счётчик попыток: старая блокировка не должна мешать.
+            it.remove(KEY_PIN_FAILED_ATTEMPTS)
+            it.remove(KEY_PIN_LOCKED_UNTIL)
+        }
     }
 
+    /**
+     * Проверяет PIN с ограничением числа попыток.
+     *
+     * Раньше проверка не ограничивалась ничем: SMS-команды `#PG:PIN:…` можно было
+     * подбирать бесконечно. Теперь после [PinAttemptLimiter.MAX_ATTEMPTS] неудач
+     * проверка отклоняется на [PinAttemptLimiter.LOCKOUT_MS], а успешный ввод
+     * сбрасывает счётчик. Состояние живёт в DataStore, поэтому перезагрузка
+     * устройства блокировку не снимает.
+     */
     suspend fun verifyPin(pin: String): Boolean {
-        val storedHash = context.dataStore.data.map { it[KEY_PIN_HASH] }.take(1).first()
-        return storedHash?.let { SecurityUtils.verifyPin(pin, it) } ?: false
+        val preferences = context.dataStore.data.first()
+        val now = System.currentTimeMillis()
+        val state = PinAttemptLimiter.State(
+            attempts = preferences[KEY_PIN_FAILED_ATTEMPTS] ?: 0,
+            lockedUntil = preferences[KEY_PIN_LOCKED_UNTIL] ?: 0L
+        )
+        if (state.isLocked(now)) return false
+
+        val storedHash = preferences[KEY_PIN_HASH] ?: return false
+        val isValid = SecurityUtils.verifyPin(pin, storedHash)
+        val next = if (isValid) {
+            PinAttemptLimiter.afterSuccess()
+        } else {
+            PinAttemptLimiter.afterFailure(state, now)
+        }
+        context.dataStore.edit { edit ->
+            if (next.attempts == 0) edit.remove(KEY_PIN_FAILED_ATTEMPTS) else edit[KEY_PIN_FAILED_ATTEMPTS] = next.attempts
+            if (next.lockedUntil == 0L) edit.remove(KEY_PIN_LOCKED_UNTIL) else edit[KEY_PIN_LOCKED_UNTIL] = next.lockedUntil
+        }
+        return isValid
+    }
+
+    /** Сколько ещё действует блокировка ввода PIN (0 — не заблокирован). */
+    suspend fun pinLockoutRemainingMs(): Long {
+        val preferences = context.dataStore.data.first()
+        val state = PinAttemptLimiter.State(
+            attempts = preferences[KEY_PIN_FAILED_ATTEMPTS] ?: 0,
+            lockedUntil = preferences[KEY_PIN_LOCKED_UNTIL] ?: 0L
+        )
+        return state.remainingMs(System.currentTimeMillis())
     }
 
     suspend fun clearPinCode() {
@@ -109,13 +182,13 @@ class PreferencesManager(private val context: Context) {
     }
 
     // Pro status
-    // Note: Pro features are currently unlocked for personal/internal use.
-    // Re-enable monetization check before publishing to Play Store.
-    val isPro: Flow<Boolean> = flow { emit(true) }
+    // Pro-функции разблокированы по умолчанию (личное использование), но флаг
+    // теперь реально сохраняется: иначе после включения монетизации интерфейс
+    // уже нельзя было бы перевести в платный режим без переустановки.
+    val isPro: Flow<Boolean> = context.dataStore.data.map { it[KEY_IS_PRO] ?: true }
 
     suspend fun setPro(isPro: Boolean) {
-        // No-op, pro is always enabled for personal use
-        // context.dataStore.edit { it[KEY_IS_PRO] = isPro }
+        context.dataStore.edit { it[KEY_IS_PRO] = isPro }
     }
 
     // Last scan
@@ -203,6 +276,46 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[KEY_INTRUSION_HONEYPOT] = enabled }
     }
 
+    // Чек всего телефона
+    /** Оценка последней проверки (0..100); `null` — проверок ещё не было. */
+    val deviceAuditScore: Flow<Int?> = context.dataStore.data.map { it[KEY_DEVICE_AUDIT_SCORE] }
+    val deviceAuditIssues: Flow<Int?> = context.dataStore.data.map { it[KEY_DEVICE_AUDIT_ISSUES] }
+    val deviceAuditTime: Flow<Long?> = context.dataStore.data.map { it[KEY_DEVICE_AUDIT_TIME] }
+
+    suspend fun saveDeviceAudit(score: Int, issues: Int, timestamp: Long = System.currentTimeMillis()) {
+        context.dataStore.edit {
+            it[KEY_DEVICE_AUDIT_SCORE] = score
+            it[KEY_DEVICE_AUDIT_ISSUES] = issues
+            it[KEY_DEVICE_AUDIT_TIME] = timestamp
+        }
+    }
+
+    // Threat intelligence (opt-in)
+    val isThreatIntelEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_THREAT_INTEL_ENABLED] ?: false }
+
+    suspend fun setThreatIntelEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_THREAT_INTEL_ENABLED] = enabled }
+    }
+
+    /**
+     * Засевалась ли база спам-номеров.
+     *
+     * Раньше сид выполнялся при каждой пустой таблице: пользователь удалял записи,
+     * а после перезапуска они возвращались.
+     */
+    val isSpamDatabaseSeeded: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_SPAM_DB_SEEDED] ?: false }
+
+    suspend fun setSpamDatabaseSeeded() {
+        context.dataStore.edit { it[KEY_SPAM_DB_SEEDED] = true }
+    }
+
+    /** Сброс флага: после «Удалить все данные» база засевается заново. */
+    suspend fun resetSpamDatabaseSeeded() {
+        context.dataStore.edit { it[KEY_SPAM_DB_SEEDED] = false }
+    }
+
     // Theme
     val isDarkTheme: Flow<Boolean> = context.dataStore.data.map { it[KEY_DARK_THEME] ?: false }
 
@@ -212,10 +325,24 @@ class PreferencesManager(private val context: Context) {
 
     // Language
     private val KEY_LANGUAGE = stringPreferencesKey("app_language")
-    val language: Flow<String> = context.dataStore.data.map { it[KEY_LANGUAGE] ?: "ru" }
+    val language: Flow<String> = context.dataStore.data.map { it[KEY_LANGUAGE] ?: defaultLanguage() }
 
     suspend fun setLanguage(lang: String) {
+        saveLanguageSync(lang)
         context.dataStore.edit { it[KEY_LANGUAGE] = lang }
+    }
+
+    /**
+     * Синхронная запись выбранного языка в SharedPreferences-зеркало.
+     *
+     * Нужна, чтобы `Activity.attachBaseContext()` (и последующий `recreate()`)
+     * увидели новый язык сразу: DataStore — асинхронный.
+     */
+    fun saveLanguageSync(lang: String) {
+        context.getSharedPreferences(LOCALE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(LOCALE_KEY, lang)
+            .apply()
     }
 
     // Onboarding

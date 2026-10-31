@@ -3,7 +3,6 @@ package com.phoneguard.data.local
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
-import com.phoneguard.intrusion.IntrusionSeverity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -26,6 +25,16 @@ interface IntrusionEventDao {
     @Query("UPDATE intrusion_events SET photoPath = :path WHERE id = :id")
     suspend fun updatePhotoPath(id: Long, path: String)
 
+    @Query("SELECT * FROM intrusion_events WHERE timestamp >= :since ORDER BY timestamp DESC")
+    suspend fun getSince(since: Long): List<IntrusionEventEntity>
+
+    @Query("SELECT * FROM intrusion_events WHERE timestamp < :cutoff")
+    suspend fun getOlderThan(cutoff: Long): List<IntrusionEventEntity>
+
     @Query("DELETE FROM intrusion_events WHERE timestamp < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)
+
+    /** Полная очистка журнала — вызывается пунктом «Удалить все данные». */
+    @Query("DELETE FROM intrusion_events")
+    suspend fun deleteAll()
 }

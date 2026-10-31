@@ -3,35 +3,48 @@ package com.phoneguard.antitheft
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.ImageFormat
-import android.graphics.SurfaceTexture
-import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CaptureRequest
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.telephony.SmsManager
-import androidx.camera.core.*
+import android.util.Log
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
-import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.R
 import com.phoneguard.data.local.IntrusionEventDao
+import com.phoneguard.util.SmsSender
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.*
 import java.io.File
-import java.io.FileOutputStream
-import java.util.concurrent.Executors
 import javax.inject.Inject
+import kotlin.coroutines.resume
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Stealth Camera Service.
- * Делает фото с задней камеры без показа превью.
- * Используется при SMS-команде #PG:PIN:PHOTO.
+ * Stealth Camera Service — фото с камеры без превью.
+ *
+ * Запускается по SMS-команде `#PG:PIN:PHOTO` и из `IntrusionResponseExecutor`.
+ *
+ * Что было не так раньше:
+ *  - в `CaptureRequest.Builder.addTarget(...)` передавался `SurfaceTexture`, а метод
+ *    принимает `Surface` — файл просто не компилировался;
+ *  - `ImageReader` создавался после запроса и подписывался на события без `Handler`
+ *    с Looper'ом (слушатель на IO-потоке падал);
+ *  - камера не закрывалась по таймауту, а `SurfaceTexture` — вообще никогда;
+ *  - упавшая съёмка всё равно отправляла SMS «фото сделано».
+ *
+ * Теперь используется CameraX `ImageCapture` (уже подключён в проекте): он сам
+ * управляет потоками, поворотом и закрытием устройства.
  */
 @AndroidEntryPoint
 class StealthCameraService : LifecycleService() {
@@ -40,19 +53,20 @@ class StealthCameraService : LifecycleService() {
         const val ACTION_TAKE_PHOTO = "com.phoneguard.antitheft.TAKE_PHOTO"
         const val EXTRA_SENDER = "sender_number"
         const val EXTRA_EVENT_ID = "event_id"
+
+        /** Каталог фото-улик внутри `getExternalFilesDir(null)` (используется и уборкой данных). */
+        const val OUTPUT_DIR = "phoneguard_stealth"
+
+        private const val TAG = "StealthCameraService"
         private const val NOTIFICATION_ID = 9001
         private const val CHANNEL_ID = "stealth_camera_channel"
-        private const val OUTPUT_DIR = "phoneguard_stealth"
+        private const val CAPTURE_TIMEOUT_MS = 20_000L
     }
-
-    @Inject
-    lateinit var preferencesManager: PreferencesManager
 
     @Inject
     lateinit var intrusionEventDao: IntrusionEventDao
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val cameraExecutor = Executors.newSingleThreadExecutor()
 
     override fun onBind(intent: Intent): IBinder? {
         super.onBind(intent)
@@ -67,8 +81,13 @@ class StealthCameraService : LifecycleService() {
             val eventId = intent.getLongExtra(EXTRA_EVENT_ID, -1L).takeIf { it > 0 }
             startForeground(NOTIFICATION_ID, createNotification())
             serviceScope.launch {
-                takePhoto(sender)
-                stopSelf()
+                try {
+                    takePhoto(sender, eventId)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Stealth photo failed", e)
+                } finally {
+                    stopSelf()
+                }
             }
         }
         return START_NOT_STICKY
@@ -77,7 +96,8 @@ class StealthCameraService : LifecycleService() {
     private fun createNotification(): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID, "PhoneGuard Anti-Theft",
+                CHANNEL_ID,
+                getString(R.string.stealth_camera_title),
                 NotificationManager.IMPORTANCE_MIN
             )
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -92,114 +112,112 @@ class StealthCameraService : LifecycleService() {
             .build()
     }
 
-    private suspend fun takePhoto(sender: String?, eventId: Long?) = suspendCancellableCoroutine<Unit> { cont ->
-        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    private suspend fun takePhoto(sender: String?, eventId: Long?) {
+        val outputDir = File(getExternalFilesDir(null), OUTPUT_DIR)
+        if (!outputDir.exists() && !outputDir.mkdirs()) {
+            Log.w(TAG, "Cannot create output dir $outputDir")
+            return
+        }
+        val photoFile = File(outputDir, "stealth_${System.currentTimeMillis()}.jpg")
 
-        try {
-            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
-                val characteristics = cameraManager.getCameraCharacteristics(id)
-                val facing = characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
-                facing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
-            } ?: cameraManager.cameraIdList.firstOrNull() ?: run {
-                cont.resume(Unit)
-                return@suspendCancellableCoroutine
-            }
+        val provider = awaitCameraProvider() ?: run {
+            Log.w(TAG, "Camera provider unavailable")
+            return
+        }
+        val imageCapture = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .build()
 
-            val outputDir = File(getExternalFilesDir(null), OUTPUT_DIR)
-            if (!outputDir.exists()) outputDir.mkdirs()
-            val photoFile = File(outputDir, "stealth_${System.currentTimeMillis()}.jpg")
+        val bound = bindCamera(provider, imageCapture)
+        if (!bound) {
+            Log.w(TAG, "No usable camera")
+            return
+        }
 
-            // Используем Camera2 API напрямую — не нужно preview
-            val stateCallback = object : CameraDevice.StateCallback() {
-                override fun onOpened(camera: CameraDevice) {
-                    try {
-                        val captureRequestBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-                        captureRequestBuilder.addTarget(
-                            android.view.SurfaceTexture(0).apply { setDefaultBufferSize(1920, 1080) }
-                        )
+        val saved = captureToFile(imageCapture, photoFile)
+        provider.unbindAll()
 
-                        // Для простоты: используем ImageReader
-                        val imageReader = android.media.ImageReader.newInstance(
-                            1920, 1080, ImageFormat.JPEG, 1
-                        )
+        if (!saved) {
+            photoFile.delete()
+            Log.w(TAG, "Photo was not saved")
+            return
+        }
 
-                        val surfaces = listOf(imageReader.surface)
-                        camera.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
-                            override fun onConfigured(session: CameraCaptureSession) {
-                                val captureRequest = captureRequestBuilder.build()
-                                session.capture(captureRequest, object : CameraCaptureSession.CaptureCallback() {}, null)
+        eventId?.let { id ->
+            runCatching { intrusionEventDao.updatePhotoPath(id, photoFile.absolutePath) }
+                .onFailure { Log.w(TAG, "Cannot attach photo to event $id", it) }
+        }
 
-                                imageReader.setOnImageAvailableListener({ reader ->
-                                    val image = reader.acquireNextImage()
-                                    val buffer = image.planes[0].buffer
-                                    val bytes = ByteArray(buffer.remaining())
-                                    buffer.get(bytes)
-
-                                    FileOutputStream(photoFile).use { it.write(bytes) }
-                                    image.close()
-                                    reader.close()
-                                    session.close()
-                                    camera.close()
-
-                                    eventId?.let { id ->
-                                        try {
-                                            intrusionEventDao.updatePhotoPath(id, photoFile.absolutePath)
-                                        } catch (_: Exception) {}
-                                    }
-
-                                    // Отправляем SMS с подтверждением
-                                    sender?.let { s ->
-                                        sendSms(s, "PhoneGuard: Фото сделано. Файл: ${photoFile.name}")
-                                    }
-
-                                    if (cont.isActive) cont.resume(Unit)
-                                }, null)
-                            }
-
-                            override fun onConfigureFailed(session: CameraCaptureSession) {
-                                camera.close()
-                                if (cont.isActive) cont.resume(Unit)
-                            }
-                        }, null)
-                    } catch (e: Exception) {
-                        camera.close()
-                        if (cont.isActive) cont.resume(Unit)
-                    }
-                }
-
-                override fun onDisconnected(camera: CameraDevice) {
-                    camera.close()
-                    if (cont.isActive) cont.resume(Unit)
-                }
-
-                override fun onError(camera: CameraDevice, error: Int) {
-                    camera.close()
-                    if (cont.isActive) cont.resume(Unit)
-                }
-            }
-
-            cameraManager.openCamera(cameraId, stateCallback, null)
-
-            // Timeout 30 секунд
-            Handler(android.os.Looper.getMainLooper()).postDelayed({
-                if (cont.isActive) cont.resume(Unit)
-            }, 30000)
-
-        } catch (e: Exception) {
-            if (cont.isActive) cont.resume(Unit)
+        // Подтверждение отправляем только если фото действительно сохранено.
+        sender?.let { destination ->
+            sendSms(destination, getString(R.string.stealth_photo_sent, photoFile.name))
         }
     }
 
+    /**
+     * Привязывает камеру: сначала заднюю, при её отсутствии — фронтальную.
+     * `bindToLifecycle` бросает `IllegalArgumentException`, если селектору не
+     * соответствует ни одна камера, поэтому перебор безопасен.
+     */
+    private fun bindCamera(provider: ProcessCameraProvider, imageCapture: ImageCapture): Boolean {
+        val selectors = listOf(
+            CameraSelector.DEFAULT_BACK_CAMERA,
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        )
+        selectors.forEach { selector ->
+            val bound = runCatching {
+                provider.unbindAll()
+                provider.bindToLifecycle(this, selector, imageCapture)
+            }
+            if (bound.isSuccess) return true
+            Log.w(TAG, "Camera bind failed: ${bound.exceptionOrNull()?.message}")
+        }
+        return false
+    }
+
+    private suspend fun awaitCameraProvider(): ProcessCameraProvider? =
+        withTimeoutOrNull(CAPTURE_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                val future = ProcessCameraProvider.getInstance(this@StealthCameraService)
+                future.addListener(
+                    {
+                        val provider = runCatching { future.get() }.getOrNull()
+                        if (cont.isActive) cont.resume(provider)
+                    },
+                    ContextCompat.getMainExecutor(this@StealthCameraService)
+                )
+            }
+        }
+
+    private suspend fun captureToFile(imageCapture: ImageCapture, file: File): Boolean =
+        withTimeoutOrNull(CAPTURE_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                val options = ImageCapture.OutputFileOptions.Builder(file).build()
+                imageCapture.takePicture(
+                    options,
+                    ContextCompat.getMainExecutor(this@StealthCameraService),
+                    object : ImageCapture.OnImageSavedCallback {
+                        override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                            if (cont.isActive) cont.resume(true)
+                        }
+
+                        override fun onError(exception: ImageCaptureException) {
+                            Log.w(TAG, "ImageCapture failed: ${exception.message}", exception)
+                            if (cont.isActive) cont.resume(false)
+                        }
+                    }
+                )
+            }
+        } ?: false
+
     private fun sendSms(destination: String, text: String) {
-        try {
-            val smsManager = SmsManager.getDefault()
-            smsManager.sendTextMessage(destination, null, text, null, null)
-        } catch (_: Exception) {}
+        // Общая точка отправки: учитывает длину сообщения, номер в E.164 и
+        // отсутствие телефонии на устройстве.
+        if (!SmsSender.send(this, destination, text)) Log.w(TAG, "Cannot send SMS")
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        cameraExecutor.shutdown()
         serviceScope.cancel()
     }
 }

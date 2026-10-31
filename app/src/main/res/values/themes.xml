@@ -1,4 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.PhoneGuard" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      Базовая тема платформы. Сам интерфейс рисует Compose (Material 3),
+      но тема определяет фон окна до первого кадра, вид системных панелей
+      и поведение force-dark. Раньше здесь была пустая тема без
+      windowBackground, из-за чего при запуске и при переключении тёмной темы
+      появлялась белая вспышка.
+    -->
+    <style name="Theme.PhoneGuard" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:colorBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@color/transparent</item>
+        <item name="android:navigationBarColor">@color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
+        <!-- Цвета задаёт Compose; системный force-dark их искажает. -->
+        <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
+    </style>
+
+    <!-- Для activity/сервисов без интерфейса (камера, подтверждение SIM). -->
+    <style name="Theme.PhoneGuard.Transparent" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
+    </style>
 </resources>

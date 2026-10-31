@@ -2,16 +2,12 @@ package com.phoneguard
 
 import android.app.Application
 import android.content.Context
-import android.os.Build
 import android.os.StrictMode
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.phoneguard.data.local.AppDatabase
+import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.intrusion.IntrusionRepository
 import com.phoneguard.util.CrashHandler
 import com.phoneguard.worker.DataCleanupWorker
@@ -23,7 +19,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONArray
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -45,6 +40,9 @@ class PhoneGuardApplication : Application(), Configuration.Provider {
     lateinit var intrusionRepository: IntrusionRepository
 
     @Inject
+    lateinit var preferencesManager: PreferencesManager
+
+    @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
     override val workManagerConfiguration: Configuration
@@ -54,6 +52,9 @@ class PhoneGuardApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // Порядок важен: обработчик падений ставится первым, чтобы ловить сбои
+        // последующей инициализации (StrictMode, WorkManager, DataStore, БД).
+        crashHandler.install()
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()
@@ -68,7 +69,8 @@ class PhoneGuardApplication : Application(), Configuration.Provider {
                     .build()
             )
         }
-        crashHandler.install()
+        // WorkManager здесь уже инициализирован (Application.onCreate отрабатывает раньше
+        // ContentProvider'ов, а конфигурация берётся из Configuration.Provider выше).
         scheduleDataCleanup()
         scheduleScheduledFullScan()
         seedSpamDatabase()
@@ -85,66 +87,59 @@ class PhoneGuardApplication : Application(), Configuration.Provider {
         }
     }
 
+    /**
+     * Однократный засев базы спам-номеров из `assets/spam_numbers.json`.
+     *
+     * Флаг в DataStore, а не «таблица пуста»: иначе удалённые пользователем записи
+     * возвращались при следующем запуске приложения.
+     */
     private fun seedSpamDatabase() {
         applicationScope.launch {
             try {
+                if (preferencesManager.isSpamDatabaseSeeded.first()) return@launch
                 val dao = database.spamNumberDao()
-                val existing = dao.getAllSpamNumbers().first()
-                if (existing.isEmpty()) {
-                    val json = assets.open("spam_numbers.json").bufferedReader().use { it.readText() }
-                    val array = JSONArray(json)
-                    for (i in 0 until array.length()) {
-                        val obj = array.getJSONObject(i)
-                        val phoneNumber = obj.getString("phoneNumber")
-                        val source = obj.optString("source", "seed")
-                        if (!dao.isSpam(phoneNumber)) {
-                            dao.insertSpamNumber(
-                                com.phoneguard.model.SpamNumber(
-                                    phoneNumber = phoneNumber,
-                                    source = source,
-                                    addedAt = System.currentTimeMillis()
-                                )
-                            )
-                        }
-                    }
+                val json = assets.open("spam_numbers.json").bufferedReader().use { it.readText() }
+                val array = JSONArray(json)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val phoneNumber = obj.getString("phoneNumber").trim()
+                    if (phoneNumber.isEmpty()) continue
+                    dao.insertSpamNumber(
+                        com.phoneguard.model.SpamNumber(
+                            phoneNumber = phoneNumber,
+                            source = obj.optString("source", "seed"),
+                            addedAt = System.currentTimeMillis()
+                        )
+                    )
                 }
+                preferencesManager.setSpamDatabaseSeeded()
             } catch (e: Exception) {
-                // ignore seed failure
+                // ignore seed failure — повторим при следующем запуске
             }
         }
     }
 
     private fun scheduleDataCleanup() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val cleanupRequest = PeriodicWorkRequestBuilder<DataCleanupWorker>(1, TimeUnit.DAYS)
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "data_cleanup",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            cleanupRequest
-        )
+        DataCleanupWorker.schedule(WorkManager.getInstance(this))
     }
 
+    /**
+     * Периодическое сканирование включается только по настройке.
+     *
+     * Раньше работа ставилась в очередь при каждом запуске приложения, даже если
+     * пользователь выключил «периодическое сканирование» — после перезапуска
+     * процесса она возвращалась.
+     */
     private fun scheduleScheduledFullScan() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-
-        val scanRequest = PeriodicWorkRequestBuilder<ScheduledFullScanWorker>(7, TimeUnit.DAYS)
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "scheduled_full_scan",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            scanRequest
-        )
+        applicationScope.launch {
+            val enabled = runCatching { preferencesManager.isScheduledScanEnabled.first() }
+                .getOrDefault(false)
+            val workManager = WorkManager.getInstance(this@PhoneGuardApplication)
+            if (enabled) {
+                ScheduledFullScanWorker.schedule(workManager)
+            } else {
+                ScheduledFullScanWorker.cancel(workManager)
+            }
+        }
     }
 }

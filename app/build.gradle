@@ -5,7 +5,6 @@ plugins {
     id 'dagger.hilt.android.plugin'
     id 'kotlin-parcelize'
     id 'org.jetbrains.kotlin.plugin.compose'
-    id 'com.google.gms.google-services' version '4.4.2' apply false
 }
 
 android {
@@ -98,9 +97,33 @@ android {
         buildConfig true
     }
 
+    sourceSets {
+        // Экспортированные схемы Room (app/schemas) нужны MigrationTestHelper, если тесты
+        // миграций снова появятся. В репозитории схем пока нет — они создаются первой
+        // сборкой, поэтому актуальную цепочку миграций проверяет JVM-тест
+        // AppDatabaseMigrationConfigTest.
+        androidTest.assets.srcDirs += files("$projectDir/schemas")
+    }
+
     packaging {
         resources {
-            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}', '/META-INF/DEPENDENCIES', '/META-INF/LICENSE*', '/META-INF/NOTICE*']
+        }
+    }
+
+    lint {
+        // Локализация неполная умышленно: отсутствующие строки берутся из values/ (fallback).
+        disable += ['MissingTranslation', 'UnusedResources']
+        abortOnError true
+        checkReleaseBuilds true
+    }
+
+    testOptions {
+        unitTests {
+            // android.util.Log и прочие заглушки android.jar возвращают значения
+            // по умолчанию вместо RuntimeException("Stub!").
+            returnDefaultValues = true
+            includeAndroidResources = true
         }
     }
 }
@@ -141,6 +164,17 @@ dependencies {
     // JSON serialization for scan reports
     implementation "com.google.code.gson:gson:2.11.0"
 
+    // Phone number parsing / E.164 normalisation (google/libphonenumber)
+    implementation "com.googlecode.libphonenumber:libphonenumber:$rootProject.ext.libphonenumber_version"
+
+    // HTTP client with certificate-pinning support (square/okhttp)
+    implementation platform("com.squareup.okhttp3:okhttp-bom:$rootProject.ext.okhttp_version")
+    implementation "com.squareup.okhttp3:okhttp"
+    implementation "com.squareup.okhttp3:logging-interceptor"
+
+    // APK / certificate inspection for the malware scanner (hsiafan/apk-parser)
+    implementation "net.dongliu:apk-parser:$rootProject.ext.apk_parser_version"
+
     // WorkManager
     implementation "androidx.work:work-runtime-ktx:$rootProject.ext.work_version"
     implementation "androidx.hilt:hilt-work:1.1.0"
@@ -172,12 +206,6 @@ dependencies {
     // ML Kit Face Detection (for shoulder surfer detection)
     implementation "com.google.android.gms:play-services-mlkit-face-detection:17.1.0"
 
-    // Firebase Crashlytics
-    implementation platform("com.google.firebase:firebase-bom:33.1.0")
-    implementation "com.google.firebase:firebase-crashlytics"
-    implementation "com.google.firebase:firebase-analytics"
-    implementation "com.google.firebase:firebase-performance"
-
     // Testing
     testImplementation "junit:junit:$rootProject.ext.junit_version"
     androidTestImplementation "androidx.test.ext:junit:1.2.1"
@@ -191,16 +219,15 @@ dependencies {
     
     // Mocking
     testImplementation "io.mockk:mockk:$rootProject.ext.mockk_version"
+    androidTestImplementation "io.mockk:mockk-android:$rootProject.ext.mockk_version"
+    androidTestImplementation "androidx.test:core-ktx:1.6.1"
+    androidTestImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$rootProject.ext.coroutines_version"
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$rootProject.ext.coroutines_version"
     testImplementation "app.cash.turbine:turbine:1.2.0"
     testImplementation "org.robolectric:robolectric:$rootProject.ext.roboversion"
+    testImplementation "com.squareup.okhttp3:mockwebserver"
 }
 
 kapt {
     correctErrorTypes true
-}
-
-if (file('google-services.json').exists()) {
-    apply plugin: 'com.google.gms.google-services'
-    apply plugin: 'com.google.firebase.crashlytics'
 }

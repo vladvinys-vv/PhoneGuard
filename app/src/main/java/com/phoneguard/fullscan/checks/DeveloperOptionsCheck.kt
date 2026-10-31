@@ -2,6 +2,7 @@ package com.phoneguard.fullscan.checks
 
 import android.content.Context
 import android.provider.Settings
+import com.phoneguard.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,15 +45,23 @@ class DeveloperOptionsCheck @Inject constructor(
             else -> "LOW"
         }
 
-        details.add("USB-отладка: ${if (adbEnabled) "ВКЛЮЧЕНА ⚠" else "выключена"}")
-        details.add("Developer Options: ${if (devOptionsEnabled) "ВКЛЮЧЕНЫ ⚠" else "выключены"}")
+        details.add(
+            context.getString(
+                if (adbEnabled) R.string.dev_options_usb_on else R.string.dev_options_usb_off
+            )
+        )
+        details.add(
+            context.getString(
+                if (devOptionsEnabled) R.string.dev_options_dev_on else R.string.dev_options_dev_off
+            )
+        )
 
         if (adbEnabled) {
-            details.add("USB-отладка позволяет подключаться к устройству через ADB.")
-            details.add("Рекомендация: отключить USB-отладку в Настройки > Для разработчиков.")
+            details.add(context.getString(R.string.dev_options_adb_hint))
+            details.add(context.getString(R.string.dev_options_adb_recommendation))
         }
         if (devOptionsEnabled) {
-            details.add("Рекомендация: отключить Developer Options, если вы не разработчик.")
+            details.add(context.getString(R.string.dev_options_recommendation))
         }
 
         return DevOptionsResult(adbEnabled, devOptionsEnabled, riskLevel, details)

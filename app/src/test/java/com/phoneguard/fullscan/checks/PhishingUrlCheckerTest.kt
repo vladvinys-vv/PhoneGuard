@@ -1,12 +1,22 @@
 package com.phoneguard.fullscan.checks
 
+import com.phoneguard.threatintel.ThreatIntelRepository
 import io.mockk.mockk
 import org.junit.Assert.*
 import org.junit.Test
 
+/**
+ * Локальная эвристика фишинга.
+ *
+ * Раньше конструктор вызывался с одним аргументом (только `Context`), хотя у
+ * `PhishingUrlChecker` их два — файл не компилировался.
+ */
 class PhishingUrlCheckerTest {
 
-    private val checker = PhishingUrlChecker(mockk(relaxed = true))
+    private val checker = PhishingUrlChecker(
+        mockk(relaxed = true),
+        mockk<ThreatIntelRepository>(relaxed = true)
+    )
 
     @Test
     fun `isSuspicious returns true for phishing message with link and keywords`() {
@@ -27,7 +37,7 @@ class PhishingUrlCheckerTest {
     }
 
     @Test
-    fun `isSuspicious returns true for t.me link with urgent keyword`() {
+    fun `isSuspicious returns true for telegram link with urgent keyword`() {
         val body = "Срочно подтвердите код по ссылке t.me/channel"
         assertTrue(checker.isSuspicious(body))
     }

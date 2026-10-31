@@ -3,7 +3,9 @@ package com.phoneguard.fullscan.checks
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import com.phoneguard.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -48,6 +50,10 @@ class DeviceAdminAbuseCheck @Inject constructor(
         "anti.theft", "spy"
     )
 
+    private fun isSystemApp(appInfo: ApplicationInfo): Boolean =
+        (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
+            (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+
     fun performCheck(): DeviceAdminResult {
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         val pm = context.packageManager
@@ -57,23 +63,31 @@ class DeviceAdminAbuseCheck @Inject constructor(
         val suspicious = activeAdmins.mapNotNull { component ->
             val pkg = component.packageName
 
-            // Легитимные admin пропускаем
+            // Собственные права Device Admin (анти-кража самого PhoneGuard) — не находка.
+            if (pkg == context.packageName) return@mapNotNull null
+            // Легитимные admin из списка пропускаем.
             if (knownLegitAdmins.contains(pkg)) return@mapNotNull null
 
-            val appName = try {
-                val appInfo = pm.getApplicationInfo(pkg, 0)
-                pm.getApplicationLabel(appInfo).toString()
+            val appInfo = try {
+                pm.getApplicationInfo(pkg, 0)
             } catch (_: PackageManager.NameNotFoundException) {
-                "Неизвестное приложение ($pkg)"
+                null
             }
 
-            val riskReason = if (suspiciousAdminPatterns.any { pattern ->
-                pkg.contains(pattern, ignoreCase = true) ||
-                appName.contains(pattern, ignoreCase = true)
-            }) {
-                "Подозрительное имя + права Device Admin"
-            } else {
-                "Неизвестный Device Admin (не из списка легитимных)"
+            // Предустановленные администраторы (MDM от производителя, корпоративные образы)
+            // — норма; раньше любой из них попадал в отчёт как «неизвестный Device Admin».
+            if (appInfo != null && isSystemApp(appInfo)) return@mapNotNull null
+
+            val appName = appInfo?.let { pm.getApplicationLabel(it).toString() }
+                ?: context.getString(R.string.device_admin_unknown_app, pkg)
+
+            val riskReason = when {
+                appInfo == null -> context.getString(R.string.device_admin_app_removed)
+                suspiciousAdminPatterns.any { pattern ->
+                    pkg.contains(pattern, ignoreCase = true) ||
+                        appName.contains(pattern, ignoreCase = true)
+                } -> context.getString(R.string.device_admin_suspicious_name)
+                else -> context.getString(R.string.device_admin_third_party)
             }
 
             SuspiciousAdmin(

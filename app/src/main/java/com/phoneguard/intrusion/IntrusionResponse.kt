@@ -1,13 +1,17 @@
 package com.phoneguard.intrusion
 
+import androidx.annotation.StringRes
+import com.phoneguard.R
+
 sealed interface IntrusionResponseAction {
     data class BlockPackage(val packageName: String) : IntrusionResponseAction
     data class BlockNetwork(val packageName: String?) : IntrusionResponseAction
     data object LockVault : IntrusionResponseAction
     data object StartAlarm : IntrusionResponseAction
     data object CapturePhoto : IntrusionResponseAction
-    data class NotifyTrustedContacts(val message: String) : IntrusionResponseAction
-    data class ShowWarning(val title: String, val message: String) : IntrusionResponseAction
+    /** @param messageRes текст SMS — ресурс, чтобы сообщение было на языке устройства. */
+    data class NotifyTrustedContacts(@StringRes val messageRes: Int) : IntrusionResponseAction
+    data class ShowWarning(val title: String, @StringRes val messageRes: Int) : IntrusionResponseAction
     data class CreateHoneypot(val name: String) : IntrusionResponseAction
     data object ExportLog : IntrusionResponseAction
 }
@@ -22,7 +26,7 @@ class IntrusionResponseOrchestrator {
             IntrusionSeverity.MEDIUM -> {
                 actions += IntrusionResponseAction.ShowWarning(
                     title = "PhoneGuard",
-                    message = "Подозрительная активность обнаружена"
+                    messageRes = R.string.intrusion_warning_suspicious
                 )
                 actions += IntrusionResponseAction.ExportLog
             }
@@ -32,8 +36,13 @@ class IntrusionResponseOrchestrator {
                 actions += IntrusionResponseAction.LockVault
                 actions += IntrusionResponseAction.StartAlarm
                 actions += IntrusionResponseAction.CapturePhoto
-                actions += IntrusionResponseAction.NotifyTrustedContacts("Обнаружена попытка взлома")
-                actions += IntrusionResponseAction.CreateHoneypot("intrusion_${event.timestamp}")
+                actions += IntrusionResponseAction.NotifyTrustedContacts(R.string.intrusion_sms_suspicious_activity)
+                // Для самого события «приманку открыли» новую приманку не создаём:
+                // иначе обработчик снова пишет файлы в наблюдаемый каталог и
+                // провоцирует бесконечную цепочку событий.
+                if (event.type != IntrusionType.HONEYPOT_ACCESSED) {
+                    actions += IntrusionResponseAction.CreateHoneypot("intrusion_${event.timestamp}")
+                }
                 actions += IntrusionResponseAction.ExportLog
             }
             IntrusionSeverity.CRITICAL -> {
@@ -42,11 +51,13 @@ class IntrusionResponseOrchestrator {
                 actions += IntrusionResponseAction.LockVault
                 actions += IntrusionResponseAction.StartAlarm
                 actions += IntrusionResponseAction.CapturePhoto
-                actions += IntrusionResponseAction.NotifyTrustedContacts("Критическая попытка взлома")
-                actions += IntrusionResponseAction.CreateHoneypot("critical_${event.timestamp}")
+                actions += IntrusionResponseAction.NotifyTrustedContacts(R.string.intrusion_sms_critical)
+                if (event.type != IntrusionType.HONEYPOT_ACCESSED) {
+                    actions += IntrusionResponseAction.CreateHoneypot("critical_${event.timestamp}")
+                }
                 actions += IntrusionResponseAction.ShowWarning(
                     title = "PhoneGuard",
-                    message = "Устройство защищено. Попытка взлома заблокирована"
+                    messageRes = R.string.intrusion_warning_blocked
                 )
                 actions += IntrusionResponseAction.ExportLog
             }
@@ -56,17 +67,68 @@ class IntrusionResponseOrchestrator {
 }
 
 class HoneypotManager {
+
+    /**
+     * Создаёт файлы-приманки и убирает старые.
+     *
+     * Раньше каждый инцидент добавлял новый набор `<timestamp>_passwords.txt` и никто их
+     * не удалял: каталог рос без ограничений, а наполнение приманок было текстом
+     * «PhoneGuard honeypot 42» — вредонос сразу понимает, что его ждут. Теперь:
+     *  - держим не больше [MAX_DECOY_SETS] наборов (старые удаляются при создании);
+     *  - содержимое похоже на настоящую находку для malware.
+     */
     fun createDecoys(context: android.content.Context, event: IntrusionEvent): List<File> {
-        val dir = java.io.File(context.filesDir, "phoneguard_honeypot")
+        val dir = java.io.File(context.filesDir, DIR_NAME)
         if (!dir.exists()) dir.mkdirs()
-        return decoyNames(event).map { name ->
-            java.io.File(dir, name).apply { if (!exists()) writeText("PhoneGuard honeypot ${event.id}") }
+        val created = decoyNames(event).map { name ->
+            java.io.File(dir, name).apply {
+                if (!exists()) runCatching { writeText(contentFor(name)) }
+            }
         }
+        // Чистим после создания: иначе в каталоге остаётся MAX_DECOY_SETS + 1 набор.
+        pruneOldDecoys(dir)
+        return created
     }
 
     fun decoyNames(event: IntrusionEvent): List<String> =
-        listOf("passwords.txt", "wallet_backup.json", "private_photos").map { "${event.timestamp}_$it" }
+        DECOY_BASE_NAMES.map { "${event.timestamp}_$it" }
 
-    fun isDecoyAccess(path: String): Boolean =
-        path.contains("passwords.txt") || path.contains("wallet_backup.json") || path.contains("private_photos")
+    /** Доступ к приманке определяем по точному имени файла, а не по вхождению подстроки. */
+    fun isDecoyAccess(path: String): Boolean {
+        val name = java.io.File(path).name
+        return DECOY_PATTERN.matches(name)
+    }
+
+    private fun pruneOldDecoys(dir: java.io.File) {
+        val decoys = dir.listFiles { file -> DECOY_PATTERN.matches(file.name) } ?: return
+        val sets = decoys
+            .map { it.name.substringBefore('_').toLongOrNull() ?: 0L }
+            .distinct()
+            .sortedDescending()
+        val expired = sets.drop(MAX_DECOY_SETS).toSet()
+        if (expired.isEmpty()) return
+        decoys.filter { it.name.substringBefore('_').toLongOrNull() in expired }
+            .forEach { runCatching { it.delete() } }
+    }
+
+    private fun contentFor(fileName: String): String = when {
+        fileName.endsWith("passwords.txt") ->
+            "mail: kunde.beispiel@example.com\npassword: Sommer2021!\npin: 4821\n"
+        fileName.endsWith("wallet_backup.json") ->
+            """{"mnemonic":"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about","created":"2021-04-11"}"""
+        else -> buildString {
+            appendLine("IMG_20210411_182233.jpg")
+            appendLine("IMG_20210411_182310.jpg")
+            append("IMG_20210411_182402.jpg")
+        }
+    }
+
+    companion object {
+        /** Каталог приманок внутри `filesDir` (используется и уборкой данных). */
+        const val DIR_NAME = "phoneguard_honeypot"
+
+        private const val MAX_DECOY_SETS = 3
+        private val DECOY_BASE_NAMES = listOf("passwords.txt", "wallet_backup.json", "private_photos")
+        private val DECOY_PATTERN = Regex("""^\d+_(${DECOY_BASE_NAMES.joinToString("|") { Regex.escape(it) }})$""")
+    }
 }

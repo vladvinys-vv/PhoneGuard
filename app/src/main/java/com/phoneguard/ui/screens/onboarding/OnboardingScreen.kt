@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -27,8 +28,10 @@ fun OnboardingScreen(
     onCompleted: () -> Unit = {}
 ) {
     val isCompleted by viewModel.isCompleted.collectAsState()
-    if (isCompleted) {
-        onCompleted()
+    // Побочный эффект нельзя вызывать прямо в теле композиции — только в LaunchedEffect,
+    // иначе колбэк выполняется на каждой рекомпозиции.
+    LaunchedEffect(isCompleted) {
+        if (isCompleted) onCompleted()
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -50,10 +53,7 @@ fun OnboardingScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
             Button(
-                onClick = {
-                    viewModel.completeOnboarding()
-                    onCompleted()
-                },
+                onClick = { viewModel.completeOnboarding() },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.onboarding_get_started))

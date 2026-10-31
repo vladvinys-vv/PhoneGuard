@@ -3,16 +3,29 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ============================== -->
+    <!-- HARDWARE FEATURES -->
+    <!-- ============================== -->
+    <!-- Приложение работает и без этих модулей: разрешения запрашиваются по требованию.
+         Без required="false" Play считает камеру/микрофон/GPS/телефонию обязательными
+         и скрывает приложение от Wi-Fi-only планшетов и части ТВ-боксов. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+
+    <!-- ============================== -->
     <!-- CORE PERMISSIONS -->
     <!-- ============================== -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Android 14+ требует тип foreground-сервиса для VPN-фаервола -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- ============================== -->
@@ -38,16 +51,14 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Foreground service camera type (Android 14+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <!-- Microphone for audio recording -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- External storage for saving photos/recording -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Чтение общего хранилища: полносканирование MediaStore. На Android 13+ приложение
+         не запрашивает READ_MEDIA_*, поэтому область видимости ограничена (см.
+         strings `file_scan_limit_scoped_storage`) — не заявляем больше, чем нужно. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <!-- Android 13+ media permissions -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <!-- Device Admin for protection against uninstall -->
     <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
     <!-- System Alert Window for Overlay -->
@@ -59,28 +70,38 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
     <!-- ============================== -->
     <!-- PRIVACY SCANNER PERMISSIONS -->
     <!-- ============================== -->
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
-        tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND"
-        android:maxSdkVersion="33" />
+    <!--
+      Сканер malware/шпионского ПО анализирует ВСЕ установленные приложения.
+      Без QUERY_ALL_PACKAGES на Android 11+ PackageManager возвращает только
+      «видимые» пакеты (около десятка), и проверка становится бессмысленной.
+      Это разрешённый вариант использования для антивируса/безопасности в Play.
+    -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
 
     <!-- ============================== -->
     <!-- FIREWALL / VPN PERMISSIONS -->
     <!-- ============================== -->
     <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
-    <uses-permission android:name="android.permission.MANAGE_NETWORK_POLICY"
-        tools:ignore="ProtectedPermissions" />
 
     <!-- ============================== -->
     <!-- BATTERY OPTIMIZATION EXCLUSION -->
     <!-- ============================== -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Разблокировка сейфа через BiometricPrompt (без этого разрешения
+         BiometricPrompt.authenticate() завершается ошибкой) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission
+        android:name="android.permission.USE_FINGERPRINT"
+        android:maxSdkVersion="27" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -92,6 +113,8 @@
     <application
         android:name=".PhoneGuardApplication"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="${appLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -119,10 +142,22 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.PhoneGuard">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Ссылки `phoneguard://…`: ими пользуются ярлыки на рабочем столе
+                 (res/xml/shortcuts.xml) и внешние вызовы вида
+                 `adb shell am start -a android.intent.action.VIEW -d phoneguard://settings`.
+                 Граф навигации объявляет те же шаблоны через navDeepLink. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="phoneguard" />
             </intent-filter>
         </activity>
 
@@ -147,6 +182,18 @@
             android:exported="true"
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- SMS Spam Filter (blacklist / spam database) -->
+        <receiver
+            android:name=".callblocker.SmsSpamReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <!-- Ниже приоритета анти-воровских команд (999): сначала обрабатываются
+                 команды владельца, затем — фильтрация спама. -->
+            <intent-filter android:priority="998">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
@@ -177,45 +224,43 @@
         <service
             android:name=".firewall.PhoneGuardVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="vpn_firewall" />
         </service>
 
         <!-- SIM Swap Confirmation -->
+        <!-- Экран подтверждения подмены SIM. Запускается только своим PendingIntent'ом из
+             уведомления (simswap/SimSwapNotifications.kt), поэтому exported="false" —
+             чужие приложения не могут показать пользователю поддельное «подтвердите SIM».
+             Поверх блокировки экрана активность показывает себя сама
+             (setShowWhenLocked/setTurnScreenOn). -->
         <activity
             android:name=".simswap.SimSwapConfirmationActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.PhoneGuard"
             android:taskAffinity=""
             android:excludeFromRecents="true"
-            android:launchMode="singleTask"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-            </intent-filter>
-        </activity>
+            android:launchMode="singleTask" />
 
         <!-- Intrusion Warning Activity -->
         <activity
             android:name=".ui.IntrusionWarningActivity"
             android:exported="false"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true"
             android:theme="@style/Theme.PhoneGuard" />
 
-        <!-- Intrusion Response Service -->
-        <service
-            android:name=".intrusion.IntrusionResponseService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
-
         <!-- SIM Swap Receiver -->
+        <!-- exported=false: системные broadcast'ы (SIM_STATE_CHANGED, BOOT_COMPLETED)
+             защищённые, доставляются приёмнику и без экспорта, а сторонние приложения
+             не смогут подделать событие подмены SIM. -->
         <receiver
             android:name=".simswap.SimSwapReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.SIM_STATE_CHANGED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -231,5 +276,16 @@
                 <data android:scheme="package" />
             </intent-filter>
         </receiver>
+        <!-- Открывает расшифрованный предпросмотр сейфа внешнему просмотрщику -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 </manifest>

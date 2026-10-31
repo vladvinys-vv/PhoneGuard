@@ -13,6 +13,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * Экспорт журналов в JSON-файл во внешнем каталоге приложения.
+ *
+ * Единственная реализация экспорта: `SettingsRepository.exportLogs()` раньше держал
+ * свою копию, и они расходились (например, в одной не было `trafficDirection`).
+ */
 object LogExporter {
 
     suspend fun exportToJson(
@@ -31,10 +37,16 @@ object LogExporter {
         scanHistory: List<ScanHistory>
     ): File? {
         return try {
-            val exportDir = File(context.getExternalFilesDir(null), "exports")
-            if (!exportDir.exists()) exportDir.mkdirs()
+            // getExternalFilesDir() возвращает null, если внешнее хранилище недоступно
+            // (оно может быть отмонтировано) — File(null, …) давал относительный путь,
+            // запись в который молча падала.
+            val externalDir = context.getExternalFilesDir(null) ?: return null
+            val exportDir = File(externalDir, "exports")
+            if (!exportDir.exists() && !exportDir.mkdirs()) return null
 
-            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            // Locale.US: в некоторых локалях цифры в имени файла экзотические,
+            // и файл потом неудобно искать/сортировать.
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val file = File(exportDir, "phoneguard_export_$timestamp.json")
 
             val json = JSONObject()
@@ -57,6 +69,7 @@ object LogExporter {
                 obj.put("domainName", log.domainName)
                 obj.put("timestamp", log.timestamp)
                 obj.put("connectionType", log.connectionType)
+                obj.put("trafficDirection", log.trafficDirection)
                 firewallArray.put(obj)
             }
             json.put("firewallLogs", firewallArray)

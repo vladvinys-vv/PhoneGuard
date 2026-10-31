@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import com.phoneguard.R
+import com.phoneguard.util.HiddenAppHeuristics
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,15 +30,39 @@ class HiddenAppsCheck @Inject constructor(
         val appName: String,
         val installTime: Long,
         val targetSdk: Int,
-        val riskReason: String
+        /** Человекочитаемая причина, уже локализованная. */
+        val riskReason: String,
+        /**
+         * Имя пакета похоже на системное/маскирующееся.
+         *
+         * Флаг нужен вызывающему коду: раньше он искал подстроку «Подозрительное» в
+         * [riskReason], то есть зависел от русского текста и переставал работать
+         * при любой смене формулировки или языка.
+         */
+        val isSuspiciousName: Boolean = false,
+        /** Опасные разрешения, которые запрашивает приложение. */
+        val dangerousPermissions: List<String> = emptyList()
     )
 
-    // Подозрительные паттерны имён пакетов для скрытых приложений
-    private val suspiciousHiddenPatterns = listOf(
-        "com.android.system", "com.android.service",
-        "com.google.service", "com.system.update",
-        "update.service", "android.system"
-    )
+    /** `PackageInfo` с activity и списком разрешений (флаги различаются до/после API 33). */
+    private fun queryPackageInfo(packageName: String): android.content.pm.PackageInfo? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageInfo(
+                packageName,
+                PackageManager.PackageInfoFlags.of(
+                    (PackageManager.GET_ACTIVITIES or PackageManager.GET_PERMISSIONS).toLong()
+                )
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(
+                packageName,
+                PackageManager.GET_ACTIVITIES or PackageManager.GET_PERMISSIONS
+            )
+        }
+    } catch (_: Exception) {
+        null
+    }
 
     fun performCheck(): HiddenAppsResult {
         val pm = context.packageManager
@@ -58,33 +84,46 @@ class HiddenAppsCheck @Inject constructor(
             launchIntent == null
         }.mapNotNull { appInfo ->
             val pkg = appInfo.packageName
+            val packageInfo = queryPackageInfo(pkg) ?: return@mapNotNull null
+            // PackageInfo.applicationInfo в SDK nullable — проверяем явно, иначе
+            // `packageInfo.applicationInfo.targetSdkVersion` падал бы NPE.
+            val packageAppInfo = packageInfo.applicationInfo ?: return@mapNotNull null
+
+            val requested = packageInfo.requestedPermissions?.toSet().orEmpty()
+            val dangerous = HiddenAppHeuristics.dangerousPermissions(requested)
+            val hasSuspiciousName = HiddenAppHeuristics.hasSuspiciousName(pkg)
+
+            // Приложение вообще без activity — это библиотека/плагин/аддон (иконки,
+            // виджеты, камера-паки), а не «спрятанная» программа; эвристика это учитывает.
+            if (!HiddenAppHeuristics.isHiddenAppCandidate(
+                    packageInfo.activities?.size ?: 0,
+                    requested,
+                    pkg
+                )
+            ) {
+                return@mapNotNull null
+            }
+
             val appName = try {
                 pm.getApplicationLabel(appInfo).toString()
             } catch (_: Exception) { pkg }
 
-            val packageInfo = try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-                } else {
-                    @Suppress("DEPRECATION")
-                    pm.getPackageInfo(pkg, 0)
-                }
-            } catch (_: Exception) { return@mapNotNull null }
-
-            val riskReason = if (suspiciousHiddenPatterns.any { pattern ->
-                pkg.contains(pattern, ignoreCase = true)
-            }) {
-                "Подозрительное имя пакета + скрыт из лаунчера"
-            } else {
-                "Скрыт из лаунчера (нет activity с LAUNCHER intent)"
+            val permissionNames = dangerous.joinToString(", ") { it.substringAfterLast('.') }
+            val riskReason = when {
+                hasSuspiciousName && dangerous.isNotEmpty() ->
+                    context.getString(R.string.hidden_app_reason_suspicious_perms, permissionNames)
+                hasSuspiciousName -> context.getString(R.string.hidden_app_reason_suspicious)
+                else -> context.getString(R.string.hidden_app_reason_perms, permissionNames)
             }
 
-            HiddenAppsCheck.HiddenApp(
+            HiddenApp(
                 packageName = pkg,
                 appName = appName,
                 installTime = packageInfo.firstInstallTime,
-                targetSdk = packageInfo.applicationInfo.targetSdkVersion,
-                riskReason = riskReason
+                targetSdk = packageAppInfo.targetSdkVersion,
+                riskReason = riskReason,
+                isSuspiciousName = hasSuspiciousName,
+                dangerousPermissions = dangerous.toList()
             )
         }
 

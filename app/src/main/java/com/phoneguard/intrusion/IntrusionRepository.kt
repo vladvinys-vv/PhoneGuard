@@ -15,25 +15,28 @@ class IntrusionRepository @Inject constructor(
     private val honeypotManager: HoneypotManager,
     private val intrusionResponseExecutor: IntrusionResponseExecutor
 ) {
+    /**
+     * Сканирует окружение и записывает **только новые** события.
+     *
+     * Раньше каждое сканирование (а оно выполняется на каждом старте приложения)
+     * заново вставляло те же самые сигналы — эмулятор, включённый ADB, debug-сборка —
+     * и запускало по ним реакцию (тревога, фото, SMS). Теперь сигнал, который уже
+     * зафиксирован за последние сутки (тот же тип + те же доказательства),
+     * пропускается.
+     */
     suspend fun scan(context: android.content.Context): List<IntrusionEvent> = withContext(Dispatchers.IO) {
-        val events = intrusionDetector.detect(intrusionDetector.collectEnvironmentSignals(context))
+        val detected = intrusionDetector.detect(intrusionDetector.collectEnvironmentSignals(context))
+        val since = System.currentTimeMillis() - IntrusionScanPolicy.DEDUP_WINDOW_MS
+        val recent = intrusionEventDao.getSince(since).map { it.toIntrusionEvent() }
+        val events = IntrusionScanPolicy.selectNewEvents(detected, recent)
+
         events.forEach { event ->
-            intrusionEventDao.insert(
-                IntrusionEventEntity(
-                    timestamp = event.timestamp,
-                    type = event.type,
-                    severity = event.severity,
-                    evidence = event.evidence.entries.joinToString(";") { "${it.key}=${it.value}" },
-                    uid = event.uid,
-                    packageName = event.packageName,
-                    ipAddress = event.ipAddress,
-                    photoPath = event.photoPath,
-                    handled = event.handled
-                )
-            )
+            intrusionEventDao.insert(event.toEntity())
             val actions = intrusionResponseOrchestrator.plan(event)
             intrusionResponseExecutor.execute(event, actions)
-            honeypotManager.decoyNames(event)
+            // Приманки действительно создаются (раньше здесь считались только имена,
+            // и файлы не появлялись вовсе).
+            honeypotManager.createDecoys(context, event)
         }
         events
     }
@@ -44,17 +47,5 @@ class IntrusionRepository @Inject constructor(
         intrusionResponseExecutor.execute(event, actions)
     }
 
-    fun toEntity(event: IntrusionEvent): IntrusionEventEntity =
-        IntrusionEventEntity(
-            id = event.id,
-            timestamp = event.timestamp,
-            type = event.type,
-            severity = event.severity,
-            evidence = event.evidence.entries.joinToString(";") { "${it.key}=${it.value}" },
-            uid = event.uid,
-            packageName = event.packageName,
-            ipAddress = event.ipAddress,
-            photoPath = event.photoPath,
-            handled = event.handled
-        )
+    fun toEntity(event: IntrusionEvent): IntrusionEventEntity = event.toEntity()
 }

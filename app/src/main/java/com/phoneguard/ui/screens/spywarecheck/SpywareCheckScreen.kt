@@ -5,10 +5,8 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,6 +17,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.RiskLevel
 import com.phoneguard.model.SpywareIndicator
+import com.phoneguard.util.IntentUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +56,7 @@ fun SpywareCheckScreen(
                         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", app.packageName, null)
                         }
-                        context.startActivity(intent)
+                        IntentUtils.open(context, intent)
                     }
                 )
                 Divider()
@@ -71,7 +70,7 @@ fun SpywareCheckScreen(
                     riskLevel = RiskLevel.HIGH,
                     onAppClick = { app ->
                         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        context.startActivity(intent)
+                        IntentUtils.open(context, intent)
                     }
                 )
                 Divider()
@@ -87,7 +86,7 @@ fun SpywareCheckScreen(
                         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", app.packageName, null)
                         }
-                        context.startActivity(intent)
+                        IntentUtils.open(context, intent)
                     }
                 )
                 Divider()
@@ -103,7 +102,7 @@ fun SpywareCheckScreen(
                         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", app.packageName, null)
                         }
-                        context.startActivity(intent)
+                        IntentUtils.open(context, intent)
                     }
                 )
             }
@@ -195,6 +194,14 @@ fun IndicatorSection(
                                 SpywareIndicator.ACCESSIBILITY_SERVICE -> stringResource(R.string.accessibility_services)
                                 SpywareIndicator.SIDELOADED -> stringResource(R.string.sideloaded)
                                 SpywareIndicator.HIDDEN_LAUNCHER -> stringResource(R.string.hidden)
+                                SpywareIndicator.DEBUG_SIGNATURE ->
+                                    stringResource(R.string.indicator_debug_signature)
+                                SpywareIndicator.WEAK_SIGNATURE ->
+                                    stringResource(R.string.indicator_weak_signature)
+                                SpywareIndicator.EXPIRED_CERTIFICATE ->
+                                    stringResource(R.string.indicator_expired_certificate)
+                                SpywareIndicator.MODIFIED_AFTER_INSTALL ->
+                                    stringResource(R.string.indicator_modified_after_install)
                             }
                         }
                         Text(indicators)

@@ -5,10 +5,19 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.repository.PrivacyScannerRepository
 import com.phoneguard.model.PrivacyApp
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 sealed class PrivacyFilter {
@@ -52,11 +61,32 @@ class PrivacyScannerViewModel @Inject constructor(
         loadApps()
     }
 
+    private var loadJob: Job? = null
+
+    /**
+     * Загружает список приложений.
+     *
+     * Исправления: повторный вызов отменяет предыдущую загрузку (иначе несколько
+     * подписок на один поток), ошибка чтения пакетов больше не оставляет экран в
+     * вечной загрузке, а `_isLoading` не остаётся `true` на пустом списке.
+     */
     fun loadApps() {
-        viewModelScope.launch {
-            repository.getInstalledApps().collect { appList ->
-                _apps.value = appList
-                _isLoading.value = appList.isEmpty()
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                repository.getInstalledApps().collect { appList ->
+                    _apps.value = appList
+                    _isLoading.value = false
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _isLoading.value = false
+            } finally {
+                // Отменённая загрузка не должна гасить индикатор новой: иначе
+                // повторный `loadApps()` сразу после отмены оставляет экран «пустым».
+                if (isActive) _isLoading.value = false
             }
         }
     }

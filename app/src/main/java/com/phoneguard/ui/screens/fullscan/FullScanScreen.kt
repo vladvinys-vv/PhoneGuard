@@ -1,10 +1,19 @@
 package com.phoneguard.ui.screens.fullscan
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,8 +24,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.compose.rememberNavController
 import com.phoneguard.R
+import com.phoneguard.fullscan.FullScanOrchestrator
 import com.phoneguard.model.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -28,15 +37,55 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
     val progress by viewModel.progress.collectAsState()
     val report by viewModel.report.collectAsState()
     val scanHistory by viewModel.scanHistory.collectAsState()
-    val navController = rememberNavController()
+    val blockedReason by viewModel.scanBlockedReason.collectAsState()
+    val scanFailed by viewModel.scanFailed.collectAsState()
+    val comparison by viewModel.comparison.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val tooSoonText = stringResource(R.string.scan_too_soon)
+    val alreadyRunningText = stringResource(R.string.scan_already_running)
+    LaunchedEffect(blockedReason) {
+        val message = when (blockedReason) {
+            FullScanViewModel.ScanBlockedReason.TOO_SOON -> tooSoonText
+            FullScanViewModel.ScanBlockedReason.ALREADY_RUNNING -> alreadyRunningText
+            null -> null
+        }
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearBlockedReason()
+        }
+    }
+
+    val scanFailedText = stringResource(R.string.scan_failed)
+    LaunchedEffect(scanFailed) {
+        if (scanFailed) {
+            snackbarHostState.showSnackbar(scanFailedText)
+            viewModel.clearScanFailed()
+        }
+    }
+
+    // Детали открываются внутри экрана: вложенный NavHost на каждое открытие
+    // создавал второй контроллер навигации и второй Scaffold с top bar.
+    var selectedScan by remember { mutableStateOf<ScanHistory?>(null) }
+    val current = selectedScan
+    if (current != null) {
+        BackHandler { selectedScan = null }
+        ScanDetailScreen(scan = current, onBack = { selectedScan = null }, viewModel = viewModel)
+        return
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.full_scan)) },
                 actions = {
                     if (!isScanning) {
-                        IconButton(onClick = { viewModel.startScan() }, contentDescription = stringResource(R.string.scan_now)) {
+                        IconButton(
+                            onClick = { viewModel.startScan() },
+                            contentDescription = stringResource(R.string.scan_now)
+                        ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null)
                         }
                     }
@@ -44,54 +93,46 @@ fun FullScanScreen(viewModel: FullScanViewModel = hiltViewModel()) {
             )
         }
     ) { padding ->
-        NavHost(navController = navController, startDestination = "fullscan_main") {
-            composable("fullscan_main") {
-                Column(
-                    modifier = Modifier
-                        .padding(padding)
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
-                    if (isScanning) {
-                        ScanProgressCard(progress)
-                    }
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            if (isScanning) {
+                ScanProgressCard(progress)
+            }
 
-                    report?.let { r ->
-                        ScanReportCard(report = r)
-                    }
-
-                    if (scanHistory.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = stringResource(R.string.scan_history),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            items(scanHistory) { history ->
-                                ScanHistoryCard(
-                                    history = history,
-                                    onClick = {
-                                        navController.navigate("scan_detail/${history.id}")
-                                    }
-                                )
-                            }
-                        }
-                    }
+            report?.let { r ->
+                ScanReportCard(report = r)
+                comparison?.let { cmp ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${if (cmp.riskScoreDiff >= 0) "+" else ""}${cmp.riskScoreDiff} / " +
+                            "${if (cmp.issuesDiff >= 0) "+" else ""}${cmp.issuesDiff}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-            composable("scan_detail/{scanId}") { backStackEntry ->
-                val scanId = backStackEntry.arguments?.getString("scanId")?.toLongOrNull()
-                val scan = scanHistory.find { it.id == scanId }
-                if (scan != null) {
-                    ScanDetailScreen(scan = scan, onBack = { navController.popBackStack() })
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.scan_not_found))
+
+            if (scanHistory.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.scan_history),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(scanHistory, key = { it.id }) { history ->
+                        ScanHistoryCard(
+                            history = history,
+                            onClick = { selectedScan = history }
+                        )
                     }
                 }
             }
@@ -106,6 +147,13 @@ fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit, viewModel: FullScanV
     val exportResult by viewModel.exportPdfResult.collectAsState()
     val context = LocalContext.current
 
+    val exportFailed by viewModel.exportPdfFailed.collectAsState()
+    LaunchedEffect(exportFailed) {
+        if (exportFailed) {
+            snackbarHostState.showSnackbar(context.getString(R.string.export_pdf_failed))
+            viewModel.clearExportResult()
+        }
+    }
     LaunchedEffect(exportResult) {
         exportResult?.let { path ->
             val message = context.getString(R.string.export_pdf_success, path)
@@ -118,14 +166,17 @@ fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit, viewModel: FullScanV
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Scan Report") },
+                title = { Text(stringResource(R.string.scan_report_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack, contentDescription = stringResource(R.string.back)) {
                         Icon(Icons.Default.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.exportPdf(scan) }, contentDescription = stringResource(R.string.export_pdf)) {
+                    IconButton(
+                        onClick = { viewModel.exportPdf(scan) },
+                        contentDescription = stringResource(R.string.export_pdf)
+                    ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                     }
                 }
@@ -150,19 +201,21 @@ fun ScanDetailScreen(scan: ScanHistory, onBack: () -> Unit, viewModel: FullScanV
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "Risk Score: ${scan.riskScore}/100",
+                        text = stringResource(R.string.risk_label, scan.riskScore),
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Issues Found: ${scan.issuesFound}")
+                    Text(text = stringResource(R.string.issues_found_label, scan.issuesFound))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Date: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(scan.timestamp))}")
+                    val scanDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+                        .format(Date(scan.timestamp))
+                    Text(text = stringResource(R.string.scan_date_label, scanDate))
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Report Details",
+                text = stringResource(R.string.report_details),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -185,7 +238,9 @@ private fun ScanHistoryCard(history: ScanHistory, onClick: () -> Unit = {}) {
     val dateText = sdf.format(Date(history.timestamp))
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = when {
                 history.riskScore >= 80 -> Color(0xFFC8E6C9)
@@ -208,7 +263,7 @@ private fun ScanHistoryCard(history: ScanHistory, onClick: () -> Unit = {}) {
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "${history.issuesFound} issues",
+                    text = stringResource(R.string.issues_short, history.issuesFound),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -228,7 +283,8 @@ private fun ScanHistoryCard(history: ScanHistory, onClick: () -> Unit = {}) {
 }
 
 @Composable
-fun ScanProgressCard(progress: FullScanProgress?) {
+fun ScanProgressCard(progress: FullScanOrchestrator.FullScanState.Progress?) {
+    val totalSteps = progress?.totalSteps?.takeIf { it > 0 } ?: 1
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -236,18 +292,19 @@ fun ScanProgressCard(progress: FullScanProgress?) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                progress?.stageName ?: "Сканирование...",
+                text = progress?.let { stringResource(it.stage.titleRes) }
+                    ?: stringResource(R.string.scan_in_progress),
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleMedium
             )
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = { (progress?.step?.toFloat() ?: 0f) / (progress?.totalSteps?.toFloat() ?: 1f) },
+                progress = { (progress?.step?.toFloat() ?: 0f) / totalSteps.toFloat() },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                "${progress?.step ?: 0}/${progress?.totalSteps ?: 0}",
+                text = "${progress?.step ?: 0}/$totalSteps",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -274,7 +331,7 @@ fun ScanReportCard(report: FullScanReport) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Риск: ${report.riskScore}/100",
+                    text = stringResource(R.string.risk_label, report.riskScore),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
@@ -293,15 +350,15 @@ fun ScanReportCard(report: FullScanReport) {
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            LazyColumn {
-                items(report.issues.size) { index ->
-                    val issue = report.issues[index]
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+            // Обычная колонка: LazyColumn внутри карточки на экране без
+            // прокрутки-родителя ведёт себя непредсказуемо при измерении.
+            report.issues.forEachIndexed { index, issue ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
                         imageVector = when (issue.severity) {
                             IssueSeverity.CRITICAL -> Icons.Default.Error
@@ -310,29 +367,28 @@ fun ScanReportCard(report: FullScanReport) {
                         },
                         contentDescription = when (issue.severity) {
                             IssueSeverity.CRITICAL -> stringResource(R.string.critical_risk)
-                            IssueSeverity.WARNING -> stringResource(R.string.warning)
-                            IssueSeverity.INFO -> stringResource(R.string.info)
+                            IssueSeverity.WARNING -> stringResource(R.string.severity_warning)
+                            IssueSeverity.INFO -> stringResource(R.string.severity_info)
                         },
-                            tint = when (issue.severity) {
-                                IssueSeverity.CRITICAL -> Color.Red
-                                IssueSeverity.WARNING -> Color(0xFFFFA000)
-                                IssueSeverity.INFO -> Color.Gray
-                            },
-                            modifier = Modifier.size(20.dp)
+                        tint = when (issue.severity) {
+                            IssueSeverity.CRITICAL -> Color.Red
+                            IssueSeverity.WARNING -> Color(0xFFFFA000)
+                            IssueSeverity.INFO -> Color.Gray
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(issue.title, fontWeight = FontWeight.Medium)
+                        Text(
+                            issue.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(issue.title, fontWeight = FontWeight.Medium)
-                            Text(
-                                issue.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
-                    if (index < report.issues.size - 1) {
-                        HorizontalDivider()
-                    }
+                }
+                if (index < report.issues.size - 1) {
+                    HorizontalDivider()
                 }
             }
         }

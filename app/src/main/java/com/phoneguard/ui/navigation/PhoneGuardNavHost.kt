@@ -1,14 +1,20 @@
 package com.phoneguard.ui.navigation
 
+import android.content.Intent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PhonelinkSetup
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -20,9 +26,9 @@ import com.phoneguard.R
 import com.phoneguard.ui.screens.antitheft.AntiTheftScreen
 import com.phoneguard.ui.screens.callblocker.CallBlockerScreen
 import com.phoneguard.ui.screens.dashboard.DashboardScreen
-import com.phoneguard.ui.screens.dashboard.DashboardViewModel
 import com.phoneguard.ui.screens.firewall.FirewallScreen
 import com.phoneguard.ui.screens.fullscan.FullScanScreen
+import com.phoneguard.ui.screens.phonecheck.PhoneCheckScreen
 import com.phoneguard.ui.screens.privacyscanner.PrivacyScannerScreen
 import com.phoneguard.ui.screens.settings.SettingsScreen
 import com.phoneguard.ui.screens.spywarecheck.SpywareCheckScreen
@@ -40,54 +46,47 @@ sealed class Screen(val route: String, val title: Int, val icon: ImageVector) {
     object Firewall : Screen("firewall", R.string.firewall, Icons.Default.Security)
     object SecureVault : Screen("vault", R.string.secure_vault, Icons.Default.Lock)
     object FullScan : Screen("fullscan", R.string.full_scan, Icons.Default.Security)
+    object PhoneCheck : Screen("phonecheck", R.string.phone_check, Icons.Default.PhonelinkSetup)
 }
 
+/**
+ * @param deepLinkIntent intent, которым открыли Activity (`phoneguard://…` из ярлыка
+ *        или извне). Раньше ссылки были объявлены в графе (`navDeepLink`), но никто
+ *        не вызывал `handleDeepLink`, поэтому ярлыки на рабочем столе открывали
+ *        дашборд вместо нужного экрана.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhoneGuardNavHost(
     modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    deepLinkIntent: Intent? = null
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
 
-    val bottomNavItems = listOf(
-        Screen.Dashboard,
-        Screen.AntiTheft,
-        Screen.CallBlocker,
-        Screen.Firewall,
-        Screen.Settings
-    )
+    LaunchedEffect(deepLinkIntent, navController) {
+        val intent = deepLinkIntent ?: return@LaunchedEffect
+        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+            navController.handleDeepLink(intent)
+        }
+    }
 
     val showBottomBar = bottomNavItems.any { it.route == currentRoute }
 
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
-                    bottomNavItems.forEach { screen ->
-                        val selected = currentRoute == screen.route
-                        NavigationBarItem(
-                            icon = {
-                                Icon(
-                                    imageVector = screen.icon,
-                                    contentDescription = stringResource(screen.title)
-                                )
-                            },
-                            label = { Text(stringResource(screen.title)) },
-                            selected = selected,
-                            onClick = {
-                                if (currentRoute != screen.route) {
-                                    navController.navigate(screen.route) {
-                                        popUpTo(Screen.Dashboard.route) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            }
-                        )
+                PhoneGuardBottomBar(
+                    currentRoute = currentRoute,
+                    onNavigate = { route ->
+                        navController.navigate(route) {
+                            popUpTo(Screen.Dashboard.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
-                }
+                )
             }
         }
     ) { innerPadding ->
@@ -104,7 +103,8 @@ fun PhoneGuardNavHost(
                         onNavigateToPrivacyScanner = { navController.navigate(Screen.PrivacyScanner.route) },
                         onNavigateToSpywareCheck = { navController.navigate(Screen.SpywareCheck.route) },
                         onNavigateToFullScan = { navController.navigate(Screen.FullScan.route) },
-                        onNavigateToSimSwap = { navController.navigate("simswap_history") }
+                        onNavigateToSimSwap = { navController.navigate("simswap_history") },
+                        onNavigateToPhoneCheck = { navController.navigate(Screen.PhoneCheck.route) }
                     )
                 }
                 composable(
@@ -123,7 +123,7 @@ fun PhoneGuardNavHost(
                     route = Screen.PrivacyScanner.route,
                     deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://privacy" })
                 ) {
-                    PrivacyScannerScreen(viewModel = hiltViewModel())
+                    PrivacyScannerScreen()
                 }
                 composable(
                     route = Screen.SpywareCheck.route,
@@ -135,13 +135,21 @@ fun PhoneGuardNavHost(
                     route = Screen.Settings.route,
                     deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://settings" })
                 ) {
-                    SettingsScreen(settingsViewModel = hiltViewModel())
+                    SettingsScreen(
+                        settingsViewModel = hiltViewModel(),
+                        onNavigateToPhoneCheck = { navController.navigate(Screen.PhoneCheck.route) }
+                    )
                 }
                 composable(
                     route = Screen.Firewall.route,
                     deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://firewall" })
                 ) {
-                    FirewallScreen()
+                    FirewallScreen(onOpenLogs = { navController.navigate("firewall_logs") })
+                }
+                composable("firewall_logs") {
+                    com.phoneguard.ui.screens.firewall.FirewallLogsScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
                 composable(
                     route = Screen.SecureVault.route,
@@ -154,6 +162,12 @@ fun PhoneGuardNavHost(
                     deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://fullscan" })
                 ) {
                     FullScanScreen()
+                }
+                composable(
+                    route = Screen.PhoneCheck.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://phonecheck" })
+                ) {
+                    PhoneCheckScreen(onBack = { navController.popBackStack() })
                 }
                 composable("simswap") {
                     com.phoneguard.ui.screens.simswap.SimSwapConfirmationScreen(

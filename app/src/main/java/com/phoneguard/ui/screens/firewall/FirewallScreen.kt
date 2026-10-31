@@ -1,16 +1,7 @@
 package com.phoneguard.ui.screens.firewall
 
-import android.Manifest
-import android.app.Activity
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,37 +9,34 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.FirewallRule
-import com.phoneguard.model.FirewallLog
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.core.graphics.drawable.toBitmap
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FirewallScreen(
+    onOpenLogs: () -> Unit = {},
     viewModel: FirewallViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val apps by viewModel.apps.collectAsState()
     val logs by viewModel.allLogs.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
+    val vpnStartError by viewModel.vpnStartError.collectAsState()
 
     val vpnLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -63,6 +51,14 @@ fun FirewallScreen(
                 actions = {
                     IconButton(onClick = { viewModel.loadApps() }, contentDescription = stringResource(R.string.scan_now)) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
+                    }
+                    // Раньше полный журнал брандмауэра (FirewallLogsScreen) был реализован,
+                    // но недостижим: на экране показывались только последние 20 записей.
+                    IconButton(
+                        onClick = onOpenLogs,
+                        contentDescription = stringResource(R.string.firewall_logs_title)
+                    ) {
+                        Icon(Icons.Default.List, contentDescription = null)
                     }
                 }
             )
@@ -92,13 +88,13 @@ fun FirewallScreen(
                     )
                     Column {
                         Text(
-                            text = "MVP режим",
+                            text = stringResource(R.string.firewall_limited_mode_badge),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
                         )
                         Text(
-                            text = "Фаерволл работает в ограниченном режиме. Блокировка на уровне приложений не обеспечивает 100% защиту без root-доступа.",
+                            text = stringResource(R.string.firewall_limited_mode_notice),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -153,6 +149,14 @@ fun FirewallScreen(
                         )
                     }
                 }
+                vpnStartError?.let { errorRes ->
+                    Text(
+                        text = stringResource(errorRes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             // Apps List
@@ -196,7 +200,7 @@ fun FirewallScreen(
             if (logs.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Recent Blocks",
+                    text = stringResource(R.string.firewall_recent_blocks),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp)
@@ -206,11 +210,15 @@ fun FirewallScreen(
                     modifier = Modifier.heightIn(max = 200.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(logs.take(20)) { log ->
+                    items(logs.take(20), key = { log -> log.id }) { log ->
                         ListItem(
                             headlineContent = { Text(log.appName) },
                             supportingContent = {
-                                Text("${log.ipAddress ?: log.domainName} • ${log.trafficDirection.name} • ${log.connectionType.name}")
+                                val target = log.ipAddress ?: log.domainName.orEmpty()
+                                Text(
+                                    "$target • ${trafficDirectionLabel(log.trafficDirection)} • " +
+                                        connectionTypeLabel(log.connectionType)
+                                )
                             }
                         )
                         Divider()
@@ -218,100 +226,78 @@ fun FirewallScreen(
                 }
             }
         }
-    )
-}
+    }
 }
 
 @Composable
 private fun AppFirewallItem(
-    appInfo: com.phoneguard.ui.screens.firewall.AppInfo,
-    onRuleChanged: (com.phoneguard.model.FirewallRule) -> Unit
+    appInfo: AppInfo,
+    onRuleChanged: (FirewallRule) -> Unit
 ) {
-    var rule by remember { mutableStateOf(appInfo.rule) }
+    // Состояние должно быть Compose-состоянием, иначе чипы не перерисовываются
+    // после переключения (раньше это были обычные var).
+    var rule by remember(appInfo.packageName, appInfo.rule) { mutableStateOf(appInfo.rule) }
     var showDomainDialog by remember { mutableStateOf(false) }
-    val context = LocalContext.current
 
-    var blockWifi = rule?.blockWifi ?: false
-    var blockMobile = rule?.blockMobile ?: false
-    var blockAll = rule?.blockAll ?: false
-    var allowWifiOnly = rule?.allowWifiOnly ?: false
-    var allowMobileOnly = rule?.allowMobileOnly ?: false
-    var blockBackground = rule?.blockBackground ?: false
-
-    fun updateRule() {
-        val newRule = (rule ?: com.phoneguard.model.FirewallRule(
-            packageName = appInfo.packageName,
-            appName = appInfo.appName,
-            blockWifi = false,
-            blockMobile = false,
-            blockAll = false,
-            blockVpn = false,
-            blockBackground = false,
-            blockedDomains = "[]",
-            blockedIps = "[]",
-            allowByDefault = true,
-            allowWifiOnly = false,
-            allowMobileOnly = false,
-            updatedAt = System.currentTimeMillis()
-        )).copy(
-            blockWifi = blockWifi,
-            blockMobile = blockMobile,
-            blockAll = blockAll,
-            allowWifiOnly = allowWifiOnly,
-            allowMobileOnly = allowMobileOnly,
-            blockBackground = blockBackground,
-            updatedAt = System.currentTimeMillis()
-        )
+    fun persist(newRule: FirewallRule) {
         rule = newRule
         onRuleChanged(newRule)
     }
 
+    fun baseRule(): FirewallRule = rule ?: FirewallRule(
+        packageName = appInfo.packageName,
+        appName = appInfo.appName,
+        allowByDefault = true
+    )
+
+    fun update(transform: (FirewallRule) -> FirewallRule) {
+        persist(transform(baseRule()).copy(updatedAt = System.currentTimeMillis()))
+    }
+
+    val blockAll = rule?.blockAll == true
+    val blockWifi = rule?.blockWifi == true
+    val blockMobile = rule?.blockMobile == true
+
     if (showDomainDialog) {
-        var domainsText by remember { mutableStateOf(rule?.blockedDomains?.removeSurrounding("[", "]")?.replace("\"", "") ?: "") }
-        var ipsText by remember { mutableStateOf(rule?.blockedIps?.removeSurrounding("[", "]")?.replace("\"", "") ?: "") }
+        var domainsText by remember {
+            mutableStateOf(jsonListToText(rule?.blockedDomains))
+        }
+        var ipsText by remember {
+            mutableStateOf(jsonListToText(rule?.blockedIps))
+        }
 
         AlertDialog(
             onDismissRequest = { showDomainDialog = false },
-            title = { Text("Block domains/IPs") },
+            title = { Text(stringResource(R.string.block_domains_ips_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = domainsText,
                         onValueChange = { domainsText = it },
-                        label = { Text("Domains (comma separated)") },
+                        label = { Text(stringResource(R.string.block_domains_hint)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = ipsText,
                         onValueChange = { ipsText = it },
-                        label = { Text("IPs (comma separated)") },
+                        label = { Text(stringResource(R.string.block_ips_hint)) },
                         modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = stringResource(R.string.firewall_lists_not_enforced_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val newRule = (rule ?: com.phoneguard.model.FirewallRule(
-                        packageName = appInfo.packageName,
-                        appName = appInfo.appName,
-                        blockWifi = false,
-                        blockMobile = false,
-                        blockAll = false,
-                        blockVpn = false,
-                        blockBackground = false,
-                        blockedDomains = "[]",
-                        blockedIps = "[]",
-                        allowByDefault = true,
-                        allowWifiOnly = false,
-                        allowMobileOnly = false,
-                        updatedAt = System.currentTimeMillis()
-                    )).copy(
-                        blockedDomains = domainsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toString(),
-                        blockedIps = ipsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toString(),
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    rule = newRule
-                    onRuleChanged(newRule)
+                    update {
+                        it.copy(
+                            blockedDomains = textToJsonList(domainsText),
+                            blockedIps = textToJsonList(ipsText)
+                        )
+                    }
                     showDomainDialog = false
                 }) {
                     Text(stringResource(R.string.save))
@@ -331,43 +317,32 @@ private fun AppFirewallItem(
         supportingContent = { Text(appInfo.packageName) },
         leadingContent = {
             Icon(
-                painter = rememberVectorPainter(Icons.Default.Security),
+                painter = rememberVectorPainter(appInfo.icon),
                 contentDescription = null,
                 modifier = Modifier.size(40.dp)
             )
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick = { showDomainDialog = true }, contentDescription = stringResource(R.string.edit_domains_ips)) {
+                IconButton(
+                    onClick = { showDomainDialog = true },
+                    contentDescription = stringResource(R.string.edit_domains_ips)
+                ) {
                     Icon(Icons.Default.Edit, contentDescription = null)
                 }
                 FilterChip(
                     selected = blockAll,
                     onClick = {
-                        val newBlockAll = !blockAll
-                        if (newBlockAll) {
-                            onRuleChanged(
-                                com.phoneguard.model.FirewallRule(
-                                    packageName = appInfo.packageName,
-                                    appName = appInfo.appName,
-                                    blockWifi = true,
-                                    blockMobile = true,
-                                    blockAll = true,
-                                    blockVpn = false,
-                                    blockBackground = true,
-                                    blockedDomains = "[]",
-                                    blockedIps = "[]",
-                                    allowByDefault = false,
-                                    allowWifiOnly = false,
-                                    allowMobileOnly = false,
-                                    updatedAt = System.currentTimeMillis()
-                                )
+                        update {
+                            it.copy(
+                                blockAll = !blockAll,
+                                blockWifi = !blockAll,
+                                blockMobile = !blockAll,
+                                allowByDefault = blockAll
                             )
-                        } else {
-                            updateRule()
                         }
                     },
-                    label = { Text("Block All") },
+                    label = { Text(stringResource(R.string.block_all)) },
                     leadingIcon = if (blockAll) {
                         { Icon(Icons.Default.CheckCircle, contentDescription = null) }
                     } else null
@@ -375,11 +350,15 @@ private fun AppFirewallItem(
                 FilterChip(
                     selected = blockWifi,
                     onClick = {
-                        blockWifi = !blockWifi
-                        if (blockWifi) allowWifiOnly = false
-                        updateRule()
+                        update {
+                            it.copy(
+                                blockWifi = !blockWifi,
+                                allowWifiOnly = blockWifi,
+                                allowMobileOnly = if (!blockWifi) false else it.allowMobileOnly
+                            )
+                        }
                     },
-                    label = { Text("Wi-Fi") },
+                    label = { Text(stringResource(R.string.wifi)) },
                     leadingIcon = if (blockWifi) {
                         { Icon(Icons.Default.Wifi, contentDescription = null) }
                     } else null,
@@ -388,11 +367,15 @@ private fun AppFirewallItem(
                 FilterChip(
                     selected = blockMobile,
                     onClick = {
-                        blockMobile = !blockMobile
-                        if (blockMobile) allowMobileOnly = false
-                        updateRule()
+                        update {
+                            it.copy(
+                                blockMobile = !blockMobile,
+                                allowMobileOnly = blockMobile,
+                                allowWifiOnly = if (!blockMobile) false else it.allowWifiOnly
+                            )
+                        }
                     },
-                    label = { Text("Mobile") },
+                    label = { Text(stringResource(R.string.mobile_data)) },
                     leadingIcon = if (blockMobile) {
                         { Icon(Icons.Default.Info, contentDescription = null) }
                     } else null,
@@ -403,3 +386,24 @@ private fun AppFirewallItem(
     )
 }
 
+/** `["a","b"]` → `a, b` для редактирования в текстовом поле. */
+private fun jsonListToText(json: String?): String {
+    if (json.isNullOrBlank()) return ""
+    return try {
+        val array = org.json.JSONArray(json)
+        (0 until array.length()).joinToString(", ") { array.optString(it) }
+    } catch (_: Exception) {
+        json.removeSurrounding("[", "]").replace("\"", "")
+    }
+}
+
+/** `a, b` → `["a","b"]` (формат, который читает [com.phoneguard.firewall.PhoneGuardVpnService]). */
+private fun textToJsonList(text: String): String {
+    val array = org.json.JSONArray()
+    text.split(",", " ", "\n")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .forEach { array.put(it) }
+    return array.toString()
+}

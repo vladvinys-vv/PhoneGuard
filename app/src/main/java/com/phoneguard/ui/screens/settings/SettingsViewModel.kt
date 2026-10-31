@@ -2,16 +2,13 @@ package com.phoneguard.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
+import android.util.Log
 import androidx.work.WorkManager
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.data.settings.SettingsRepository
-import com.phoneguard.model.FirewallLog
+import com.phoneguard.threatintel.ThreatIntelRepository
 import com.phoneguard.worker.ScheduledFullScanWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,8 +18,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+
+/** Результат экспорта логов — без готового текста, чтобы локализовать в UI. */
+sealed class ExportResult {
+    data class Success(val path: String) : ExportResult()
+    object Failure : ExportResult()
+}
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -30,11 +32,16 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val appDatabase: AppDatabase,
     private val firewallRepository: FirewallRepository,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    private val threatIntelRepository: ThreatIntelRepository
 ) : ViewModel() {
 
     val isDarkTheme: StateFlow<Boolean> = preferencesManager.isDarkTheme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
+    /** Выбранный язык интерфейса (`ru`/`en`). */
+    val language: StateFlow<String> = preferencesManager.language
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), PreferencesManager.defaultLanguage())
 
     val isScheduledScanEnabled: StateFlow<Boolean> = preferencesManager.isScheduledScanEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
@@ -52,8 +59,32 @@ class SettingsViewModel @Inject constructor(
     val isIntrusionHoneypotEnabled: StateFlow<Boolean> = preferencesManager.isIntrusionHoneypotEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
 
-    private val _exportResult = MutableStateFlow<String?>(null)
-    val exportResult: StateFlow<String?> = _exportResult.asStateFlow()
+    /** Opt-in сетевая проверка доменов (по умолчанию выключена). */
+    val isThreatIntelEnabled: StateFlow<Boolean> = preferencesManager.isThreatIntelEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
+    private val _exportResult = MutableStateFlow<ExportResult?>(null)
+    val exportResult: StateFlow<ExportResult?> = _exportResult.asStateFlow()
+
+    /** Сбрасывает результат после показа, иначе Toast повторялся на каждой рекомпозиции. */
+    fun consumeExportResult() {
+        _exportResult.value = null
+    }
+
+    private val _dataClearFailed = MutableStateFlow(false)
+    val dataClearFailed: StateFlow<Boolean> = _dataClearFailed.asStateFlow()
+
+    fun consumeDataClearFailed() {
+        _dataClearFailed.value = false
+    }
+
+    private val _dataCleared = MutableStateFlow(false)
+    /** Данные удалены — экран показывает подтверждение и сбрасывает флаг. */
+    val dataCleared: StateFlow<Boolean> = _dataCleared.asStateFlow()
+
+    fun consumeDataCleared() {
+        _dataCleared.value = false
+    }
 
     fun setDarkTheme(enabled: Boolean) {
         viewModelScope.launch {
@@ -62,20 +93,26 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setLanguage(lang: String) {
+        // Синхронно фиксируем язык для attachBaseContext/recreate(), затем — в DataStore.
+        preferencesManager.saveLanguageSync(lang)
         viewModelScope.launch {
             preferencesManager.setLanguage(lang)
         }
     }
 
     fun exportLogs() = viewModelScope.launch {
-        val blockedLogs = appDatabase.blockedLogDao().getAllBlockedLogs().first()
-        val firewallLogs = firewallRepository.allLogs.first()
-        val scanHistory = appDatabase.scanHistoryDao().getAllScans().first()
-        val file = settingsRepository.exportLogs(blockedLogs, firewallLogs, scanHistory)
-        _exportResult.value = if (file != null) {
-            "Экспорт сохранён: ${file.absolutePath}"
+        // Раньше исключение из DAO (например, из-за занятой БД) валило корутину и
+        // пользователь не видел ни успеха, ни ошибки — кнопка «молчала».
+        val result = runCatching {
+            val blockedLogs = appDatabase.blockedLogDao().getAllBlockedLogs().first()
+            val firewallLogs = firewallRepository.allLogs.first()
+            val scanHistory = appDatabase.scanHistoryDao().getAllScans().first()
+            settingsRepository.exportLogs(blockedLogs, firewallLogs, scanHistory)
+        }.getOrNull()
+        _exportResult.value = if (result != null) {
+            ExportResult.Success(result.absolutePath)
         } else {
-            "Ошибка экспорта логов"
+            ExportResult.Failure
         }
     }
 
@@ -95,36 +132,52 @@ class SettingsViewModel @Inject constructor(
     fun setIntrusionBlockNetwork(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionBlockNetworkEnabled(enabled) }
     fun setIntrusionHoneypot(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionHoneypotEnabled(enabled) }
 
+    fun setThreatIntelEnabled(enabled: Boolean) = viewModelScope.launch {
+        preferencesManager.setThreatIntelEnabled(enabled)
+        if (!enabled) {
+            // При выключении сбрасываем кэш, чтобы не хранить результаты сетевых проверок.
+            threatIntelRepository.clearCache()
+        }
+    }
+
+    /**
+     * Полное удаление пользовательских данных.
+     *
+     * Что было не так: журнал вторжений (`intrusion_events`), спам-номера и файлы
+     * приложения (снимки нарушителя, приманки, отчёты о падениях, экспорт) не
+     * удалялись; ошибка любого шага валила корутину, а флаг «данные удалены»
+     * выставлялся в любом случае.
+     */
     fun deleteAllData() = viewModelScope.launch {
-        appDatabase.blockedNumberDao().deleteAll()
-        appDatabase.blockedLogDao().clearAllLogs()
-        appDatabase.firewallDao().clearLogs()
-        appDatabase.firewallDao().clearRules()
-        appDatabase.scanHistoryDao().deleteAll()
-        appDatabase.vaultDao().deleteAll()
-        appDatabase.simSwapEventDao().deleteAll()
-        preferencesManager.setFirstLaunchDone()
-        _exportResult.value = "Все данные удалены"
+        val outcome = runCatching {
+            appDatabase.blockedNumberDao().deleteAll()
+            appDatabase.blockedLogDao().clearAllLogs()
+            appDatabase.firewallDao().clearLogs()
+            appDatabase.firewallDao().clearRules()
+            appDatabase.scanHistoryDao().deleteAll()
+            appDatabase.vaultDao().deleteAll()
+            appDatabase.simSwapEventDao().deleteAll()
+            appDatabase.intrusionEventDao().deleteAll()
+            appDatabase.spamNumberDao().deleteAll()
+            // После полной очистки база спам-номеров засевается заново при старте.
+            preferencesManager.resetSpamDatabaseSeeded()
+            settingsRepository.deleteLocalFiles()
+        }
+        outcome.onFailure { Log.w(TAG, "Полная очистка данных завершилась ошибкой", it) }
+        _dataClearFailed.value = outcome.isFailure
+        _dataCleared.value = outcome.isSuccess
+        if (outcome.isSuccess) preferencesManager.setFirstLaunchDone()
+    }
+
+    private companion object {
+        private const val TAG = "SettingsViewModel"
     }
 
     private fun schedulePeriodicScan() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-            .setRequiresCharging(false)
-            .build()
-
-        val request = PeriodicWorkRequestBuilder<ScheduledFullScanWorker>(7, TimeUnit.DAYS)
-            .setConstraints(constraints)
-            .build()
-
-        workManager.enqueueUniquePeriodicWork(
-            "scheduled_full_scan",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request
-        )
+        ScheduledFullScanWorker.schedule(workManager)
     }
 
     private fun cancelPeriodicScan() {
-        workManager.cancelUniqueWork("scheduled_full_scan")
+        ScheduledFullScanWorker.cancel(workManager)
     }
 }

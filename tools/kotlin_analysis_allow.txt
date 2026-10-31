@@ -1,0 +1,39 @@
+# Ложные срабатывания проверки «suspend-вызов вне suspend-контекста»
+#
+# tools/kotlin_analysis.py собирает имена suspend-функций по всему проекту.
+# Если в другом классе есть не-suspend функция с тем же именем, проверка
+# срабатывает ложно. Каждая строка ниже проверена вручную: в правой части —
+# имя символа, в левой — файл; формат `путь : имя`.
+#
+# Правило: добавлять сюда только после того, как убедились, что вызывается
+# именно не-suspend перегрузка. Новые записи без пояснения не принимаются.
+
+# --- UI: ViewModel-методы с тем же именем, что у suspend-методов сервисов ----
+# stopAlarm: suspend есть у SecurityService, а AntiTheftViewModel.stopAlarm() — обычная.
+app/src/main/java/com/phoneguard/ui/screens/antitheft/AntiTheftScreen.kt: stopAlarm
+# upsertRule: suspend в FirewallRepository, FirewallViewModel.upsertRule() — обычная.
+app/src/main/java/com/phoneguard/ui/screens/firewall/FirewallScreen.kt: upsertRule
+# persist: suspend в SettingsRepository, а это локальная функция composable-скоупа.
+app/src/main/java/com/phoneguard/ui/screens/firewall/FirewallScreen.kt: persist
+# setDarkTheme / setLanguage / setThreatIntelEnabled: suspend в PreferencesManager,
+# у SettingsViewModel все три запускают viewModelScope.launch и сами не suspend.
+app/src/main/java/com/phoneguard/ui/screens/settings/SettingsScreen.kt: setDarkTheme
+app/src/main/java/com/phoneguard/ui/screens/settings/SettingsScreen.kt: setLanguage
+app/src/main/java/com/phoneguard/ui/screens/settings/SettingsScreen.kt: setThreatIntelEnabled
+# exportLogs: suspend в SettingsRepository, SettingsViewModel.exportLogs() — запуск корутины.
+app/src/main/java/com/phoneguard/ui/screens/settings/SettingsScreen.kt: exportLogs
+# deleteItem: suspend в VaultRepository, VaultViewModel.deleteItem() — запуск корутины.
+app/src/main/java/com/phoneguard/ui/screens/vault/VaultScreen.kt: deleteItem
+
+# --- util ------------------------------------------------------------------
+# record: suspend есть у SimSwapRepository.record(), а AnalyticsHelper.record() — обычная.
+app/src/main/java/com/phoneguard/util/AnalyticsHelper.kt: record
+
+# --- тесты ------------------------------------------------------------------
+# getRuleForPackage: suspend в FirewallRepository, FirewallRulesManager — обычная.
+app/src/test/java/com/phoneguard/firewall/FirewallRulesManagerTest.kt: getRuleForPackage
+# performCheck: suspend только у ApkSignatureCheck, остальные проверки — обычные.
+app/src/test/java/com/phoneguard/fullscan/checks/PermissionAbuseCheckTest.kt: performCheck
+app/src/test/java/com/phoneguard/fullscan/checks/RootDetectionCheckTest.kt: performCheck
+# verifyPin: suspend в PreferencesManager, SecurityUtils.verifyPin() — обычная.
+app/src/test/java/com/phoneguard/util/SecurityUtilsTest.kt: verifyPin

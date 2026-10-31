@@ -15,11 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Sms
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,10 +28,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +41,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.phoneguard.R
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import com.phoneguard.util.IntentUtils
 
 @Composable
 fun ConsentScreen(
@@ -53,7 +63,25 @@ fun ConsentScreen(
             ConsentItem(Manifest.permission.READ_PHONE_STATE, R.string.consent_phone, Icons.Default.Phone),
             ConsentItem(Manifest.permission.ACCESS_FINE_LOCATION, R.string.consent_location, Icons.Default.LocationOn),
             ConsentItem(Manifest.permission.POST_NOTIFICATIONS, R.string.consent_notifications, Icons.Default.Notifications)
-        )
+        ).map { it.copy(accepted = it.isGranted(context)) }.toMutableStateList()
+    }
+
+    // Раньше галочки на этом экране были декоративными: системный запрос
+    // разрешений не вызывался вовсе, и функции (SMS-команды, геолокация,
+    // уведомления, фото при неудачном PIN) молча не работали.
+    var pendingIndex by remember { mutableStateOf(-1) }
+    // Если пользователь отказал «навсегда», запрос больше не покажется —
+    // без ссылки в настройки он застревал на этом экране.
+    var deniedOnce by remember { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val index = pendingIndex
+        if (index >= 0 && index < consents.size) {
+            consents[index] = consents[index].copy(accepted = granted)
+        }
+        if (!granted) deniedOnce = true
+        pendingIndex = -1
     }
 
     val allAccepted = consents.all { it.accepted }
@@ -81,14 +109,16 @@ fun ConsentScreen(
                     onToggle = { accepted ->
                         val index = consents.indexOf(consent)
                         if (index >= 0) {
-                            consents[index] = consent.copy(accepted = accepted)
+                            when {
+                                !accepted -> consents[index] = consent.copy(accepted = false)
+                                consent.isGranted(context) ->
+                                    consents[index] = consent.copy(accepted = true)
+                                else -> {
+                                    pendingIndex = index
+                                    permissionLauncher.launch(consent.permission)
+                                }
+                            }
                         }
-                    },
-                    onOpenSettings = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
-                        }
-                        context.startActivity(intent)
                     }
                 )
             }
@@ -105,6 +135,15 @@ fun ConsentScreen(
                 Text(stringResource(R.string.consent_accept))
             }
 
+            if (deniedOnce && !allAccepted) {
+                TextButton(
+                    onClick = { openAppSettings(context) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.settings))
+                }
+            }
+
             OutlinedButton(
                 onClick = onDecline,
                 modifier = Modifier.fillMaxWidth()
@@ -115,11 +154,17 @@ fun ConsentScreen(
     }
 }
 
+private fun openAppSettings(context: android.content.Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.fromParts("package", context.packageName, null)
+    }
+    IntentUtils.open(context, intent)
+}
+
 @Composable
 private fun ConsentCard(
     item: ConsentItem,
-    onToggle: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit
+    onToggle: (Boolean) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -153,4 +198,8 @@ data class ConsentItem(
     val titleRes: Int,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val accepted: Boolean = false
-)
+) {
+    /** Уже выдано системой? На Android < 33 `POST_NOTIFICATIONS` считается выданным. */
+    fun isGranted(context: android.content.Context): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+}

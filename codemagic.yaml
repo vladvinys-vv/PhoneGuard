@@ -2,11 +2,69 @@ workflows:
   phoneguard-android:
     name: PhoneGuard Android
     max_build_duration: 120
+
     environment:
       java: 17
+      vars:
+        # Секреты webhook'а (docs/CI_WEBHOOKS.md) задаются в Codemagic UI →
+        # Environment variables как WEBHOOK_URL и WEBHOOK_SECRET; без них шаг
+        # просто печатает, что уведомление пропущено.
+        WEBHOOK_TIMEOUT: "10"
+        WEBHOOK_RETRIES: "3"
+
+    # Автоматические сборки: webhook репозитория → https://api.codemagic.io/hooks/<appId>
+    # (Codemagic UI: App settings → Webhooks → Create webhook).
+    triggering:
+      events:
+        - push
+        - pull_request
+        - tag
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+        - pattern: master
+          include: true
+          source: true
+        - pattern: develop
+          include: true
+          source: true
+      tag_patterns:
+        - pattern: "v*"
+          include: true
+      cancel_previous_builds: true
+
     scripts:
       - name: Make Gradle wrapper executable
         script: chmod +x ./gradlew
+      - name: Static audit
+        script: python3 tools/static_audit.py
+      - name: Strings are in sync
+        script: python3 tools/sync_strings.py --check
+      - name: Kotlin frontend check
+        script: |
+          if command -v kotlinc >/dev/null 2>&1; then
+            python3 tools/kotlin_frontend_check.py
+          else
+            echo "kotlinc не установлен — компиляторная проверка пропущена"
+          fi
+      # На образах Codemagic может не быть android-35: ставим платформу явно, иначе
+      # манифест линкуется против старого android.jar (ложная ошибка про specialUse).
+      - name: Ensure Android SDK platform 35
+        script: |
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager || true)"
+          fi
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+            "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null || \
+              echo "sdkmanager: не удалось обновить платформу — aapt2_check сам решит, что проверять"
+          else
+            echo "sdkmanager не найден — оставляем платформы как есть"
+          fi
+      - name: Resources and manifest (aapt2)
+        script: python3 tools/aapt2_check.py
       - name: Lint
         script: ./gradlew lintDebug --no-daemon --stacktrace
       - name: Unit tests
@@ -15,6 +73,18 @@ workflows:
         script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
       - name: Build production release APK
         script: ./gradlew assembleProductionRelease --no-daemon --stacktrace
+      # Ставится только если все шаги выше прошли: publishing-скрипты Codemagic
+      # выполняются и при падении, поэтому статус для webhook'а берётся из маркера.
+      - name: Mark build successful
+        script: python3 tools/webhook_notify.py --mark-success
+
     artifacts:
       - app/build/outputs/**/*.apk
       - app/build/outputs/**/*.aab
+      - app/build/reports/lint-results-debug.html
+      - app/build/reports/tests/**
+
+    publishing:
+      scripts:
+        - name: Send build status to webhook
+          script: python3 tools/webhook_notify.py

@@ -8,10 +8,13 @@ import com.phoneguard.data.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -35,8 +38,15 @@ class SimSwapViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    private val _events = MutableSharedFlow<Event>()
-    val events: SharedFlow<Event> = _events.asSharedFlow()
+    /**
+     * События экрана подтверждения.
+     *
+     * `MutableSharedFlow` без буфера терял событие, отправленное до подписки
+     * (поворот экрана, повторный вход), а `emit` без подписчика вообще зависал.
+     * `Channel` доставляет событие ровно один раз и не требует ожидания.
+     */
+    private val _events = Channel<Event>(Channel.BUFFERED)
+    val events: Flow<Event> = _events.receiveAsFlow()
 
     private var countdownJob: Job? = null
 
@@ -71,20 +81,29 @@ class SimSwapViewModel @Inject constructor(
                     isCountingDown = unconfirmed
                 )
             }
-            if (unconfirmed) startCountdown()
+            if (unconfirmed) startCountdown(latest.timestamp + AUTO_LOCK_WINDOW_MS)
         }
     }
 
-    private fun startCountdown() {
+    /**
+     * Обратный отсчёт до автоматической блокировки.
+     *
+     * Считается от времени события, а не от 300 секунд «с нуля»: раньше при каждом
+     * открытии экрана (в том числе после поворота) таймер начинался заново, и
+     * автоблокировка могла не сработать никогда.
+     */
+    private fun startCountdown(deadlineMillis: Long) {
         countdownJob?.cancel()
         countdownJob = viewModelScope.launch {
-            var seconds = _uiState.value.timerSeconds
-            while (seconds > 0) {
+            while (true) {
+                val remaining = ((deadlineMillis - System.currentTimeMillis()) / 1000)
+                    .coerceAtLeast(0L)
+                    .coerceAtMost(AUTO_LOCK_WINDOW_MS / 1000)
+                    .toInt()
+                _uiState.update { it.copy(timerSeconds = remaining, isCountingDown = remaining > 0) }
+                if (remaining == 0) break
                 delay(1000)
-                seconds--
-                _uiState.update { it.copy(timerSeconds = seconds) }
             }
-            _uiState.update { it.copy(isCountingDown = false) }
             lockDevice()
         }
     }
@@ -96,7 +115,7 @@ class SimSwapViewModel @Inject constructor(
             preferencesManager.setSimSwapUnconfirmed(false)
             countdownJob?.cancel()
             _uiState.update { it.copy(isCountingDown = false, pendingEventId = null) }
-            _events.emit(Event.Confirmed)
+            _events.trySend(Event.Confirmed)
         }
     }
 
@@ -112,19 +131,24 @@ class SimSwapViewModel @Inject constructor(
             securityService.activateLostMode()
             securityService.sendLocationToContacts()
             _uiState.update { it.copy(isCountingDown = false, pendingEventId = null) }
-            _events.emit(Event.Rejected)
+            _events.trySend(Event.Rejected)
         }
     }
 
     private suspend fun lockDevice() {
         securityService.activateLostMode()
         securityService.sendLocationToContacts()
-        _events.emit(Event.AutoLocked)
+        _events.trySend(Event.AutoLocked)
     }
 
     sealed interface Event {
         object Confirmed : Event
         object Rejected : Event
         object AutoLocked : Event
+    }
+
+    private companion object {
+        /** Сколько пользователь может подтвердить «свой» SIM перед автоблокировкой. */
+        const val AUTO_LOCK_WINDOW_MS = 300_000L
     }
 }

@@ -1,17 +1,16 @@
 package com.phoneguard.ui.screens.antitheft
 
+import android.Manifest
 import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,8 +19,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,10 +36,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,14 +50,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.antitheft.DeviceAdminReceiverImpl
 import com.phoneguard.ui.common.Event
-import kotlinx.coroutines.flow.collectLatest
+import com.phoneguard.util.IntentUtils
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,18 +66,24 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
     val context = LocalContext.current
     var pinInput by remember { mutableStateOf("") }
     var backupNumberInput by remember { mutableStateOf(uiState.backupNumber) }
+    val eventScope = rememberCoroutineScope()
 
     viewModel.ObserveEvents { event ->
         when (event) {
-            is Event.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            // showSnackbar — suspend-функция: если вызывать её прямо в collect,
+            // сбор событий встаёт на паузу до закрытия снекбара.
+            is Event.ShowSnackbar -> eventScope.launch {
+                snackbarHostState.showSnackbar(context.getString(event.messageRes))
+            }
             else -> {}
         }
     }
 
+    // Значение подставляется один раз при входе на экран. Раньше поле переписывалось
+    // при каждом изменении uiState (переключение любого тумблера), и уже начатый ввод
+    // резервного номера стирался.
     LaunchedEffect(Unit) {
-        viewModel.uiState.collectLatest { state ->
-            backupNumberInput = state.backupNumber
-        }
+        backupNumberInput = viewModel.uiState.value.backupNumber
     }
 
     Scaffold(
@@ -167,28 +173,34 @@ fun AntiTheftScreen(viewModel: AntiTheftViewModel = hiltViewModel()) {
                 }
             }
 
-            // Device Admin
+            // Device Admin. Тумблер и кнопка делают одно и то же: раньше `onCheckedChange`
+            // был пустым, и переключатель «не реагировал» на нажатие.
+            val toggleDeviceAdmin: () -> Unit = {
+                val devicePolicyManager =
+                    context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                val componentName = DeviceAdminReceiverImpl.getComponentName(context)
+                if (uiState.isDeviceAdminEnabled) {
+                    runCatching { devicePolicyManager.removeActiveAdmin(componentName) }
+                    viewModel.checkDeviceAdminStatus()
+                } else {
+                    val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                        putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
+                        putExtra(
+                            DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                            context.getString(R.string.device_admin_description)
+                        )
+                    }
+                    IntentUtils.open(context, intent)
+                }
+            }
             FeatureToggleCard(
                 title = stringResource(R.string.device_admin),
                 description = stringResource(R.string.device_admin_description),
                 icon = Icons.Default.Security,
                 checked = uiState.isDeviceAdminEnabled,
-                onCheckedChange = { /* handled by button */ },
+                onCheckedChange = { toggleDeviceAdmin() },
                 buttonText = if (uiState.isDeviceAdminEnabled) stringResource(R.string.disable) else stringResource(R.string.enable_device_admin),
-                onButtonClick = {
-                    val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-                    val componentName = DeviceAdminReceiverImpl.getComponentName(context)
-                    if (uiState.isDeviceAdminEnabled) {
-                        devicePolicyManager.removeActiveAdmin(componentName)
-                        viewModel.checkDeviceAdminStatus()
-                    } else {
-                        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
-                            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
-                            putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, context.getString(R.string.device_admin_description))
-                        }
-                        context.startActivity(intent)
-                    }
-                }
+                onButtonClick = toggleDeviceAdmin
             )
 
             // SIM Lock

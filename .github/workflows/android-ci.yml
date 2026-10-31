@@ -2,15 +2,69 @@ name: Android CI
 
 on:
   push:
-    branches: [ main, master, feature/production-readiness ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main, master, feature/production-readiness ]
   workflow_dispatch:
 
+# Отменяем устаревшие прогоны на той же ветке/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Быстрые проверки без Android SDK: ловят ошибки до тяжёлых job'ов.
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Static audit (imports, R.*, Room, manifest, strings, migrations)
+        run: python3 tools/static_audit.py
+
+      - name: Strings are in sync with tools/sync_strings.py
+        run: python3 tools/sync_strings.py --check
+
+  # Настоящий компилятор Kotlin без Android SDK: видит то, чего не видит regex-аудит.
+  kotlin-frontend:
+    name: Kotlin frontend check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+
+      - name: Install Kotlin 2.1.0
+        run: |
+          curl -sSLo kotlin.zip https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-compiler-2.1.0.zip
+          unzip -q kotlin.zip -d "$RUNNER_TEMP/kotlinc"
+          echo "$RUNNER_TEMP/kotlinc/kotlinc/bin" >> "$GITHUB_PATH"
+
+      # С android.jar в classpath проверяются ещё и реальные сигнатуры android.* API.
+      - name: Compile all sources with the frontend
+        run: python3 tools/kotlin_frontend_check.py
+
+      # aapt2 (из build-tools) проверяет ресурсы и манифест — то же, что processDebugResources.
+      # Платформа android-35 ставится шагом setup-android выше, поэтому здесь строгий режим:
+      # если android.jar окажется старее compileSdk, это ошибка, а не тихий пропуск link.
+      - name: Resources and manifest (aapt2)
+        run: python3 tools/aapt2_check.py --require-compile-sdk
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: [static-checks]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -23,8 +77,9 @@ jobs:
       - run: ./gradlew lintDebug --no-daemon --stacktrace
 
   unit-test:
-    name: Unit Tests
+    name: Unit tests
     runs-on: ubuntu-latest
+    needs: [static-checks]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -35,9 +90,16 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: chmod +x gradlew
       - run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/**
+          retention-days: 7
 
   build-debug:
-    name: Build Production Debug APK
+    name: Build production debug APK
     runs-on: ubuntu-latest
     needs: [lint, unit-test]
     steps:
@@ -57,7 +119,7 @@ jobs:
           retention-days: 30
 
   build-release:
-    name: Build Production Release (unsigned)
+    name: Build production release APK (unsigned)
     runs-on: ubuntu-latest
     needs: [lint, unit-test]
     steps:
@@ -75,3 +137,20 @@ jobs:
           name: PhoneGuard-production-release
           path: app/build/outputs/apk/production/release/*.apk
           retention-days: 30
+
+  # Отправка статуса сборки на внешний webhook (docs/CI_WEBHOOKS.md).
+  # Секреты WEBHOOK_URL / WEBHOOK_SECRET задаются в Settings → Secrets → Actions;
+  # без них шаг просто печатает, что уведомление пропущено.
+  notify:
+    name: Webhook notification
+    runs-on: ubuntu-latest
+    needs: [static-checks, kotlin-frontend, lint, unit-test, build-debug, build-release]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send build status
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          BUILD_STATUS: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+        run: python3 tools/webhook_notify.py --status "$BUILD_STATUS"

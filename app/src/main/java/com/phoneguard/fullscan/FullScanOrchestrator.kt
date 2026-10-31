@@ -1,15 +1,18 @@
 package com.phoneguard.fullscan
 
+import android.content.Context
 import com.google.gson.Gson
+import com.phoneguard.R
 import com.phoneguard.data.local.ScanHistoryDao
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.data.repository.PrivacyScannerRepository
 import com.phoneguard.data.repository.SpywareCheckRepository
 import com.phoneguard.fullscan.checks.*
 import com.phoneguard.model.*
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -19,6 +22,7 @@ import javax.inject.Singleton
 
 @Singleton
 class FullScanOrchestrator @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val rootDetectionCheck: RootDetectionCheck,
     private val systemIntegrityCheck: SystemIntegrityCheck,
     private val fileSystemScanCheck: FileSystemScanCheck,
@@ -33,17 +37,51 @@ class FullScanOrchestrator @Inject constructor(
     private val spywareCheckRepository: SpywareCheckRepository,
     private val firewallRepository: FirewallRepository,
     private val scanHistoryDao: ScanHistoryDao,
-    private val phishingUrlChecker: PhishingUrlChecker
+    private val phishingUrlChecker: PhishingUrlChecker,
+    private val apkSignatureCheck: ApkSignatureCheck,
+    private val deviceAuditChecker: com.phoneguard.deviceaudit.DeviceAuditChecker
 ) {
+    companion object {
+        /**
+         * Количество шагов полного сканирования.
+         *
+         * Считается один раз здесь: раньше значение использовалось в `runFullScan`
+         * без объявления (ошибка компиляции), а «магическое число» в двух местах
+         * разъезжалось при добавлении проверки.
+         */
+        const val TOTAL_STEPS = 16
+
+        /** Проверки устройства, которые полный скан выполняет сам (без дублей). */
+        private val AUDIT_IDS_ALREADY_COVERED = setOf(
+            "adb",
+            "developer_options",
+            "security_patch"
+        )
+    }
     private val gson = Gson()
 
     sealed class FullScanState {
-        data class Progress(val step: Int, val totalSteps: Int, val stageName: String, val isFinished: Boolean = false) : FullScanState()
+        data class Progress(
+            val step: Int,
+            val totalSteps: Int,
+            val stage: ScanStage,
+            val isFinished: Boolean = false
+        ) : FullScanState()
         data class Result(val report: FullScanReport, val scanHistoryId: Long) : FullScanState()
     }
 
-    @Volatile
-    private var isScanning = false
+    /**
+     * Флаг «скан уже идёт».
+     *
+     * Раньше это был обычный `Boolean`, и проверка `if (isScanning) … isScanning = true`
+     * не была атомарной: полный скан из UI и периодический воркер могли стартовать
+     * одновременно (двойная нагрузка, дубли записей в истории).
+     *
+     * `AtomicBoolean`, а не `@Volatile var`: `@Volatile` к `val` применять нельзя
+     * (ошибка компиляции), а атомарность нужна именно для пары «проверить и
+     * выставить» — её даёт `compareAndSet`.
+     */
+    private val isScanning = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private fun buildReport(
         root: RootDetectionCheck.RootCheckResult,
@@ -60,128 +98,334 @@ class FullScanOrchestrator @Inject constructor(
         spywareApps: List<com.phoneguard.model.SpywareApp>,
         firewallRules: List<com.phoneguard.model.FirewallRule>,
         firewallLogs: List<com.phoneguard.model.FirewallLog>,
-        phishingResult: PhishingUrlChecker.PhishingResult
+        phishingResult: PhishingUrlChecker.PhishingResult,
+        apkSignatures: ApkSignatureCheck.ApkSignatureResult,
+        deviceAudit: com.phoneguard.deviceaudit.DeviceAuditReport
     ): FullScanReport {
         val issues = mutableListOf<ScanIssue>()
+
+        /**
+         * Тексты находок берутся из ресурсов.
+         *
+         * Раньше весь отчёт был захардкожен по-русски: в английской и немецкой локали
+         * пользователь получал русские заголовки, описания и рекомендации — и в
+         * приложении, и в экспортированном PDF.
+         */
+        fun text(resId: Int, vararg args: Any): String = context.getString(resId, *args)
+
         if (root.isRooted) {
-            issues.add(ScanIssue(IssueSeverity.CRITICAL, "Обнаружен root-доступ (эвристика)",
-                "Признаки root-доступа (уверенность ${(root.confidence * 100).toInt()}%). Данная проверка использует эвристики и не даёт 100% гарантии.",
-                "Если root не установлен намеренно — сброс до заводских. Проверьте Magisk/SuperSU.", true))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = text(R.string.scan_issue_root_title),
+                    description = text(R.string.scan_issue_root_desc, (root.confidence * 100).toInt()),
+                    recommendation = text(R.string.scan_issue_root_rec),
+                    isHeuristic = true
+                )
+            )
         }
         if (integrity.isCompromised) {
-            issues.add(ScanIssue(IssueSeverity.CRITICAL, "Возможна компрометация системы (эвристика)",
-                "Обратите внимание: без root-доступа проверка целостности /system частичная, некоторые проверки — эвристические.",
-                "Проверьте bootloader и Verified Boot. Для полной проверки нужен root.", true))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = text(R.string.scan_issue_integrity_title),
+                    description = text(R.string.scan_issue_integrity_desc),
+                    recommendation = text(R.string.scan_issue_integrity_rec),
+                    isHeuristic = true
+                )
+            )
         }
-        fileScan.suspiciousFiles.forEach { f ->
-            issues.add(ScanIssue(
-                when (f.severity) { 3 -> IssueSeverity.CRITICAL; 2 -> IssueSeverity.WARNING; else -> IssueSeverity.INFO },
-                "Подозрительный файл: ${f.path.takeLast(60)} (ограниченный доступ)", f.reason, "Проверьте файл вручную. Обратите внимание: на Android 10+ сканирование ограничено Scoped Storage — часть файлов может быть недоступна.", true))
+        fileScan.suspiciousFiles.forEach { file ->
+            issues.add(
+                ScanIssue(
+                    severity = when (file.severity) {
+                        3 -> IssueSeverity.CRITICAL
+                        2 -> IssueSeverity.WARNING
+                        else -> IssueSeverity.INFO
+                    },
+                    title = text(R.string.scan_issue_file_title, file.path.takeLast(60)),
+                    description = file.reason,
+                    recommendation = text(R.string.scan_issue_file_rec),
+                    isHeuristic = true
+                )
+            )
         }
 
-        // Accessibility Service Abuse
         if (accessibility.suspiciousServices.isNotEmpty()) {
             val names = accessibility.suspiciousServices.joinToString(", ") { it.appName }
-            issues.add(ScanIssue(IssueSeverity.CRITICAL,
-                "Подозрительные Accessibility-сервисы (${accessibility.suspiciousServices.size})",
-                "Активные сервисы: $names. Malware использует Accessibility для чтения экрана, перехвата ввода и обхода банковских защит.",
-                "Отключите ненужные: Настройки > Специальные возможности. Проверьте каждое приложение."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = text(
+                        R.string.scan_issue_accessibility_title,
+                        accessibility.suspiciousServices.size
+                    ),
+                    description = text(R.string.scan_issue_accessibility_desc, names),
+                    recommendation = text(R.string.scan_issue_accessibility_rec)
+                )
+            )
         }
 
-        // Overlay Attack Detection
         if (overlays.hasDangerousOverlays) {
             val names = overlays.appsWithOverlay.joinToString(", ") { it.appName }
-            issues.add(ScanIssue(IssueSeverity.CRITICAL,
-                "Обнаружены потенциальные overlay-атаки",
-                "Приложения, возможные для tapjacking: $names. Overlay-окна могут перехватывать клики.",
-                "Отозвать разрешение 'Поверх других приложений' для подозрительных приложений."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = text(R.string.scan_issue_overlay_title),
+                    description = text(R.string.scan_issue_overlay_desc, names),
+                    recommendation = text(R.string.scan_issue_overlay_rec)
+                )
+            )
         }
 
-        // Permission Abuse
         if (permissionAbuse.riskyApps.isNotEmpty()) {
-            val critical = permissionAbuse.riskyApps.count { it.riskLevel == PermissionAbuseCheck.RiskLevel.CRITICAL }
-            val high = permissionAbuse.riskyApps.count { it.riskLevel == PermissionAbuseCheck.RiskLevel.HIGH }
-            issues.add(ScanIssue(
-                if (critical > 0) IssueSeverity.CRITICAL else IssueSeverity.WARNING,
-                "Приложения с опасными разрешениями (${permissionAbuse.riskyApps.size}, критичных: $critical, высоких: $high)",
-                "Найдены приложения с рискованными комбинациями разрешений. ${permissionAbuse.riskyApps.take(3).joinToString("; ") { "${it.appName}: ${it.explanation}" }}",
-                "Перейдите в Privacy Scanner для детального анализа и отзыва разрешений."))
+            val critical = permissionAbuse.riskyApps.count {
+                it.riskLevel == PermissionAbuseCheck.RiskLevel.CRITICAL
+            }
+            val high = permissionAbuse.riskyApps.count {
+                it.riskLevel == PermissionAbuseCheck.RiskLevel.HIGH
+            }
+            val examples = permissionAbuse.riskyApps
+                .take(3)
+                .joinToString("; ") { "${it.appName}: ${it.explanation}" }
+            issues.add(
+                ScanIssue(
+                    severity = if (critical > 0) IssueSeverity.CRITICAL else IssueSeverity.WARNING,
+                    title = text(
+                        R.string.scan_issue_permissions_title,
+                        permissionAbuse.riskyApps.size,
+                        critical,
+                        high
+                    ),
+                    description = text(R.string.scan_issue_permissions_desc, examples),
+                    recommendation = text(R.string.scan_issue_privacy_rec)
+                )
+            )
         }
 
-        // Hidden Apps
         if (hiddenApps.totalCount > 0) {
-            val suspiciousNames = hiddenApps.hiddenApps.filter { it.riskReason.contains("Подозрительное") }
+            // Признак «подозрительное имя» берём из структуры, а не из текста причины:
+            // раньше сравнение шло с русской строкой, и на другом языке фильтр не работал.
+            val suspiciousNames = hiddenApps.hiddenApps.filter { it.isSuspiciousName }
             if (suspiciousNames.isNotEmpty()) {
-                issues.add(ScanIssue(IssueSeverity.CRITICAL,
-                    "Скрытые приложения с подозрительными именами (${suspiciousNames.size})",
-                    "Скрытые из лаунчера: ${suspiciousNames.joinToString(", ") { "${it.appName} (${it.packageName})" }}. Malware часто прячет иконки.",
-                    "Удалите подозрительные приложения. Проверьте список установленных приложений в настройках."))
+                val names = suspiciousNames.joinToString(", ") { "${it.appName} (${it.packageName})" }
+                issues.add(
+                    ScanIssue(
+                        severity = IssueSeverity.CRITICAL,
+                        title = text(R.string.scan_issue_hidden_suspicious_title, suspiciousNames.size),
+                        description = text(R.string.scan_issue_hidden_suspicious_desc, names),
+                        recommendation = text(R.string.scan_issue_hidden_rec)
+                    )
+                )
             } else {
-                issues.add(ScanIssue(IssueSeverity.WARNING,
-                    "Скрытые приложения (${hiddenApps.totalCount})",
-                    "Приложения без иконки в лаунчере: ${hiddenApps.hiddenApps.take(3).joinToString(", ") { it.appName }}. Могут быть легитимными сервисами.",
-                    "Проверьте каждое приложение — если не знаете, зачем оно, удалите."))
+                val names = hiddenApps.hiddenApps.take(3).joinToString(", ") { it.appName }
+                issues.add(
+                    ScanIssue(
+                        severity = IssueSeverity.WARNING,
+                        title = text(R.string.scan_issue_hidden_title, hiddenApps.totalCount),
+                        description = text(R.string.scan_issue_hidden_desc, names),
+                        recommendation = text(R.string.scan_issue_hidden_check_rec)
+                    )
+                )
             }
         }
 
-        // Device Admin Abuse
         if (deviceAdmins.hasSuspiciousAdmins) {
             val names = deviceAdmins.activeAdmins.joinToString(", ") { it.appName }
-            issues.add(ScanIssue(IssueSeverity.CRITICAL,
-                "Подозрительные Device Admin (${deviceAdmins.activeAdmins.size})",
-                "Активные администраторы: $names. Device Admin защищает приложение от удаления.",
-                "Отозвать права администратора: Настройки > Безопасность > Администраторы устройства."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = text(R.string.scan_issue_admins_title, deviceAdmins.activeAdmins.size),
+                    description = text(R.string.scan_issue_admins_desc, names),
+                    recommendation = text(R.string.scan_issue_admins_rec)
+                )
+            )
         }
 
         val appsWithRiskyPermissions = privacyApps.filter { it.hasExcessivePermissions }
         if (appsWithRiskyPermissions.isNotEmpty()) {
-            issues.add(ScanIssue(IssueSeverity.WARNING, "Приложения с избыточными разрешениями (${appsWithRiskyPermissions.size})",
-                "Найдены приложения, запрашивающие чувствительные разрешения без явной необходимости.",
-                "Перейдите в Privacy Scanner для детального анализа и отзыва разрешений."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = text(R.string.scan_issue_excessive_title, appsWithRiskyPermissions.size),
+                    description = text(R.string.scan_issue_excessive_desc),
+                    recommendation = text(R.string.scan_issue_privacy_rec)
+                )
+            )
         }
+
         val suspiciousSpywareApps = spywareApps.filter { it.indicators.isNotEmpty() }
         if (suspiciousSpywareApps.isNotEmpty()) {
-            issues.add(ScanIssue(IssueSeverity.WARNING, "Подозрительные приложения по активности (${suspiciousSpywareApps.size})",
-                "Приложения имеют признаки скрытого мониторинга: device admin, accessibility service, sideloaded.",
-                "Перейдите в Spyware Check для детального анализа. Данная проверка — эвристика."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = text(R.string.scan_issue_spyware_title, suspiciousSpywareApps.size),
+                    description = text(R.string.scan_issue_spyware_desc),
+                    recommendation = text(R.string.scan_issue_spyware_rec),
+                    isHeuristic = true
+                )
+            )
         }
+
         val blockedRecent = firewallLogs.take(20)
         if (blockedRecent.isNotEmpty()) {
-            issues.add(ScanIssue(IssueSeverity.INFO, "Недавние блокировки сети (${blockedRecent.size})",
-                "В журнале Firewall обнаружены недавние попытки подключений.",
-                "Проверьте правила в Firewall. Логи — эвристика, не гарантируют угрозу."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.INFO,
+                    title = text(R.string.scan_issue_firewall_blocks_title, blockedRecent.size),
+                    description = text(R.string.scan_issue_firewall_blocks_desc),
+                    recommendation = text(R.string.scan_issue_firewall_blocks_rec),
+                    isHeuristic = true
+                )
+            )
         }
         if (firewallRules.isEmpty()) {
-            issues.add(ScanIssue(IssueSeverity.INFO, "Firewall: нет активных правил (рекомендация)",
-                "Для повышения защиты рекомендуется настроить правила Firewall.",
-                "Перейдите в модуль Firewall для настройки правил."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.INFO,
+                    title = text(R.string.scan_issue_firewall_empty_title),
+                    description = text(R.string.scan_issue_firewall_empty_desc),
+                    recommendation = text(R.string.scan_issue_firewall_empty_rec)
+                )
+            )
         }
+
+        val criticalSignatureFindings =
+            apkSignatures.findings.filter { it.severity == ApkSignatureCheck.Severity.CRITICAL }
+        if (criticalSignatureFindings.isNotEmpty()) {
+            val names = criticalSignatureFindings.take(3).joinToString(", ") { it.appName }
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = text(R.string.scan_issue_signature_debug_title, criticalSignatureFindings.size),
+                    description = text(R.string.scan_issue_signature_debug_desc, names),
+                    recommendation = text(R.string.scan_issue_signature_remove_rec)
+                )
+            )
+        }
+        val warningSignatureFindings =
+            apkSignatures.findings.filter { it.severity == ApkSignatureCheck.Severity.WARNING }
+        if (warningSignatureFindings.isNotEmpty()) {
+            val details = warningSignatureFindings.take(3)
+                .joinToString("; ") { "${it.appName}: ${it.reason}" }
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = text(R.string.scan_issue_signature_warning_title, warningSignatureFindings.size),
+                    description = text(R.string.scan_issue_signature_warning_desc, details),
+                    recommendation = text(R.string.scan_issue_signature_verify_rec),
+                    isHeuristic = true
+                )
+            )
+        }
+        val infoSignatureFindings =
+            apkSignatures.findings.filter { it.severity == ApkSignatureCheck.Severity.INFO }
+        if (infoSignatureFindings.isNotEmpty()) {
+            val names = infoSignatureFindings.take(3).joinToString(", ") { it.appName }
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.INFO,
+                    title = text(R.string.scan_issue_signature_expired_title, infoSignatureFindings.size),
+                    description = text(R.string.scan_issue_signature_expired_desc, names),
+                    recommendation = text(R.string.scan_issue_signature_update_rec),
+                    isHeuristic = true
+                )
+            )
+        }
+
         if (phishingResult.suspiciousMessages.isNotEmpty()) {
-            issues.add(ScanIssue(IssueSeverity.WARNING, "Подозрительные SMS-ссылки (${phishingResult.suspiciousMessages.size})",
-                "В недавних SMS найдены сообщения с ссылками и фишинговыми ключевыми словами.",
-                "Проверьте отправителей вручную. Обратите внимание: доступ к SMS может быть ограничен.",
-                isHeuristic = true))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = text(R.string.scan_issue_phishing_title, phishingResult.suspiciousMessages.size),
+                    description = text(R.string.scan_issue_phishing_desc),
+                    recommendation = text(R.string.scan_issue_phishing_rec),
+                    isHeuristic = true
+                )
+            )
         }
+
         if (devOptions.isUsbDebuggingEnabled) {
-            issues.add(ScanIssue(IssueSeverity.WARNING, "Включена USB-отладка (эвристика)",
-                "ADB-подключение — риск при физическом доступе к устройству.",
-                "Отключите: Настройки > Для разработчиков > USB-отладка"))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = text(R.string.scan_issue_usb_debug_title),
+                    description = text(R.string.scan_issue_usb_debug_desc),
+                    recommendation = text(R.string.scan_issue_usb_debug_rec),
+                    isHeuristic = true
+                )
+            )
         }
         if (devOptions.isDeveloperOptionsEnabled) {
-            issues.add(ScanIssue(IssueSeverity.INFO, "Включены Developer Options (эвристика)",
-                "Режим разработчика активен. Это повышает риск при физическом доступе к устройству.", "Отключите, если вы не разработчик."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.INFO,
+                    title = text(R.string.scan_issue_dev_options_title),
+                    description = text(R.string.scan_issue_dev_options_desc),
+                    recommendation = text(R.string.scan_issue_dev_options_rec),
+                    isHeuristic = true
+                )
+            )
         }
+
         if (patch.isCritical) {
-            issues.add(ScanIssue(IssueSeverity.CRITICAL, "Патч устарел (${patch.monthsOutdated} мес.)",
-                "Дата патча: ${patch.patchDate}. Устройство уязвимо.",
-                "Установите обновление: Настройки > О телефоне > Обновления"))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = text(R.string.scan_issue_patch_title, patch.monthsOutdated),
+                    description = text(R.string.scan_issue_patch_desc, patchDateLabel(patch.patchDate)),
+                    recommendation = text(R.string.scan_issue_patch_rec)
+                )
+            )
         } else if (patch.monthsOutdated >= 3) {
-            issues.add(ScanIssue(IssueSeverity.WARNING, "Патч устарел (${patch.monthsOutdated} мес.)",
-                "Дата патча: ${patch.patchDate}.", "Установите обновление безопасности."))
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = text(R.string.scan_issue_patch_title, patch.monthsOutdated),
+                    description = text(R.string.scan_issue_patch_desc, patchDateLabel(patch.patchDate)),
+                    recommendation = text(R.string.scan_issue_patch_rec)
+                )
+            )
         }
+
+        // Чек всего телефона: проблемы устройства (блокировка экрана, шифрование,
+        // свободное место, разрешения…) попадают в общий отчёт.
+        // Проверки, которые уже есть в самом скане (ADB, режим разработчика, патч),
+        // пропускаем, иначе одна и та же проблема штрафует оценку дважды.
+        val auditItemsToReport = deviceAudit.items.filter { it.id !in AUDIT_IDS_ALREADY_COVERED }
+        auditItemsToReport
+            .filter { it.status == com.phoneguard.deviceaudit.AuditStatus.CRITICAL }
+            .forEach { item ->
+                issues.add(ScanIssue(
+                    severity = IssueSeverity.CRITICAL,
+                    title = deviceAuditTitle(item),
+                    description = deviceAuditDetail(item),
+                    recommendation = item.recommendationRes?.let { deviceAuditText(it) }.orEmpty(),
+                    isHeuristic = false
+                ))
+            }
+        auditItemsToReport
+            .filter { it.status == com.phoneguard.deviceaudit.AuditStatus.WARNING }
+            .forEach { item ->
+                issues.add(ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = deviceAuditTitle(item),
+                    description = deviceAuditDetail(item),
+                    recommendation = item.recommendationRes?.let { deviceAuditText(it) }.orEmpty(),
+                    isHeuristic = true
+                ))
+            }
+
         if (issues.isEmpty()) {
-            issues.add(ScanIssue(IssueSeverity.INFO, "Устройство выглядит безопасным",
-                "Критических проблем не обнаружено.", "Регулярно запускайте сканирование."))
+            // Раньше текст был захардкожен по-русски и попадал в отчёт на любом языке.
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.INFO,
+                    title = deviceAuditText(R.string.scan_no_issues_title),
+                    description = deviceAuditText(R.string.scan_no_issues_description),
+                    recommendation = deviceAuditText(R.string.scan_no_issues_recommendation)
+                )
+            )
         }
         val criticalCount = issues.count { it.severity == IssueSeverity.CRITICAL }
         val warningCount = issues.count { it.severity == IssueSeverity.WARNING }
@@ -189,6 +433,35 @@ class FullScanOrchestrator @Inject constructor(
         val riskScore = (100 - criticalCount * 30 - warningCount * 10).coerceIn(0, 100)
         return FullScanReport(riskScore, issues, criticalCount, warningCount, infoCount)
     }
+
+    /**
+     * Подпись даты патча для отчёта.
+     *
+     * `SecurityPatchCheck` остаётся чистой (без `Context`) и возвращает пустую
+     * строку, если производитель не указал дату, — раньше в отчёт подставлялось
+     * русское «неизвестно» в любой локали.
+     */
+    private fun patchDateLabel(patchDate: String): String =
+        if (patchDate.isBlank()) deviceAuditText(R.string.patch_date_unknown) else patchDate
+
+    /** Заголовок проверки устройства в терминах ScanIssue (текст уже локализован). */
+    private fun deviceAuditTitle(item: com.phoneguard.deviceaudit.AuditItem): String =
+        deviceAuditText(item.titleRes)
+
+    private fun deviceAuditDetail(item: com.phoneguard.deviceaudit.AuditItem): String =
+        if (item.detailArgs.isEmpty()) {
+            deviceAuditText(item.detailRes)
+        } else {
+            deviceAuditText(item.detailRes, *item.detailArgs.toTypedArray())
+        }
+
+    /**
+     * Строка из ресурсов. Прокси через `DeviceAuditChecker.getString` больше не нужен:
+     * у оркестратора есть свой `Context`, и обёртка с `try/catch` лишь прятала бы
+     * реальные ошибки формата строк.
+     */
+    private fun deviceAuditText(resId: Int, vararg args: Any): String =
+        context.getString(resId, *args)
 
     private suspend fun saveScanHistory(report: FullScanReport): Long {
         val totalIssues = report.criticalCount + report.warningCount + report.infoCount
@@ -209,56 +482,65 @@ class FullScanOrchestrator @Inject constructor(
     }
 
     fun runFullScan(): Flow<FullScanState> = flow {
-        if (isScanning) {
-            emit(FullScanState.Progress(0, 13, "Сканирование уже выполняется...", isFinished = true))
+        if (!isScanning.compareAndSet(false, true)) {
+            emit(FullScanState.Progress(0, TOTAL_STEPS, ScanStage.ALREADY_RUNNING, isFinished = true))
             return@flow
         }
-        isScanning = true
-        val totalSteps = 13
+        val totalSteps = TOTAL_STEPS
         try {
-            emit(FullScanState.Progress(1, totalSteps, "Проверка root-доступа..."))
+            emit(FullScanState.Progress(1, totalSteps, ScanStage.ROOT))
             val rootResult = withContext(Dispatchers.IO) { rootDetectionCheck.performCheck() }
 
-            emit(FullScanState.Progress(2, totalSteps, "Проверка целостности системы..."))
+            emit(FullScanState.Progress(2, totalSteps, ScanStage.INTEGRITY))
             val integrityResult = withContext(Dispatchers.IO) { systemIntegrityCheck.performCheck() }
 
-            emit(FullScanState.Progress(3, totalSteps, "Сканирование файловой системы..."))
+            emit(FullScanState.Progress(3, totalSteps, ScanStage.FILE_SYSTEM))
             val fileScanResult = withContext(Dispatchers.IO) { fileSystemScanCheck.performScan() }
 
-            emit(FullScanState.Progress(4, totalSteps, "Проверка опций разработчика..."))
+            emit(FullScanState.Progress(4, totalSteps, ScanStage.DEVELOPER_OPTIONS))
             val devOptionsResult = withContext(Dispatchers.IO) { developerOptionsCheck.performCheck() }
 
-            emit(FullScanState.Progress(5, totalSteps, "Проверка обновлений безопасности..."))
+            emit(FullScanState.Progress(5, totalSteps, ScanStage.SECURITY_PATCH))
             val patchResult = withContext(Dispatchers.IO) { securityPatchCheck.performCheck() }
 
-            emit(FullScanState.Progress(6, totalSteps, "Проверка Accessibility-сервисов..."))
+            emit(FullScanState.Progress(6, totalSteps, ScanStage.ACCESSIBILITY))
             val accessibilityResult = withContext(Dispatchers.IO) { accessibilityServiceCheck.performCheck() }
 
-            emit(FullScanState.Progress(7, totalSteps, "Проверка overlay-атак..."))
+            emit(FullScanState.Progress(7, totalSteps, ScanStage.OVERLAYS))
             val overlayResult = withContext(Dispatchers.IO) { overlayAttackCheck.performCheck() }
 
-            emit(FullScanState.Progress(8, totalSteps, "Анализ злоупотребления разрешениями..."))
+            emit(FullScanState.Progress(8, totalSteps, ScanStage.PERMISSIONS))
             val permissionAbuseResult = withContext(Dispatchers.IO) { permissionAbuseCheck.performCheck() }
 
-            emit(FullScanState.Progress(9, totalSteps, "Поиск скрытых приложений..."))
+            emit(FullScanState.Progress(9, totalSteps, ScanStage.HIDDEN_APPS))
             val hiddenAppsResult = withContext(Dispatchers.IO) { hiddenAppsCheck.performCheck() }
 
-            emit(FullScanState.Progress(10, totalSteps, "Проверка Device Admin..."))
+            emit(FullScanState.Progress(10, totalSteps, ScanStage.DEVICE_ADMINS))
             val deviceAdminResult = withContext(Dispatchers.IO) { deviceAdminAbuseCheck.performCheck() }
 
-            emit(FullScanState.Progress(11, totalSteps, "Анализ приложений и разрешений..."))
+            emit(FullScanState.Progress(11, totalSteps, ScanStage.PRIVACY_APPS))
             val privacyApps = withContext(Dispatchers.IO) { privacyScannerRepository.getInstalledApps().first() }
 
-            emit(FullScanState.Progress(12, totalSteps, "Поиск подозрительной активности..."))
+            emit(FullScanState.Progress(12, totalSteps, ScanStage.SPYWARE))
             val spywareApps = withContext(Dispatchers.IO) { spywareCheckRepository.scanForSpyware().first() }
 
-            emit(FullScanState.Progress(13, totalSteps, "Анализ сети и правил фаервола..."))
-            val firewallDeferred = withContext(Dispatchers.IO) { async { firewallRepository.allRules.first() } }
-            val logsDeferred = withContext(Dispatchers.IO) { async { firewallRepository.allLogs.first() } }
-            val firewallRules = firewallDeferred.await()
-            val firewallLogs = logsDeferred.await()
+            emit(FullScanState.Progress(13, totalSteps, ScanStage.FIREWALL))
+            // Два запроса к БД параллельно: раньше `async` создавался внутри
+            // `withContext`, то есть фактически выполнялся последовательно.
+            val (firewallRules, firewallLogs) = coroutineScope {
+                val rulesDeferred = async(Dispatchers.IO) { firewallRepository.allRules.first() }
+                val logsDeferred = async(Dispatchers.IO) { firewallRepository.allLogs.first() }
+                rulesDeferred.await() to logsDeferred.await()
+            }
 
+            emit(FullScanState.Progress(14, totalSteps, ScanStage.APK_SIGNATURES))
+            val apkSignatureResult = withContext(Dispatchers.IO) { apkSignatureCheck.performCheck() }
+
+            emit(FullScanState.Progress(15, totalSteps, ScanStage.PHISHING))
             val phishingResult = withContext(Dispatchers.IO) { phishingUrlChecker.checkRecentMessages() }
+
+            emit(FullScanState.Progress(16, totalSteps, ScanStage.PHONE_CHECK))
+            val deviceAudit = withContext(Dispatchers.IO) { deviceAuditChecker.performAudit() }
 
             val report = buildReport(
                 root = rootResult,
@@ -275,13 +557,15 @@ class FullScanOrchestrator @Inject constructor(
                 spywareApps = spywareApps,
                 firewallRules = firewallRules,
                 firewallLogs = firewallLogs,
-                phishingResult = phishingResult
+                phishingResult = phishingResult,
+                apkSignatures = apkSignatureResult,
+                deviceAudit = deviceAudit
             )
             val historyId = withContext(Dispatchers.IO) { saveScanHistory(report) }
-            emit(FullScanState.Progress(totalSteps, totalSteps, "Сканирование завершено", isFinished = true))
+            emit(FullScanState.Progress(totalSteps, totalSteps, ScanStage.FINISHED, isFinished = true))
             emit(FullScanState.Result(report, historyId))
         } finally {
-            isScanning = false
+            isScanning.set(false)
         }
     }
 }

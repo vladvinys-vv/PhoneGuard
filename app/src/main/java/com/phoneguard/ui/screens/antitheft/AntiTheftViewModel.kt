@@ -1,12 +1,11 @@
 package com.phoneguard.ui.screens.antitheft
 
 import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
 import android.content.Context
 import android.media.MediaPlayer
 import android.net.Uri
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phoneguard.R
 import com.phoneguard.antitheft.DeviceAdminReceiverImpl
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.domain.shouldersurfer.ShoulderSurferUseCase
@@ -80,18 +79,26 @@ class AntiTheftViewModel @Inject constructor(
     }
 
     fun setPin(pin: String) {
+        // Только цифры и минимум 4 знака: иначе SMS-команда `#PG:PIN:CMD` не совпадёт
+        // с сохранённым PIN, и удалённое управление молча перестанет работать.
+        if (!validatePin(pin)) {
+            sendEvent(Event.ShowSnackbar(R.string.pin_too_short))
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            preferencesManager.savePinCode(pin)
+            // false-флаг загрузки и сообщение об ошибке: раньше падение записи в
+            // DataStore оставляло экран в состоянии загрузки навсегда.
+            val saved = runCatching { preferencesManager.savePinCode(pin) }.isSuccess
             _uiState.update { it.copy(isLoading = false) }
-            sendEvent(Event.ShowSnackbar("PIN установлен"))
+            sendEvent(Event.ShowSnackbar(if (saved) R.string.pin_set else R.string.error_generic))
         }
     }
 
     fun setBackupNumber(number: String) {
         viewModelScope.launch {
             preferencesManager.saveBackupNumber(number)
-            sendEvent(Event.ShowSnackbar("Резервный номер сохранён"))
+            sendEvent(Event.ShowSnackbar(R.string.backup_number_saved))
         }
     }
 
@@ -117,21 +124,28 @@ class AntiTheftViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.setShoulderSurferEnabled(enabled)
             if (enabled) {
-                shoulderSurferUseCase.start()
-                sendEvent(Event.ShowSnackbar("Защита от подглядывания включена"))
+                val started = shoulderSurferUseCase.start()
+                if (!started) {
+                    // Android 12+ может запретить запуск foreground-сервиса из фона:
+                    // не оставляем переключатель включённым «вхолостую».
+                    preferencesManager.setShoulderSurferEnabled(false)
+                    sendEvent(Event.ShowSnackbar(R.string.shoulder_surfer_start_failed))
+                } else {
+                    sendEvent(Event.ShowSnackbar(R.string.shoulder_surfer_enabled))
+                }
             } else {
                 shoulderSurferUseCase.stop()
-                sendEvent(Event.ShowSnackbar("Защита от подглядывания выключена"))
+                sendEvent(Event.ShowSnackbar(R.string.shoulder_surfer_disabled))
             }
         }
     }
 
     fun triggerRemoteWipe() {
-        sendEvent(Event.ShowSnackbar("Remote wipe requires FCM integration"))
+        sendEvent(Event.ShowSnackbar(R.string.remote_wipe_hint))
     }
 
     fun triggerRemoteLock() {
-        sendEvent(Event.ShowSnackbar("Remote lock requires Device Admin API"))
+        sendEvent(Event.ShowSnackbar(R.string.remote_lock_hint))
     }
 
     fun validatePhoneNumber(number: String): Boolean {
@@ -155,9 +169,9 @@ class AntiTheftViewModel @Inject constructor(
                     start()
                 }
                 _uiState.update { it.copy(isAlarmPlaying = true) }
-                sendEvent(Event.ShowSnackbar(context.getString(R.string.alarm_started)))
+                sendEvent(Event.ShowSnackbar(R.string.alarm_started))
             } catch (e: Exception) {
-                sendEvent(Event.ShowSnackbar("Не удалось запустить сигнализацию"))
+                sendEvent(Event.ShowSnackbar(R.string.alarm_start_failed))
             }
         }
     }
@@ -170,7 +184,7 @@ class AntiTheftViewModel @Inject constructor(
             } catch (e: Exception) {}
             alarmPlayer = null
             _uiState.update { it.copy(isAlarmPlaying = false) }
-            sendEvent(Event.ShowSnackbar(context.getString(R.string.alarm_stopped)))
+            sendEvent(Event.ShowSnackbar(R.string.alarm_stopped))
         }
     }
 }

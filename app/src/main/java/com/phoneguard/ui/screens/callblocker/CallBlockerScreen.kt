@@ -1,19 +1,15 @@
 package com.phoneguard.ui.screens.callblocker
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,16 +35,24 @@ fun CallBlockerScreen(
         stringResource(R.string.blocked_log)
     )
     var showAddDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val error by viewModel.error.collectAsState()
+    val invalidNumberText = stringResource(R.string.phone_number_invalid)
+
+    // Раньше ошибка «некорректный номер» никак не показывалась: строка просто
+    // не добавлялась в список, и пользователь не понимал, почему.
+    LaunchedEffect(error) {
+        if (error != null) {
+            snackbarHostState.showSnackbar(invalidNumberText)
+            viewModel.clearError()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.call_sms_blocker)) },
-                actions = {
-                    IconButton(onClick = { /* Room flows are reactive; refresh is implicit */ }, contentDescription = stringResource(R.string.scan_now)) {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
-                    }
-                }
             )
         },
         floatingActionButton = {
@@ -142,6 +146,14 @@ fun BlockRulesSection(viewModel: CallBlockerViewModel) {
                 )
                 Text(stringResource(R.string.block_international))
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            // Честное объяснение: отменить доставку SMS может только приложение
+            // по умолчанию, иначе сообщение остаётся в шторке, но попадает в журнал.
+            Text(
+                text = stringResource(R.string.sms_blocking_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -175,19 +187,19 @@ fun NumberListSection(
             if (showDeleteDialog) {
                 AlertDialog(
                     onDismissRequest = { showDeleteDialog = false },
-                    title = { Text("Удалить номер?") },
-                    text = { Text("Это действие нельзя отменить.") },
+                    title = { Text(stringResource(R.string.delete_number_title)) },
+                    text = { Text(stringResource(R.string.delete_irreversible)) },
                     confirmButton = {
                         TextButton(onClick = {
                             onDelete(number)
                             showDeleteDialog = false
                         }) {
-                            Text("Удалить")
+                            Text(stringResource(R.string.delete))
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showDeleteDialog = false }) {
-                            Text("Отмена")
+                            Text(stringResource(R.string.cancel))
                         }
                     }
                 )
