@@ -81,6 +81,17 @@ workflows:
         script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
       - name: Build production release APK
         script: ./gradlew assembleProductionRelease --no-daemon --stacktrace
+      # Play с 01.11.2025 требует 16 КБ страницы памяти для targetSdk 35 — проверяем фактический APK.
+      - name: Verify 16 KB page alignment
+        script: |
+          APK="$(ls app/build/outputs/apk/production/release/*.apk 2>/dev/null | head -1)"
+          ZIPALIGN="$(ls "$ANDROID_HOME"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$APK" ] || [ ! -x "$ZIPALIGN" ]; then
+            echo "zipalign/APK недоступны — проверка 16 КБ пропущена"
+            exit 0
+          fi
+          echo "проверяю $APK"
+          "$ZIPALIGN" -c -P 16 -v 4 "$APK" | tail -5
       # Ставится только если все шаги выше прошли: publishing-скрипты Codemagic
       # выполняются и при падении, поэтому статус для webhook'а берётся из маркера.
       - name: Mark build successful
