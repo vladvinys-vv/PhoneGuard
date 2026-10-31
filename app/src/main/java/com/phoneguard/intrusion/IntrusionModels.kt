@@ -35,8 +35,3 @@ data class IntrusionEvent(
 ) {
     fun summary(): String = "${type.name} ${severity.name} ${evidence.entries.joinToString { "${it.key}=${it.value}" }}"
 }
-
-object IntrusionSeverityPolicy {
-    fun max(left: IntrusionSeverity, right: IntrusionSeverity): IntrusionSeverity =
-        if (left.ordinal >= right.ordinal) left else right
-}

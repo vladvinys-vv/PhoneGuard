@@ -2,8 +2,6 @@ package com.phoneguard.firewall.packet
 
 import java.net.InetAddress
 
-enum class TransportProtocol { TCP, UDP, ANY }
-
 data class IPv4PacketMetadata(
     val version: Int,
     val headerLength: Int,

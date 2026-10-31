@@ -118,6 +118,13 @@
 - **`<uses-feature required="false">`** для камеры, вспышки, микрофона, GPS и телефонии: без них
   Play считал эти модули обязательными и скрывал приложение от Wi-Fi-only планшетов.
 
+### Removed
+- **Мёртвый код, который вводил в заблуждение:** `util/PatternRules.kt` с тестом `PatternRulesTest`
+  (шаблоны `*`/`?` для чёрного списка) нигде не использовался — список блокируется точным SQL-совпадением
+  по канонизированному номеру, так что тест «шаблоны работают» проверял то, чего нет в приложении.
+  Также удалены неиспользуемые `model/MalwareApp.kt` (`MalwareApp`/`MalwareType`),
+  `TransportProtocol` и `IntrusionSeverityPolicy`.
+
 ### Changed
 - **Конфигурация Gradle приведена в порядок.** Удалён устаревший `android.enableAapt2` (в AGP 8
   не используется), добавлены `android.suppressUnsupportedCompileSdk=35` (осознанное использование
