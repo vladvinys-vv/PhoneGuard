@@ -74,9 +74,9 @@ workflows:
       - name: Resources and manifest (aapt2)
         script: python3 tools/aapt2_check.py
       - name: Lint
-        script: ./gradlew lintDebug --no-daemon --stacktrace
+        script: ./gradlew lintProductionDebug --no-daemon --stacktrace
       - name: Unit tests
-        script: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+        script: ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
       - name: Build production debug APK
         script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
       - name: Build production release APK

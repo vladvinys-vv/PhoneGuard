@@ -14,7 +14,7 @@ except an opt-in host-name lookup (threat intelligence, off by default).
   `tools/kotlin_analysis.py` 0/0.
 - Конфигурация Gradle починена: в `app/build.gradle` был `mapOf(...)` из Kotlin stdlib, из-за
   которого падала **любая** задача (`MissingMethodException` на этапе конфигурации). Первый
-  зелёный прогон `./gradlew lintDebug testProductionDebugUnitTest assembleProductionDebug`
+  зелёный прогон `./gradlew lintProductionDebug testProductionDebugUnitTest assembleProductionDebug`
   ещё предстоит подтвердить в Codemagic — до этого Gradle в CI ни разу не доходил до компиляции.
 - Build automation: `.github/workflows/android-ci.yml` (Gradle scripts check → static checks →
   Kotlin frontend with `platforms;android-35` → lint → unit tests → production debug/release APKs),
@@ -29,7 +29,7 @@ except an opt-in host-name lookup (threat intelligence, off by default).
   screen). Full per-app blocking is unaffected.
 
 ## Finish line
-- `./gradlew assembleProductionDebug testDebugUnitTest lintDebug` passes on a machine with the
+- `./gradlew assembleProductionDebug testProductionDebugUnitTest lintProductionDebug` passes on a machine with the
   Android SDK (or in CI), including the `production` flavor.
 - Working tree clean, no untracked build caches, no keystores in history.
 

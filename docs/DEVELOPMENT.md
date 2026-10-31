@@ -19,10 +19,10 @@
 ## Команды
 
 ```bash
-./gradlew :app:assembleDebug              # debug APK
-./gradlew :app:testDebugUnitTest          # юнит-тесты на JVM
-./gradlew :app:connectedDebugAndroidTest  # инструментальные тесты (устройство/эмулятор)
-./gradlew :app:lintDebug                  # Android Lint (abortOnError = true)
+./gradlew :app:assembleProductionDebug    # debug APK (production flavor)
+./gradlew :app:testProductionDebugUnitTest # юнит-тесты на JVM
+./gradlew :app:connectedProductionDebugAndroidTest  # инструментальные тесты
+./gradlew :app:lintProductionDebug        # Android Lint (abortOnError = true)
 ./build_release.sh production release     # подписанные APK + AAB
 ```
 
@@ -101,7 +101,7 @@ billing issue». Проверить: `gh api repos/<owner>/<repo>/check-runs/<id
 Проверяет **конфигурацию** Gradle, потому что её ошибки валят любую задачу (`lintDebug`,
 `testDebugUnitTest`, `assembleRelease`) ещё до компиляции — с многоэкранным стектрейсом Groovy
 вместо понятного сообщения. Главный кейс: функции Kotlin stdlib в Groovy-скриптах. Так реально
-падало `./gradlew lintDebug` в Codemagic:
+падало `./gradlew lintProductionDebug` в Codemagic:
 
 ```groovy
 arguments += mapOf("room.schemaLocation" to "…")   // Kotlin DSL; в Groovy метода mapOf() нет
@@ -115,6 +115,13 @@ Gradle wrapper'а и `compileSdk` (с учётом `android.suppressUnsupportedC
 `minSdk ≤ targetSdk ≤ compileSdk`; согласованность `sourceCompatibility` и `jvmTarget`;
 отсутствующий файл из `proguardFiles`; дубликаты зависимостей с разными версиями; отсутствие
 `android.useAndroidX=true`; `kapt`/Hilt без соответствующих плагинов.
+
+Отдельная проверка — **имена задач Gradle**. У проекта два flavor'а, поэтому задач без flavor'а
+нет: `lintDebug`/`testDebugUnitTest`/`assembleDebug` не существуют, а Gradle отвечает
+`Task '…' is ambiguous` и перечисляет кандидатов (`lintProductionDebug`, `lintStagingDebug`, …).
+`gradle_check.py` сканирует CI-конфиги, скрипты и документацию: если в строке с `./gradlew`
+встречается задача вида `lintDebug`, `testDebugUnitTest`, `assembleDebug`, `connectedDebugAndroidTest`,
+это ошибка с подсказкой, какое имя нужно.
 
 Проверяется и сам `app/proguard-rules.pro`: неизвестная директива R8 (опечатка вида `-dontwarns`)
 не видна до релизной сборки, а падает уже на `assembleProductionRelease`.
@@ -273,5 +280,6 @@ build id/url, артефакты), подпись `X-PhoneGuard-Signature: sha25
 Если Android SDK недоступен (например, в песочнице), `./gradlew` запустить нельзя, но проверки
 остаются: `static_audit.py`, `sync_strings.py`, `kotlin_frontend_check.py` (нужен `kotlinc` + JDK 17;
 проверяет всё, кроме разрешения внешних библиотек) и `kotlin_analysis.py` (нужен tree-sitter).
-Первой настоящей проверкой после правок остаётся `./gradlew :app:assembleDebug testDebugUnitTest`,
+Первой настоящей проверкой после правок остаётся
+`./gradlew :app:assembleProductionDebug testProductionDebugUnitTest`,
 затем `connectedDebugAndroidTest` на устройстве.

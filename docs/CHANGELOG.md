@@ -231,6 +231,14 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **Codemagic падал на шаге `Lint`: `Task 'lintDebug' is ambiguous`.** У проекта два flavor'а
+  (`staging`, `production`), поэтому задач без flavor'а не существует: Gradle предлагал
+  `lintProductionDebug`, `lintStagingDebug` и ещё десяток кандидатов. `lintDebug` заменён на
+  `lintProductionDebug`, `testDebugUnitTest` — на `testProductionDebugUnitTest` во всех CI-конфигах
+  и документации (README, `docs/DEVELOPMENT.md`, `AGENTS.md`, `HANDOFF.md`, `.qwen/PROJECT_SUMMARY.md`,
+  `app/schemas/README.md` — там же `kspDebugKotlin` исправлен на `kaptProductionDebugKotlin`, проект
+  использует kapt). В `gradle_check.py` добавлена проверка имён задач: `./gradlew lintDebug` при
+  наличии flavor'ов теперь ошибка с подсказкой правильного имени.
 - **R8/ProGuard: подписи обобщённых типов и JSR-305.** В `app/proguard-rules.pro` не было
   `-keepattributes Signature` (Gson/Room не восстанавливают generic-поля после обфускации —
   падение уже в рантайме) и `-dontwarn javax.annotation.**` (R8 считает отсутствующие

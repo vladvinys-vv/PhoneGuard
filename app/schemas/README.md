@@ -29,7 +29,8 @@ statically (`check_migrations_match_entities`), so drift is visible even without
 ## Refreshing the schemas
 
 ```bash
-./gradlew :app:kspDebugKotlin   # or any task that compiles room-compiler, e.g. assembleDebug
+./gradlew :app:kaptProductionDebugKotlin   # or any task that runs room-compiler,
+                                           # e.g. assembleProductionDebug
 git add app/schemas
 ```
 
