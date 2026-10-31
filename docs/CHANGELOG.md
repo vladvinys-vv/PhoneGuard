@@ -3,6 +3,16 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
+  (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
+  там, где нет Google Maven: в песочнице так проходят 105 тестов в 12 файлах. Заглушки
+  `androidx.room`/`androidx.annotation`/`javax.inject` втаскивают под прогон модели и конвертеры.
+  Включён в `./tools/check_all.sh` (пропускается без `kotlinc`).
+- **Тесты на непокрытую логику (58 новых):** конвертеры Room (`ConvertersTest`, включая чтение
+  неизвестных значений enum), эвристика «спрятанных» приложений (`HiddenAppHeuristicsTest`),
+  флаги фрагментации IPv4 (`PacketMetadataTest`), устойчивость парсеров пакетов
+  (`PacketParserRobustnessTest`: fuzz случайных байт, обрезанные и лживые заголовки),
+  формат `IntrusionEvent.summary()` (`IntrusionEventSummaryTest`).
 - **Лицензия MIT.** В корень добавлен `LICENSE` (MIT, © 2026 Vlad Vinys), раздел README
   «Лицензия» больше не утверждает «all rights reserved» — это противоречило файлу лицензии.
   Заодно удалён корневой `CHANGELOG.md`: он дублировал этот файл и содержал неверную дату
@@ -236,6 +246,12 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **`DeviceAuditModelsTest` ожидал неверную оценку.** В тесте «чека всего телефона» стояло
+  `assertEquals(51, report.score)` при 15+15+7 = 63 — тест никогда не запускался (Gradle не
+  доходил до тестов), и на первом же реальном прогоне упал бы. Ожидание исправлено на 63.
+- **`IntrusionEvent.summary()` оставлял хвостовой пробел и разделял улики запятыми.** При пустом
+  `evidence` получалось `"BRUTE_FORCE MEDIUM "`, а `"a=1, b=2"` неудобно грепать. Теперь
+  `"BRUTE_FORCE MEDIUM"` и `"a=1 b=2"`.
 - **`CheckAarMetadataTask`: `sqlcipher-android:4.19.1` требует `compileSdk 36`.** Сборка падала с
   «requires libraries and applications that depend on it to compile against version 36 or later».
   Виновник — сама библиотека: с 4.19 она собирается с `compileSdk 36`, и её AAR-metadata требует 36

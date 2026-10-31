@@ -65,7 +65,7 @@ class DeviceAuditModelsTest {
         assertEquals(3, report.issueCount)
         assertEquals(5, report.items.size)
         assertEquals(1234L, report.timestamp)
-        assertEquals(51, report.score) // 100 - 15 - 15 - 7
+        assertEquals(63, report.score) // 100 - 15 - 15 - 7
     }
 
     @Test

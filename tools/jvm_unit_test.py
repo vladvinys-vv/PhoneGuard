@@ -1,0 +1,405 @@
+#!/usr/bin/env python3
+"""Запуск unit-тестов чистой логики без Gradle, Maven и JUnit-jar.
+
+Зачем: в песочнице нет доступа к Google Maven, поэтому `./gradlew testProductionDebugUnitTest`
+не запускается, а `kotlin_frontend_check.py` только компилирует. Этот скрипт компилирует
+`kotlinc`-ом исходники без Android-зависимостей вместе с их тестами и **выполняет** их
+настоящим JVM-раннером с минимальным шимом `org.junit` (аннотации + `Assert` + `Runner`).
+
+Шим закрывает только то, что нужно чистым тестам: JUnit-аннотации, `Assert`, а также заглушки
+аннотаций Room и `javax.inject` — благодаря им под тесты попадают модели и конвертеры, которые
+в рантайме не тянут Android.
+
+Что получается на выходе: сколько тестов реально прогнано, сколько упало (с сообщением и местом
+падения). Тесты, которым нужны Android, Robolectric, MockK, OkHttp, Gson или полноценные
+корутины, здесь не выполняются — для них нет артефактов без сети; их проверяет Gradle.
+
+Использование:
+    python3 tools/jvm_unit_test.py            # прогнать всё, что получается
+    python3 tools/jvm_unit_test.py --verbose  # показать, что и почему пропущено
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+MAIN = ROOT / "app/src/main/java"
+TEST = ROOT / "app/src/test/java"
+CACHE = Path(tempfile.gettempdir()) / "phoneguard-jvm-tests"
+
+# Префиксы импортов, которые шим закрывает заглушками.
+STUBBED_PREFIXES = ("androidx.room.", "androidx.annotation.", "javax.inject.", "kotlinx.coroutines.flow.")
+
+# Импорты, которые без сети не разрешить даже заглушкой.
+BLOCKING_PREFIXES = (
+    "android.", "androidx.", "io.mockk", "org.robolectric", "okhttp3", "com.google.gson",
+    "kotlinx.coroutines", "dagger.", "androidx.test", "com.google.android",
+)
+
+JUNIT_SHIM = '''package org.junit
+
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION)
+annotation class Test(val expected: kotlin.reflect.KClass<out Throwable> = None::class)
+class None : Throwable()
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Before
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class After
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION, AnnotationTarget.CLASS)
+annotation class Ignore(val value: String = "")
+class AssertionFailure(message: String) : AssertionError(message)
+
+object Assert {
+    @JvmStatic fun fail(message: String? = null): Nothing = throw AssertionFailure(message ?: "fail()")
+    @JvmStatic fun assertTrue(condition: Boolean) = assertTrue(null, condition)
+    @JvmStatic fun assertTrue(message: String?, condition: Boolean) {
+        if (!condition) throw AssertionFailure(message ?: "ожидалось true")
+    }
+    @JvmStatic fun assertFalse(condition: Boolean) = assertFalse(null, condition)
+    @JvmStatic fun assertFalse(message: String?, condition: Boolean) {
+        if (condition) throw AssertionFailure(message ?: "ожидалось false")
+    }
+    @JvmStatic fun assertNull(actual: Any?) = assertNull(null, actual)
+    @JvmStatic fun assertNull(message: String?, actual: Any?) {
+        if (actual != null) throw AssertionFailure("${message ?: "ожидалось null"}: получено $actual")
+    }
+    @JvmStatic fun assertNotNull(actual: Any?) = assertNotNull(null, actual)
+    @JvmStatic fun assertNotNull(message: String?, actual: Any?) {
+        if (actual == null) throw AssertionFailure(message ?: "ожидалось не null")
+    }
+    @JvmStatic fun assertEquals(expected: Any?, actual: Any?) = assertEquals(null, expected, actual)
+    @JvmStatic fun assertEquals(message: String?, expected: Any?, actual: Any?) {
+        if (expected != actual) throw AssertionFailure("${message?.plus(": ") ?: ""}ожидалось <$expected>, получено <$actual>")
+    }
+    @JvmStatic fun assertEquals(expected: Double, actual: Double, delta: Double) = assertEquals(null, expected, actual, delta)
+    @JvmStatic fun assertEquals(message: String?, expected: Double, actual: Double, delta: Double) {
+        if (expected.isNaN() != actual.isNaN() || (!expected.isNaN() && kotlin.math.abs(expected - actual) > delta)) {
+            throw AssertionFailure("${message?.plus(": ") ?: ""}ожидалось <$expected>, получено <$actual>")
+        }
+    }
+    @JvmStatic fun assertNotEquals(unexpected: Any?, actual: Any?) {
+        if (unexpected == actual) throw AssertionFailure("не ожидалось <$unexpected>")
+    }
+    @JvmStatic fun assertArrayEquals(expected: ByteArray, actual: ByteArray) {
+        if (!expected.contentEquals(actual)) throw AssertionFailure("массивы различаются")
+    }
+    @JvmStatic fun assertSame(expected: Any?, actual: Any?) {
+        if (expected !== actual) throw AssertionFailure("ожидался тот же объект")
+    }
+    @JvmStatic fun <T : Throwable> assertThrows(type: Class<T>, block: () -> Unit): T {
+        try { block() } catch (thrown: Throwable) {
+            if (type.isInstance(thrown)) return type.cast(thrown)
+            throw AssertionFailure("ожидалось ${type.name}, получено ${thrown::class.java.name}: ${thrown.message}")
+        }
+        throw AssertionFailure("ожидалось ${type.name}, но исключения не было")
+    }
+}
+'''
+
+RUNNER_SHIM = '''package org.junit
+
+import kotlin.reflect.KClass
+
+object Runner {
+    @JvmStatic fun main(args: Array<String>) {
+        var passed = 0
+        var failed = 0
+        var skipped = 0
+        for (className in args) {
+            val type: KClass<*> = Class.forName(className).kotlin
+            val methods = type.java.declaredMethods
+            val tests = methods
+                .filter { it.isAnnotationPresent(Test::class.java) && !it.isAnnotationPresent(Ignore::class.java) }
+                .sortedBy { it.name }
+            if (type.annotations.any { it is Ignore }) { skipped += tests.size; continue }
+            for (test in tests) {
+                val instance = type.java.getDeclaredConstructor().newInstance()
+                try {
+                    methods.filter { it.isAnnotationPresent(Before::class.java) }.forEach { it.isAccessible = true; it.invoke(instance) }
+                    test.isAccessible = true
+                    val expected = test.getAnnotation(Test::class.java).expected.java
+                    var thrown: Throwable? = null
+                    try { test.invoke(instance) }
+                    catch (error: java.lang.reflect.InvocationTargetException) { thrown = error.cause ?: error }
+                    if (expected != None::class.java) {
+                        if (thrown == null || !expected.isInstance(thrown)) {
+                            throw AssertionFailure("ожидалось исключение ${expected.name}, получено " +
+                                (thrown?.let { it::class.java.name } ?: "ничего"))
+                        }
+                    } else if (thrown != null) throw thrown
+                    methods.filter { it.isAnnotationPresent(After::class.java) }.forEach { it.isAccessible = true; it.invoke(instance) }
+                    passed++
+                    println("PASS ${type.simpleName}.${test.name}")
+                } catch (error: Throwable) {
+                    failed++
+                    val cause = (error as? java.lang.reflect.InvocationTargetException)?.cause ?: error
+                    val where = cause.stackTrace.firstOrNull { it.className.startsWith("com.phoneguard") }?.let { " @ $it" } ?: ""
+                    println("FAIL ${type.simpleName}.${test.name} :: ${cause::class.java.simpleName}: ${cause.message}$where")
+                }
+            }
+        }
+        println("SUMMARY passed=$passed failed=$failed skipped=$skipped")
+        if (failed > 0) kotlin.system.exitProcess(1)
+    }
+}
+'''
+
+STUB_SOURCES = {
+    "androidx/room/Room.kt": '''package androidx.room
+
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class TypeConverter
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS) annotation class Entity(
+    val tableName: String = "",
+    val indices: Array<Index> = [],
+    val primaryKeys: Array<String> = [],
+    val foreignKeys: Array<ForeignKey> = [],
+    val inheritSuperIndices: Boolean = false,
+)
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS) annotation class ForeignKey(
+    val entity: kotlin.reflect.KClass<*> = Any::class,
+    val parentColumns: Array<String> = [],
+    val childColumns: Array<String> = [],
+    val onDelete: Int = 1,
+    val onUpdate: Int = 1,
+) {
+    companion object {
+        const val NO_ACTION: Int = 1
+        const val RESTRICT: Int = 2
+        const val SET_NULL: Int = 3
+        const val SET_DEFAULT: Int = 4
+        const val CASCADE: Int = 5
+    }
+}
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS) annotation class Dao
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Query(val value: String)
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Insert(val onConflict: Int = 3)
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Update
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Delete
+object OnConflictStrategy { const val REPLACE: Int = 1; const val IGNORE: Int = 2; const val ABORT: Int = 3 }
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS) annotation class DatabaseView(val value: String = "", val viewName: String = "")
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY_GETTER) annotation class PrimaryKey(val autoGenerate: Boolean = false)
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER) annotation class ColumnInfo(val name: String = "", val defaultValue: String = VALUE_UNSPECIFIED) {
+    companion object { const val VALUE_UNSPECIFIED: String = "[value-unspecified]" }
+}
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS) annotation class TypeConverters(vararg val value: kotlin.reflect.KClass<*> = [])
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FIELD) annotation class Index(val value: Array<String> = [], val unique: Boolean = false, val name: String = "", val orders: IntArray = [])
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FIELD) annotation class Embedded(val prefix: String = "")
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Ignore
+''',
+    "androidx/annotation/Annotations.kt": '''package androidx.annotation
+
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.FUNCTION, AnnotationTarget.FIELD, AnnotationTarget.PROPERTY) annotation class StringRes
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.FUNCTION, AnnotationTarget.FIELD, AnnotationTarget.PROPERTY) annotation class DrawableRes
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.FUNCTION, AnnotationTarget.FIELD, AnnotationTarget.PROPERTY) annotation class ColorRes
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.FUNCTION, AnnotationTarget.FIELD, AnnotationTarget.PROPERTY) annotation class RawRes
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.FUNCTION, AnnotationTarget.FIELD, AnnotationTarget.PROPERTY) annotation class AttrRes
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.FUNCTION, AnnotationTarget.FIELD, AnnotationTarget.PROPERTY) annotation class AnyRes
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY) annotation class RequiresApi(val value: Int = 1)
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY) annotation class RequiresPermission(vararg val value: String = [])
+''',
+    "javax/inject/Inject.kt": '''package javax.inject
+
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CONSTRUCTOR, AnnotationTarget.FIELD, AnnotationTarget.FUNCTION)
+annotation class Inject
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class Singleton
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class Named(val value: String = "")
+''',
+    "kotlinx/coroutines/flow/Flow.kt": '''package kotlinx.coroutines.flow
+
+interface Flow<out T>
+''',
+}
+
+
+def resolve_tool(name: str, env: str, default: str) -> str | None:
+    from_env = os.environ.get(env)
+    if from_env and Path(from_env).exists():
+        return from_env
+    found = shutil.which(name)
+    if found:
+        return found
+    return default if Path(default).exists() else None
+
+
+def imports_of(path: Path) -> list[str]:
+    return re.findall(r"^import\s+([\w.]+)", path.read_text(encoding="utf-8"), re.M)
+
+
+def blocking_import(path: Path) -> str | None:
+    for name in imports_of(path):
+        stubbed = any(name.startswith(prefix) for prefix in STUBBED_PREFIXES)
+        if not stubbed and any(name.startswith(prefix) for prefix in BLOCKING_PREFIXES):
+            return name
+    return None
+
+
+def kotlin_class_of(path: Path) -> str:
+    source = path.read_text(encoding="utf-8")
+    package = re.search(r"^package\s+([\w.]+)", source, re.M)
+    name = re.search(r"^(?:internal |private |public )?(?:class|object) (\w+)", source, re.M)
+    if not package or not name:
+        return ""
+    return f"{package.group(1)}.{name.group(1)}"
+
+
+def class_index() -> dict[str, tuple[Path, str]]:
+    """{имя класса: (файл, пакет)} по всем исходникам приложения."""
+    index: dict[str, tuple[Path, str]] = {}
+    for path in MAIN.rglob("*.kt"):
+        source = path.read_text(encoding="utf-8")
+        package = re.search(r"^package\s+([\w.]+)", source, re.M)
+        if not package:
+            continue
+        for name in re.findall(r"^(?:internal |private |public |abstract |open |sealed |data |enum )*"
+                               r"(?:class|object|interface) (\w+)", source, re.M):
+            index.setdefault(name, (path, package.group(1)))
+    return index
+
+
+def package_of(path: Path) -> str:
+    match = re.search(r"^package\s+([\w.]+)", path.read_text(encoding="utf-8"), re.M)
+    return match.group(1) if match else ""
+
+
+def resolve_sources(test: Path, index: dict[str, tuple[Path, str]]) -> tuple[list[Path], str | None]:
+    """Транзитивное замыкание исходников, нужных тесту. Возвращает (файлы, причина_пропуска)."""
+    included: dict[Path, str] = {test: test.read_text(encoding="utf-8")}
+    queue = [(test, included[test])]
+    while queue:
+        path, text = queue.pop()
+        own_package = package_of(path)
+        for name, (source_path, package) in index.items():
+            if source_path in included or source_path == path:
+                continue
+            if not re.search(rf"\b{re.escape(name)}\b", text):
+                continue
+            same_package = package == own_package
+            imported = f"import {package}.{name}" in text or f"import {package}.*" in text
+            if not (same_package or imported):
+                continue
+            reason = blocking_import(source_path)
+            if reason:
+                return [], f"{source_path.relative_to(ROOT)} требует {reason}"
+            included[source_path] = source_path.read_text(encoding="utf-8")
+            queue.append((source_path, included[source_path]))
+    return sorted(p for p in included if p != test), None
+
+
+def build_shim(kotlinc: str) -> Path | None:
+    shim_jar = CACHE / "junit-shim.jar"
+    marker = CACHE / "shim-version"
+    version = str(len(JUNIT_SHIM) + len(RUNNER_SHIM) + sum(len(v) for v in STUB_SOURCES.values()))
+    if shim_jar.exists() and marker.exists() and marker.read_text().strip() == version:
+        return shim_jar
+    CACHE.mkdir(parents=True, exist_ok=True)
+    work = CACHE / "shim-src"
+    if work.exists():
+        shutil.rmtree(work)
+    for relative, content in STUB_SOURCES.items():
+        target = work / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    (work / "JUnit.kt").write_text(JUNIT_SHIM, encoding="utf-8")
+    (work / "Runner.kt").write_text(RUNNER_SHIM, encoding="utf-8")
+    sources = [str(p) for p in work.rglob("*.kt")]
+    result = subprocess.run(
+        [kotlinc, *sources, "-include-runtime", "-d", str(shim_jar), "-nowarn"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0 or not shim_jar.exists():
+        print("не удалось собрать шим org.junit:")
+        print((result.stderr or result.stdout).strip()[:3000])
+        return None
+    marker.write_text(version, encoding="utf-8")
+    return shim_jar
+
+
+def compile_and_run(kotlinc: str, java: str, shim: Path, tests: list[Path], sources: list[Path],
+                    out_dir: Path) -> tuple[bool, str]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [kotlinc, *[str(p) for p in sources], *[str(p) for p in tests],
+         "-classpath", str(shim), "-d", str(out_dir), "-nowarn"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return False, (result.stderr or result.stdout).strip()
+    classes = sorted({kotlin_class_of(p) for p in tests} - {""})
+    if not classes:
+        return False, "в тестах не найдено классов"
+    run = subprocess.run(
+        [java, "-cp", os.pathsep.join([str(out_dir), str(shim)]), "org.junit.Runner", *classes],
+        capture_output=True, text=True,
+    )
+    return True, run.stdout + run.stderr
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verbose", action="store_true", help="показать пропущенные тесты и почему")
+    args = parser.parse_args()
+
+    kotlinc = resolve_tool("kotlinc", "KOTLINC", "/tmp/kt/package/bin/kotlinc")
+    java_home = os.environ.get("JAVA_HOME", "/tmp/pyjd17/jdk4py/java-runtime")
+    java = resolve_tool("java", "JAVA", str(Path(java_home) / "bin" / "java"))
+    if not kotlinc or not java:
+        print("jvm_unit_test: пропущено — нет kotlinc/java")
+        return 0
+
+    shim = build_shim(kotlinc)
+    if shim is None:
+        return 1
+
+    index = class_index()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        skipped: list[tuple[Path, str]] = []
+        collected: list[str] = []
+        executed: list[Path] = []
+        for test in sorted(TEST.rglob("*Test.kt")):
+            reason = blocking_import(test)
+            if reason:
+                skipped.append((test, f"импорт {reason}"))
+                continue
+            sources, skip_reason = resolve_sources(test, index)
+            if skip_reason:
+                skipped.append((test, skip_reason))
+                continue
+            ok, out = compile_and_run(kotlinc, java, shim, [test], sources, work / test.stem)
+            if not ok:
+                skipped.append((test, "не компилируется без Android/Robolectric/MockK"))
+                continue
+            executed.append(test)
+            collected.append(out)
+
+        output = "\n".join(collected)
+        failures = [line for line in output.splitlines() if line.startswith("FAIL ")]
+        for line in failures:
+            print(line)
+        summaries = re.findall(r"SUMMARY passed=(\d+) failed=(\d+) skipped=(\d+)", output)
+        passed = sum(int(item[0]) for item in summaries)
+        failed = sum(int(item[1]) for item in summaries)
+        summary = bool(summaries)
+
+        if args.verbose:
+            for test, reason in skipped:
+                print(f"skip {test.relative_to(ROOT)} — {reason}")
+
+        executed_names = ", ".join(t.stem for t in executed) or "—"
+        print(f"тест-файлов выполнено: {len(executed)} ({executed_names})")
+        print(f"тестов: {passed + failed}, прошло: {passed}, упало: {failed}")
+        if not summary:
+            print("раннер не отработал — смотрите вывод компиляции выше")
+            return 1
+        return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -150,6 +150,27 @@ python3 tools/gradle_check.py
 python3 tools/gradle_check.py --warnings-as-errors
 ```
 
+### `tools/jvm_unit_test.py`
+
+Компилирует и **выполняет** unit-тесты чистой логики без Gradle, Maven и JUnit-jar: `kotlinc`
+плюс минимальный шим `org.junit` (аннотации `@Test`/`@Before`/`@After`/`@Ignore`, `Assert`,
+раннер через reflection). Нужен там, где нет доступа к Google Maven — например, в песочнице, где
+`./gradlew testProductionDebugUnitTest` не запускается, а `kotlin_frontend_check.py` только
+компилирует.
+
+```bash
+python3 tools/jvm_unit_test.py            # прогнать всё, что получится
+python3 tools/jvm_unit_test.py --verbose  # показать, что пропущено и почему
+```
+
+Как выбираются тесты: берётся тест-файл без Android/Robolectric/MockK/OkHttp/Gson/корутин,
+к нему рекурсивно подтягиваются исходники по импортам и одноимённым классам, а вместо аннотаций
+Room, `androidx.annotation` и `javax.inject` подставляются заглушки — поэтому под прогон попадают
+модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 105 тестов в 12 файлах.
+
+Что остаётся Gradle: тесты на Android/Robolectric/MockK и всё, что требует настоящих AndroidX-
+артефактов; для них скрипт печатает `skip … — импорт …`.
+
 ### `tools/static_audit.py`
 
 Проверки без Gradle (регулярные выражения + разбор XML). Ловит то, что иначе падает на сборке или

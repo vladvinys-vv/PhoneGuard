@@ -33,5 +33,14 @@ data class IntrusionEvent(
     val photoPath: String? = null,
     val handled: Boolean = false
 ) {
-    fun summary(): String = "${type.name} ${severity.name} ${evidence.entries.joinToString { "${it.key}=${it.value}" }}"
+    /**
+     * Однострочное описание для журнала и уведомлений: `ТИП ВАЖНОСТЬ ключ=значение …`.
+     *
+     * Улики разделяются пробелом, а не запятой, и при их отсутствии не остаётся хвостового
+     * пробела — иначе в логах появляется «BRUTE_FORCE MEDIUM » и grep по `MEDIUM$` не работает.
+     */
+    fun summary(): String = buildString {
+        append(type.name).append(' ').append(severity.name)
+        evidence.entries.forEach { entry -> append(' ').append(entry.key).append('=').append(entry.value) }
+    }
 }

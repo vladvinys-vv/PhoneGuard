@@ -133,6 +133,7 @@ python3 tools/sync_strings.py            # идемпотентная синхр
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор (с android.jar — строже)
 python3 tools/aapt2_check.py             # опционально: ресурсы и манифест через aapt2 (как Gradle)
 python3 tools/kotlin_analysis.py         # опционально: парсер Kotlin (нужен tree-sitter)
+python3 tools/jvm_unit_test.py           # опционально: **запуск** тестов чистой логики на JVM (kotlinc + шим JUnit)
 python3 tools/webhook_notify.py --dry-run # опционально: payload уведомления о сборке (docs/CI_WEBHOOKS.md)
 ```
 

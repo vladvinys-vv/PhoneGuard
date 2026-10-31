@@ -37,6 +37,15 @@ else
     echo "skip: kotlinc не найден (нужен Kotlin 2.1+ и JDK 17)"
 fi
 
+step "jvm_unit_test.py (опционально)"
+# Реальный прогон тестов чистой логики без Gradle: kotlinc + шим org.junit.
+# Нужен там, где нет доступа к Google Maven (например, в песочнице) — Gradle-тесты там не идут.
+if command -v kotlinc >/dev/null 2>&1; then
+    python3 tools/jvm_unit_test.py || failed=1
+else
+    echo "skip: kotlinc не найден — JVM-тесты без Gradle пропущены"
+fi
+
 step "aapt2_check.py (опционально)"
 # Ресурсы и манифест так, как их проверяет Gradle. Нужен aapt2 ≥ 2.20 и android.jar:
 # см. docstring tools/aapt2_check.py (npm pack aaptjs3 / Android SDK build-tools).
