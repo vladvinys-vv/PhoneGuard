@@ -1,79 +1,46 @@
 # Project rules: PhoneGuard
 
-Global rules live in ~/.zcode/AGENTS.md. This file adds project specifics.
-HANDOFF.md is the full contract (mission, queue, acceptance per task).
+This file describes the repository for automated agents and new contributors.
+Facts here must match the code; the authoritative docs are `README.md`,
+`docs/DEVELOPMENT.md` and `docs/CHANGELOG.md`.
 
 ## Project
-- What it is: Android native security application with device malware scanning, local VPN firewall, anti-theft SMS remote commands, call screening, and encrypted biometric vault.
-- Stack: Android SDK (Kotlin), Jetpack Compose, Room DB, Android VpnService, Biometric API, Coroutines
-- Target users / market: Global (UI in Russian/English)
+- Android native security app: full device scan, phone check, local VPN firewall,
+  anti-theft SMS commands, call/SMS blocking, encrypted biometric vault.
+- Stack: Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.6.1 + SQLCipher,
+  WorkManager, Coroutines. `minSdk 26`, `compileSdk`/`targetSdk 35`, JDK 17,
+  Gradle 8.9 (Groovy DSL), AGP 8.5.2, flavors `staging` / `production`.
+- Everything that can run offline does; UI strings live in `values`, `values-en`,
+  `values-ru`, `values-de`.
 
-## Commands (run from the workspace root with absolute paths)
-- Build: `./gradlew assembleDebug` (Windows: `.\gradlew.bat assembleDebug`)
-- Test: `./gradlew test` (Windows: `.\gradlew.bat test`)
-- Language check (must print nothing before each commit):
-  `git -C C:/Users/vladv/projects/PhoneGuard diff --cached | grep -nP '[\x{4e00}-\x{9fff}]' || true`
+## Commands (run from the repository root)
+- All checks available without Android SDK: `./tools/check_all.sh`
+  (`static_audit.py`, `sync_strings.py --check`, optionally `kotlin_frontend_check.py`
+  and `kotlin_analysis.py`).
+- Strings: `python3 tools/sync_strings.py` (writes) / `--check` (reports only).
+  After editing strings run the check and commit the result.
+- Compiler check: `python3 tools/kotlin_frontend_check.py` — needs `kotlinc` 2.1+ and
+  JDK 17; with `--android-jar` (or `ANDROID_JAR` / `ANDROID_HOME`) it also validates
+  real `android.*` signatures. `./tools/fetch_android_jar.sh` fetches `android.jar`
+  where `dl.google.com` is blocked.
+- Build / test / lint (needs the Android SDK and Maven access):
+  `./gradlew assembleProductionDebug`, `./gradlew testDebugUnitTest`, `./gradlew lintDebug`.
+  CI (`.github/workflows/android-ci.yml`) runs the static checks, the Kotlin frontend,
+  lint, unit tests and both production builds.
 
 ## Boundaries
-- Workspace: C:\Users\vladv\projects\PhoneGuard
-- Allowed write paths: `app/src/`, `docs/`, `WORKLOG.md`, `STUCK.md`, `STATUS.md`, `requests/`
-- Read-only: `gradle/`, `gradlew*`, `build.gradle` root
-- Project red lines: NEVER commit .keystore, .jks, or hardcoded cryptographic master keys; keep allowBackup="false".
+- Never commit keystores, `*.jks`, `keystore.properties`, or cryptographic master keys.
+- Keep `allowBackup="false"`, `dataExtractionRules` and `backup_rules` cloud/D2D-safe.
+- Do not weaken privacy claims: no Firebase, no analytics/crash SDKs, no telemetry.
+  Threat intelligence stays opt-in and sends only a host name.
+- Declared permissions must be used by code or a manifest component; unused sensitive
+  permissions are a store-review risk.
 
 ## Conventions
-- Kotlin: idiomatic Kotlin, safe coroutines, proper timeout handling in background services
-- One feature per commit; commit message format: `T<id>: <what>` or conventional commit
-
-## AI Agent Skills & MCP Integration (2026)
-
-### Recommended Skill Collections
-```bash
-# Skill management
-npm install -g @skillkit/cli && skillkit init
-skillkit recommend
-
-# Android / Kotlin / Security skills
-npx skills add seb1n/awesome-ai-agent-skills --skill android,kotlin,security
-npx skills add alirezarezvani/claude-skills --skill android,security
-
-# Security scan before install
-npm install -g @nvidia/skillspector
-skillspector scan <repo-url>
-```
-
-### MCP Server Configuration
-Configure in agent settings (`.claude/settings.json`, `kilo.jsonc`):
-```json
-{
-  "mcpServers": {
-    "openregister": "openregister/openregister-sdk",
-    "browser": "browser-use/browser-use",
-    "bundestag": "local-bundestag-api",
-    "bsi": "local-bsi-threat-intel"
-  }
-}
-```
-
-### German API Integration Points
-| API | MCP/REST | Use Case | Config |
-|---|---|---|---|
-| OpenRegister | REST + SDK | Verify app publisher legitimacy | `OPENREGISTER_API_KEY` |
-| Bundestag DIP | REST | Legal compliance reference | No auth |
-| Bundestag Live | REST | Regulatory change monitoring | No auth |
-| BSI Advisories | RSS/API | Threat intelligence feeds | No auth |
-| OpenPlz | REST | Geo-fencing for anti-theft | No auth |
-| Feiertage | REST | Maintenance window optimization | No auth |
-
-### Subagent Delegation (Kilo Multi-Agent)
-Use native `task(agent="...", ...)` for specialized work:
-- `task(agent="architect", ...)` — Before new modules, VPN service changes, crypto implementations
-- `task(agent="debugger", ...)` — Test failures, VpnService crashes, BiometricPrompt issues
-- `task(agent="revisor", ...)` — Pre-commit: security scan, coverage, diff analysis
-- `task(agent="security-reviewer", ...)` — Crypto audit, permission review, privacy impact
-
-### Verification Gates (Required per Commit)
-```bash
-./gradlew lintDebug test assembleDebug
-# Secret scanning
-npx -y gitleaks detect --no-git -v
-```
+- No user-facing literals: use `R.string.*`. New keys go through `tools/sync_strings.py`
+  with `default`/`en`/`ru`/`de` values.
+- Compare text with `uppercase(Locale.US)` / `lowercase(Locale.ROOT)`.
+- Room migrations must be added to `ALL_MIGRATIONS` and to `AppDatabase` version.
+- Conventional commits (`fix:`, `feat:`, `chore:`, `docs:`), one logical change per commit.
+- Any change that touches behavior updates `docs/CHANGELOG.md`; claims in `README.md`
+  and `docs/*.md` must be true (numbers of checks, steps, permissions, features).

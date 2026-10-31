@@ -1,24 +1,37 @@
 # HANDOFF: PhoneGuard
 
 ## Mission
-Deliver a lightweight, private, permission-conscious Android security tool combining local packet inspection via VpnService, trusted-sender remote anti-theft triggers, and PBKDF2/AES-GCM secured vault storage.
+Private, permission-conscious Android security tool: on-device full scan and phone check,
+local VPN firewall without root, trusted-sender anti-theft commands, call/SMS blocking,
+and an encrypted biometric vault. Everything that can run offline does; nothing is uploaded
+except an opt-in host-name lookup (threat intelligence, off by default).
 
-## Boundaries
-- Allowed write paths: `app/src/`, `docs/`, WORKLOG.md, STUCK.md, STATUS.md, requests/
-- Do not touch: release keystores, native gradle wrappers
-- Decisions reserved for me: firewall default rules, anti-theft trigger syntax, permission list
-
-## Environment
-- OS: Windows 11 (Git Bash). Runtimes: JDK 17, Android SDK.
-- External services: none (local on-device processing)
+## Current state (2026-10-31)
+- Branch `arena/28ec46dc-phoneguard`; all checks green:
+  `tools/static_audit.py` 0/0, `tools/sync_strings.py --check` 0 missing,
+  `tools/kotlin_frontend_check.py` 0 problems (209 files, with real `android.jar`),
+  `tools/kotlin_analysis.py` 0/0.
+- Build automation: `.github/workflows/android-ci.yml` (static checks → Kotlin frontend with
+  `platforms;android-35` → lint → unit tests → production debug/release APKs), `codemagic.yaml`,
+  `build_release.sh`. `jules.yml` only validates `.jules` config.
+- Known, documented limitation: domain/IP lists in the firewall are stored but not enforced
+  without an upstream VPN forward (see `firewall_lists_not_enforced_note` and the firewall
+  screen). Full per-app blocking is unaffected.
 
 ## Finish line
-Repository default branch is `main`, untracked gradle caches removed, security hardening committed.
+- `./gradlew assembleProductionDebug testDebugUnitTest lintDebug` passes on a machine with the
+  Android SDK (or in CI), including the `production` flavor.
+- Working tree clean, no untracked build caches, no keystores in history.
 
-## Queue
-### T1: Security hardening and repository hygiene
-- Goal: Add AGENTS.md, HANDOFF.md, .gitignore, remove tracked .gradle cache, commit PBKDF2 PIN hashing and VPN packet parsing fixes.
-- Context: Migrated to central `projects/` directory, default branch verified as main.
-- Constraints: Read-only check.
-- Done when: `AGENTS.md` and `HANDOFF.md` present, working directory clean on main.
-- Not acceptable: tracking binary build caches.
+## Where the truth lives
+- `README.md` — features, integrations, CI, commands.
+- `docs/DEVELOPMENT.md` — environment, checks (including how to get `kotlinc`/`android.jar`),
+  conventions.
+- `docs/CHANGELOG.md` — what changed and why (including fixed defects).
+- `docs/RELEASE.md`, `docs/MANUAL_TESTING.md` — release checklist and manual scenarios.
+
+## Boundaries
+- Never commit keystores, `keystore.properties` or cryptographic master keys.
+- Keep `allowBackup="false"` and the backup/data-extraction rules.
+- No Firebase, analytics, crash-reporting or attribution SDKs.
+- Declared permissions must be used; store review punishes unused sensitive ones.
