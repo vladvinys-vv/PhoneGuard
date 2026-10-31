@@ -1,5 +1,6 @@
 package com.phoneguard.util
 
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -14,7 +15,7 @@ import javax.inject.Singleton
 
 @Singleton
 class NetworkMonitor @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     fun isNetworkAvailable(): Flow<Boolean> = callbackFlow {
         val connectivityManager = context.getSystemService<ConnectivityManager>() ?: return@callbackFlow

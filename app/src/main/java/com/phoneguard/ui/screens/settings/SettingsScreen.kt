@@ -150,6 +150,29 @@ fun SettingsScreen(
                 }
             }
 
+            // Intrusion response toggles
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(text = stringResource(R.string.intrusion_auto_response), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.intrusion_auto_response_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val auto by settingsViewModel.isAutoIntrusionResponseEnabled.collectAsState()
+                    IntrusionToggleRow("Автоответ", auto) { settingsViewModel.setAutoIntrusionResponse(it) }
+                    val alarm by settingsViewModel.isIntrusionAlarmEnabled.collectAsState()
+                    IntrusionToggleRow(stringResource(R.string.intrusion_alarm), alarm) { settingsViewModel.setIntrusionAlarm(it) }
+                    val photo by settingsViewModel.isIntrusionPhotoEnabled.collectAsState()
+                    IntrusionToggleRow(stringResource(R.string.intrusion_photo), photo) { settingsViewModel.setIntrusionPhoto(it) }
+                    val sms by settingsViewModel.isIntrusionSmsEnabled.collectAsState()
+                    IntrusionToggleRow(stringResource(R.string.intrusion_sms), sms) { settingsViewModel.setIntrusionSms(it) }
+                    val network by settingsViewModel.isIntrusionBlockNetworkEnabled.collectAsState()
+                    IntrusionToggleRow(stringResource(R.string.intrusion_block_network), network) { settingsViewModel.setIntrusionBlockNetwork(it) }
+                    val honeypot by settingsViewModel.isIntrusionHoneypotEnabled.collectAsState()
+                    IntrusionToggleRow(stringResource(R.string.intrusion_honeypot), honeypot) { settingsViewModel.setIntrusionHoneypot(it) }
+                }
+            }
+
             // Privacy Policy
             SettingsLinkCard(
                 title = stringResource(R.string.privacy_policy),
@@ -244,6 +267,19 @@ fun SettingsScreen(
                 Text(stringResource(R.string.open_battery_settings))
             }
         }
+    }
+}
+
+
+@Composable
+private fun IntrusionToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

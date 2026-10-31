@@ -1,5 +1,6 @@
 package com.phoneguard.util
 
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -11,7 +12,7 @@ import javax.inject.Singleton
 
 @Singleton
 class InstalledAppsCache @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     private var cachedApps: List<ApplicationInfo>? = null
     private var cacheTimestamp: Long = 0

@@ -1,5 +1,6 @@
 package com.phoneguard.util
 
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import android.graphics.pdf.PdfDocument
 import com.phoneguard.model.FullScanReport
@@ -13,7 +14,7 @@ import javax.inject.Singleton
 
 @Singleton
 class PdfExportHelper @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     suspend fun exportScanReport(scan: ScanHistory): File? = withContext(Dispatchers.IO) {
         return@withContext try {

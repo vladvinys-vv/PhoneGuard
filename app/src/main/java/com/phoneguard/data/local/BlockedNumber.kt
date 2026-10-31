@@ -1,9 +1,10 @@
 package com.phoneguard.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "blocked_numbers")
+@Entity(tableName = "blocked_numbers", indices = [Index(value = ["phoneNumber"])])
 data class BlockedNumber(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val phoneNumber: String,

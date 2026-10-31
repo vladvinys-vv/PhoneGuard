@@ -5,6 +5,7 @@ import com.phoneguard.model.FirewallLog
 import com.phoneguard.model.FirewallRule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +32,19 @@ class FirewallRepository @Inject constructor(
 
     suspend fun insertLog(log: FirewallLog) = withContext(Dispatchers.IO) {
         firewallDao.insertLog(log)
+    }
+
+    suspend fun getAllLogs(): List<FirewallLog> = withContext(Dispatchers.IO) {
+        firewallDao.getAllLogs().first()
+    }
+
+    suspend fun getPagedLogs(limit: Int, offset: Int): List<FirewallLog> =
+        withContext(Dispatchers.IO) {
+            firewallDao.getPagedLogs(limit, offset)
+        }
+
+    suspend fun getLogsCount(): Int = withContext(Dispatchers.IO) {
+        firewallDao.getLogsCount()
     }
 
     suspend fun clearLogs() = withContext(Dispatchers.IO) {

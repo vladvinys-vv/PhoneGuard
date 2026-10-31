@@ -6,26 +6,28 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Address
 import android.location.Geocoder
+import android.os.Build
 import android.telephony.TelephonyManager
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.phoneguard.antitheft.SecurityService
 import com.phoneguard.data.local.SimSwapEventDao
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.model.SimSwapEvent
 import com.phoneguard.util.await
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.*
-import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SimSwapDetector @Inject constructor(
+class SimSwapDetector(
     @ApplicationContext private val context: Context,
     private val dao: SimSwapEventDao,
     private val preferencesManager: PreferencesManager,
@@ -102,7 +104,7 @@ class SimSwapDetector @Inject constructor(
 
     private suspend fun sendBackupSms(event: SimSwapEvent): Boolean = withContext(IO) {
         val backupNumber = preferencesManager.backupNumber.first()
-        if (backupNumber.isBlank()) return@withContext false
+        if (backupNumber.isNullOrBlank()) return@withContext false
 
         val date = Date(event.timestamp)
         val message = buildString {
@@ -133,7 +135,7 @@ class SimSwapDetector @Inject constructor(
         dao.latest()?.takeIf { !it.isConfirmed }
     }
 
-    fun hasUnconfirmed(): Boolean = preferencesManager.isSimSwapUnconfirmed.first()
+    suspend fun hasUnconfirmed(): Boolean = preferencesManager.isSimSwapUnconfirmed.first()
 
     private suspend fun getLastKnownImsi(): String? = withContext(IO) {
         preferencesManager.lastKnownImsi.first().ifEmpty { null }
@@ -156,7 +158,7 @@ class SimSwapDetector @Inject constructor(
         }
     }
 
-    fun enableSensitiveAppsGuard() {
+    suspend fun enableSensitiveAppsGuard() {
         if (!preferencesManager.isSensitiveAppsGuardEnabled.first()) return
         // Guard will be handled via accessibility observer in existing app lock flows
     }

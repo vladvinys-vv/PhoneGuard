@@ -19,7 +19,7 @@ interface SpamNumberDao {
     fun getAllSpamNumbers(): Flow<List<SpamNumber>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertSpamNumber(spamNumber: SpamNumber)
+    suspend fun insertSpamNumber(spamNumber: SpamNumber): Long
 
     @Query("DELETE FROM spam_numbers WHERE id = :id")
     suspend fun deleteSpamNumber(id: Long)

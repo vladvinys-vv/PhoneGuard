@@ -1,0 +1,20 @@
+workflows:
+  phoneguard-android:
+    name: PhoneGuard Android
+    max_build_duration: 120
+    environment:
+      java: 17
+    scripts:
+      - name: Make Gradle wrapper executable
+        script: chmod +x ./gradlew
+      - name: Lint
+        script: ./gradlew lintDebug --no-daemon --stacktrace
+      - name: Unit tests
+        script: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+      - name: Build production debug APK
+        script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
+      - name: Build production release APK
+        script: ./gradlew assembleProductionRelease --no-daemon --stacktrace
+    artifacts:
+      - app/build/outputs/**/*.apk
+      - app/build/outputs/**/*.aab

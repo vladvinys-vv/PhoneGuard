@@ -3,6 +3,7 @@ package com.phoneguard.ui.screens.firewall
 import app.cash.turbine.test
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.model.FirewallRule
+import com.phoneguard.util.InstalledAppsCache
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -25,7 +26,8 @@ class FirewallViewModelTest {
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var viewModel: FirewallViewModel
     private val repository: FirewallRepository = mockk()
-    private val context: android.content.Context = mockk()
+    private val context: android.content.Context = mockk(relaxed = true)
+    private val installedAppsCache: InstalledAppsCache = mockk()
 
     @Before
     fun setup() {
@@ -33,8 +35,12 @@ class FirewallViewModelTest {
         every { repository.allRules } returns flowOf(emptyList())
         every { repository.allLogs } returns flowOf(emptyList())
         coEvery { repository.getRuleForPackage(any()) } returns null
+        coEvery { installedAppsCache.getInstalledApps() } returns emptyList()
+        coEvery { repository.getAllLogs() } returns emptyList()
+        coEvery { repository.getPagedLogs(any(), any()) } returns emptyList()
+        coEvery { repository.getLogsCount() } returns 0
         every { context.packageManager } returns mockk(relaxed = true)
-        viewModel = FirewallViewModel(repository, context)
+        viewModel = FirewallViewModel(repository, context, installedAppsCache)
     }
 
     @After
@@ -83,7 +89,8 @@ class FirewallViewModelTest {
         viewModel.isVpnActive.test {
             assertEquals(false, awaitItem())
             viewModel.stopVpn()
-            assertEquals(false, awaitItem())
+            assertEquals(false, viewModel.isVpnActive.value)
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }

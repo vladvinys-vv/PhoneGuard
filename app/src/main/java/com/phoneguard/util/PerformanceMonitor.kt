@@ -9,15 +9,14 @@ import javax.inject.Singleton
 @Singleton
 class PerformanceMonitor @Inject constructor() {
 
-    fun startTrace(traceName: String): Trace {
-        return FirebasePerformance.getInstance().newTrace(traceName)
+    fun startTrace(traceName: String): Trace? {
+        return runCatching { FirebasePerformance.getInstance().newTrace(traceName) }.getOrNull()
     }
 
-    fun startHttpMetric(url: String, method: String): HttpMetric {
-        return FirebasePerformance.getInstance().newHttpMetric(
-            url,
-            com.google.firebase.perf.metrics.HttpMethod.valueOf(method.uppercase())
-        )
+    fun startHttpMetric(url: String, method: String): HttpMetric? {
+        return runCatching {
+            FirebasePerformance.getInstance().newHttpMetric(url, com.google.firebase.perf.metrics.HttpMethod.valueOf(method.uppercase()))
+        }.getOrNull()
     }
 
     companion object {

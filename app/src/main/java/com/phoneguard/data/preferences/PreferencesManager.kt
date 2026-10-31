@@ -33,6 +33,14 @@ class PreferencesManager(private val context: Context) {
         private val KEY_SIM_SWAP_UNCONFIRMED = booleanPreferencesKey("sim_swap_unconfirmed")
         private val KEY_SENSITIVE_APPS_GUARD_ENABLED = booleanPreferencesKey("sensitive_apps_guard_enabled")
 
+        // Intrusion response
+        private val KEY_AUTO_INTRUSION_RESPONSE = booleanPreferencesKey("auto_intrusion_response")
+        private val KEY_INTRUSION_ALARM = booleanPreferencesKey("intrusion_alarm")
+        private val KEY_INTRUSION_PHOTO = booleanPreferencesKey("intrusion_photo")
+        private val KEY_INTRUSION_SMS = booleanPreferencesKey("intrusion_sms")
+        private val KEY_INTRUSION_BLOCK_NETWORK = booleanPreferencesKey("intrusion_block_network")
+        private val KEY_INTRUSION_HONEYPOT = booleanPreferencesKey("intrusion_honeypot")
+
         // Shoulder Surfer
         private val KEY_SHOULDER_SURFER_ENABLED = booleanPreferencesKey("shoulder_surfer_enabled")
 
@@ -159,8 +167,40 @@ class PreferencesManager(private val context: Context) {
     // Shoulder Surfer
     val isShoulderSurferEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_SHOULDER_SURFER_ENABLED] ?: false }
 
+    val isAutoIntrusionResponseEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTO_INTRUSION_RESPONSE] ?: true }
+    val isIntrusionAlarmEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_INTRUSION_ALARM] ?: true }
+    val isIntrusionPhotoEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_INTRUSION_PHOTO] ?: true }
+    val isIntrusionSmsEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_INTRUSION_SMS] ?: true }
+    val isIntrusionBlockNetworkEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_INTRUSION_BLOCK_NETWORK] ?: true }
+    val isIntrusionHoneypotEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_INTRUSION_HONEYPOT] ?: true }
+
+
     suspend fun setShoulderSurferEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SHOULDER_SURFER_ENABLED] = enabled }
+    }
+
+    suspend fun setAutoIntrusionResponseEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AUTO_INTRUSION_RESPONSE] = enabled }
+    }
+
+    suspend fun setIntrusionAlarmEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_INTRUSION_ALARM] = enabled }
+    }
+
+    suspend fun setIntrusionPhotoEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_INTRUSION_PHOTO] = enabled }
+    }
+
+    suspend fun setIntrusionSmsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_INTRUSION_SMS] = enabled }
+    }
+
+    suspend fun setIntrusionBlockNetworkEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_INTRUSION_BLOCK_NETWORK] = enabled }
+    }
+
+    suspend fun setIntrusionHoneypotEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_INTRUSION_HONEYPOT] = enabled }
     }
 
     // Theme

@@ -251,4 +251,17 @@
     <string name="sim_swap_sms_sent">Уведомление отправлено на резервный номер</string>
     <string name="sim_swap_sms_failed">Не удалось подготовить SMS</string>
 
+
+    <!-- Intrusion response -->
+    <string name="intrusion_warning_title">Обнаружена попытка взлома</string>
+    <string name="intrusion_warning_message">Устройство защищено. Подозрительная активность заблокирована.</string>
+    <string name="intrusion_stop_alarm">Остановить сигнал</string>
+    <string name="intrusion_auto_response">Автоответ на угрозы</string>
+    <string name="intrusion_auto_response_description">Автоматически блокировать, оповещать и сдерживать при HIGH/CRITICAL</string>
+    <string name="intrusion_alarm">Сигнал при угрозе</string>
+    <string name="intrusion_photo">Фото злоумышленника</string>
+    <string name="intrusion_sms">SMS доверенным контактам</string>
+    <string name="intrusion_block_network">Блокировка сети для угрозы</string>
+    <string name="intrusion_honeypot">Honeypot-приманки</string>
+
 </resources>

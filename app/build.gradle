@@ -5,12 +5,20 @@ plugins {
     id 'dagger.hilt.android.plugin'
     id 'kotlin-parcelize'
     id 'org.jetbrains.kotlin.plugin.compose'
-    id 'com.google.firebase.crashlytics'
+    id 'com.google.gms.google-services' version '4.4.2' apply false
 }
 
 android {
     namespace 'com.phoneguard'
     compileSdk 35
+
+    def keystorePropertiesFile = rootProject.file("keystore.properties")
+    def keystoreProperties = new Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+    def releaseStorePath = keystoreProperties['storeFile'] ?: System.getenv("KEYSTORE_PATH")
+    def hasReleaseKeystore = releaseStorePath != null && file(releaseStorePath).exists()
 
     defaultConfig {
         applicationId "com.phoneguard"
@@ -32,12 +40,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                storeFile file(releaseStorePath)
+                storePassword keystoreProperties['storePassword'] ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias keystoreProperties['keyAlias'] ?: System.getenv("KEY_ALIAS") ?: ""
+                keyPassword keystoreProperties['keyPassword'] ?: System.getenv("KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
+
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             applicationIdSuffix ".debug"
@@ -59,20 +81,6 @@ android {
             manifestPlaceholders = [
                 appLabel: "PhoneGuard"
             ]
-        }
-    }
-
-    signingConfigs {
-        release {
-            def keystorePropertiesFile = rootProject.file("keystore.properties")
-            def keystoreProperties = new Properties()
-            if (keystorePropertiesFile.exists()) {
-                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-            }
-            storeFile file(keystoreProperties['storeFile'] ?: System.getenv("KEYSTORE_PATH") ?: "keystore.jks")
-            storePassword keystoreProperties['storePassword'] ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
-            keyAlias keystoreProperties['keyAlias'] ?: System.getenv("KEY_ALIAS") ?: ""
-            keyPassword keystoreProperties['keyPassword'] ?: System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
@@ -130,6 +138,9 @@ dependencies {
     // Force newer kotlinx-metadata-jvm for Room kapt compatibility with Kotlin 2.1
     kapt "org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.7.0"
     
+    // JSON serialization for scan reports
+    implementation "com.google.code.gson:gson:2.11.0"
+
     // WorkManager
     implementation "androidx.work:work-runtime-ktx:$rootProject.ext.work_version"
     implementation "androidx.hilt:hilt-work:1.1.0"
@@ -156,6 +167,7 @@ dependencies {
 
     // Google Play Services Location (for Fused Location)
     implementation "com.google.android.gms:play-services-location:21.3.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:$rootProject.ext.coroutines_version"
 
     // ML Kit Face Detection (for shoulder surfer detection)
     implementation "com.google.android.gms:play-services-mlkit-face-detection:17.1.0"
@@ -170,6 +182,7 @@ dependencies {
     testImplementation "junit:junit:$rootProject.ext.junit_version"
     androidTestImplementation "androidx.test.ext:junit:1.2.1"
     androidTestImplementation "androidx.test.espresso:espresso-core:$rootProject.ext.espresso_version"
+    androidTestImplementation "androidx.room:room-testing:$rootProject.ext.room_version"
     androidTestImplementation platform("androidx.compose:compose-bom:2024.12.01")
     androidTestImplementation "androidx.compose.ui:ui-test-junit4"
     debugImplementation "androidx.compose.ui:ui-tooling"
@@ -187,4 +200,7 @@ kapt {
     correctErrorTypes true
 }
 
-apply plugin: 'com.google.gms.google-services'
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+    apply plugin: 'com.google.firebase.crashlytics'
+}

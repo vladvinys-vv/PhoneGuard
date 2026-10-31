@@ -20,6 +20,7 @@ import androidx.camera.core.*
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.data.local.IntrusionEventDao
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import java.io.File
@@ -38,6 +39,7 @@ class StealthCameraService : LifecycleService() {
     companion object {
         const val ACTION_TAKE_PHOTO = "com.phoneguard.antitheft.TAKE_PHOTO"
         const val EXTRA_SENDER = "sender_number"
+        const val EXTRA_EVENT_ID = "event_id"
         private const val NOTIFICATION_ID = 9001
         private const val CHANNEL_ID = "stealth_camera_channel"
         private const val OUTPUT_DIR = "phoneguard_stealth"
@@ -45,6 +47,9 @@ class StealthCameraService : LifecycleService() {
 
     @Inject
     lateinit var preferencesManager: PreferencesManager
+
+    @Inject
+    lateinit var intrusionEventDao: IntrusionEventDao
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cameraExecutor = Executors.newSingleThreadExecutor()
@@ -59,6 +64,7 @@ class StealthCameraService : LifecycleService() {
 
         if (intent?.action == ACTION_TAKE_PHOTO) {
             val sender = intent.getStringExtra(EXTRA_SENDER)
+            val eventId = intent.getLongExtra(EXTRA_EVENT_ID, -1L).takeIf { it > 0 }
             startForeground(NOTIFICATION_ID, createNotification())
             serviceScope.launch {
                 takePhoto(sender)
@@ -86,7 +92,7 @@ class StealthCameraService : LifecycleService() {
             .build()
     }
 
-    private suspend fun takePhoto(sender: String?) = suspendCancellableCoroutine<Unit> { cont ->
+    private suspend fun takePhoto(sender: String?, eventId: Long?) = suspendCancellableCoroutine<Unit> { cont ->
         val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
         try {
@@ -134,6 +140,12 @@ class StealthCameraService : LifecycleService() {
                                     reader.close()
                                     session.close()
                                     camera.close()
+
+                                    eventId?.let { id ->
+                                        try {
+                                            intrusionEventDao.updatePhotoPath(id, photoFile.absolutePath)
+                                        } catch (_: Exception) {}
+                                    }
 
                                     // Отправляем SMS с подтверждением
                                     sender?.let { s ->

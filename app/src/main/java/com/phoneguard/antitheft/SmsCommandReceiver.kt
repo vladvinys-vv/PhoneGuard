@@ -19,7 +19,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -53,8 +52,7 @@ class SmsCommandReceiver : BroadcastReceiver() {
         val pin = match.groupValues[1]
         val cmd = match.groupValues[2].uppercase()
 
-        val storedPin = preferencesManager.pinCode.first()
-        if (storedPin == null || pin != storedPin) {
+        if (!preferencesManager.verifyPin(pin)) {
             // Неверный PIN — логируем попытку
             return
         }

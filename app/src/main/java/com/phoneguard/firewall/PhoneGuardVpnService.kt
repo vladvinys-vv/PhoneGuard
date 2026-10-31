@@ -13,7 +13,12 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.phoneguard.data.repository.FirewallRepository
+import com.phoneguard.intrusion.IntrusionRepository
+import com.phoneguard.intrusion.IntrusionEvent
+import com.phoneguard.intrusion.IntrusionSeverity
+import com.phoneguard.intrusion.IntrusionType
 import com.phoneguard.model.FirewallLog
+import com.phoneguard.firewall.packet.*
 import com.phoneguard.model.FirewallRule
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -21,6 +26,7 @@ import org.json.JSONArray
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import javax.inject.Inject
 
@@ -67,6 +73,9 @@ class PhoneGuardVpnService : VpnService() {
     @Inject
     lateinit var rulesManager: FirewallRulesManager
 
+    @Inject
+    lateinit var intrusionRepository: IntrusionRepository
+
     private var vpnInterface: ParcelFileDescriptor? = null
     private var vpnJob: Job? = null
     private val vpnScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -78,6 +87,11 @@ class PhoneGuardVpnService : VpnService() {
     /** Rate limiter для логов */
     private var logCount = 0
     private var logWindowStart = 0L
+
+    private val portScanTracker = mutableMapOf<Int, MutableSet<Int>>()
+    private val portScanWindowStart = mutableMapOf<Int, Long>()
+    private var malformedPacketCount = 0
+    private var malformedWindowStart = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -227,70 +241,46 @@ class PhoneGuardVpnService : VpnService() {
     }
 
     private suspend fun doHandlePacket(packet: ByteArray, output: FileOutputStream) {
-        if (packet.size < 20) {
+        val ipv4 = IPv4PacketParser.parse(packet)
+        if (ipv4 == null) {
+            trackMalformedPackets()
             output.write(packet)
             return
         }
 
-        val versionAndIHL = packet[0].toInt() and 0xFF
-        val version = (versionAndIHL shr 4) and 0x0F
-        val headerLen = (versionAndIHL and 0x0F) * 4
-
-        if (version != 4 || headerLen < 20 || headerLen > packet.size) {
-            output.write(packet)
-            return
-        }
-
-        val protocol = packet[9].toInt() and 0xFF
-
-        val destIpBytes = byteArrayOf(
-            packet[16], packet[17], packet[18], packet[19]
-        )
-        val destIpStr = try {
-            InetAddress.getByAddress(destIpBytes).hostAddress ?: "unknown"
-        } catch (e: Exception) {
-            "unknown"
-        }
-
-        val srcIpBytes = byteArrayOf(
-            packet[12], packet[13], packet[14], packet[15]
-        )
-        val srcIpStr = try {
-            InetAddress.getByAddress(srcIpBytes).hostAddress ?: "unknown"
-        } catch (e: Exception) {
-            "unknown"
-        }
+        val protocol = ipv4.protocol
+        val destIpStr = ipv4.destinationAddress.hostAddress ?: "unknown"
+        val srcIpStr = ipv4.sourceAddress.hostAddress ?: "unknown"
+        val headerLen = ipv4.headerLength
 
         var destPort = 0
         var srcPort = 0
 
-        if (headerLen + 4 <= packet.size) {
+        if (protocol == 1) { // ICMP — always allow
+            output.write(packet)
+            return
+        }
+
+        if (ipv4.canParseTransportHeader) {
             when (protocol) {
-                6 -> { // TCP
-                    srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
-                              (packet[headerLen + 1].toInt() and 0xFF)
-                    destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
-                               (packet[headerLen + 3].toInt() and 0xFF)
+                6 -> TcpPacketParser.parse(packet, ipv4)?.let {
+                    srcPort = it.sourcePort
+                    destPort = it.destinationPort
                 }
-                17 -> { // UDP
-                    srcPort = ((packet[headerLen].toInt() and 0xFF) shl 8) or
-                              (packet[headerLen + 1].toInt() and 0xFF)
-                    destPort = ((packet[headerLen + 2].toInt() and 0xFF) shl 8) or
-                               (packet[headerLen + 3].toInt() and 0xFF)
-                }
-                1 -> { // ICMP — always allow
-                    output.write(packet)
-                    return
+                17 -> UdpPacketParser.parse(packet, ipv4)?.let {
+                    srcPort = it.sourcePort
+                    destPort = it.destinationPort
                 }
             }
         }
 
-        val uid = getUidForConnection(destIpStr, destPort, protocol)
+        val uid = getUidForConnection(srcPort, destIpStr, destPort, protocol)
         if (uid == null) {
             output.write(packet)
             return
         }
 
+        if (uid != null) trackPortScan(uid, destPort)
         val pkg = rulesManager.getPackageNameForUid(uid)
         if (pkg == null) {
             output.write(packet)
@@ -397,16 +387,70 @@ class PhoneGuardVpnService : VpnService() {
      * Определение UID через ConnectionManager (API 29+).
      * Работает только для активных соединений, для которых есть socket tracking.
      */
-    private fun getUidForConnection(destIp: String, destPort: Int, protocol: Int): Int? {
+    private fun getUidForConnection(
+        srcPort: Int,
+        destIp: String,
+        destPort: Int,
+        protocol: Int
+    ): Int? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
 
         return try {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val address = InetAddress.getByName(destIp)
-            val ownerUid = cm.getConnectionOwnerUid(address, destPort, protocol, null, 0)
+            val local = InetSocketAddress(srcPort)
+            val remote = InetSocketAddress(InetAddress.getByName(destIp), destPort)
+            val ownerUid = cm.getConnectionOwnerUid(protocol, local, remote)
             if (ownerUid > 0) ownerUid else null
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun trackMalformedPackets() {
+        val now = System.currentTimeMillis()
+        if (now - malformedWindowStart > 10000) {
+            malformedPacketCount = 0
+            malformedWindowStart = now
+        }
+        malformedPacketCount++
+        if (malformedPacketCount > 100) {
+            vpnScope.launch {
+                intrusionRepository.recordEvent(
+                    IntrusionEvent(
+                        type = IntrusionType.ANALYSIS_OR_PARSER_ATTEMPT,
+                        severity = IntrusionSeverity.MEDIUM,
+                        evidence = mapOf("reason" to "malformed_packet_flood", "count" to malformedPacketCount.toString())
+                    )
+                )
+            }
+            malformedPacketCount = 0
+        }
+    }
+
+    private fun trackPortScan(uid: Int, destPort: Int) {
+        val now = System.currentTimeMillis()
+        val windowStart = portScanWindowStart[uid] ?: now
+        if (now - windowStart > 10000) {
+            portScanTracker[uid]?.clear()
+            portScanWindowStart[uid] = now
+        } else if (portScanWindowStart[uid] == null) {
+            portScanWindowStart[uid] = now
+        }
+        val ports = portScanTracker.getOrPut(uid) { mutableSetOf() }
+        ports += destPort
+        if (ports.size > 30) {
+            vpnScope.launch {
+                intrusionRepository.recordEvent(
+                    IntrusionEvent(
+                        type = IntrusionType.ANALYSIS_OR_PARSER_ATTEMPT,
+                        severity = IntrusionSeverity.HIGH,
+                        uid = uid,
+                        packageName = rulesManager.getPackageNameForUid(uid),
+                        evidence = mapOf("reason" to "port_scan", "distinct_ports" to ports.size.toString())
+                    )
+                )
+            }
+            ports.clear()
         }
     }
 
@@ -431,27 +475,4 @@ class PhoneGuardVpnService : VpnService() {
         vpnScope.cancel()
     }
 
-    /**
-     * Fallback: block app network access via NetworkCapabilities on Android 10+.
-     * This does not require root and works without a full VPN implementation.
-     */
-    fun blockAppNetworkAccess(packageName: String, block: Boolean) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
-
-        try {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val uid = packageManager.getPackageUid(packageName, 0)
-            val builder = NetworkCapabilities.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-                .setOwnerUid(uid)
-            if (block) {
-                builder.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-            }
-            val caps = builder.build()
-            cm.bindProcessToNetwork(null)
-            cm.updateCapabilitiesForProcess(caps)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update network capabilities for $packageName", e)
-        }
-    }
 }

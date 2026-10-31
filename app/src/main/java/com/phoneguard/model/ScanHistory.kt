@@ -1,9 +1,10 @@
 package com.phoneguard.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "scan_history")
+@Entity(tableName = "scan_history", indices = [Index(value = ["timestamp"])])
 data class ScanHistory(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

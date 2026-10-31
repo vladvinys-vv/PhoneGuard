@@ -1,5 +1,6 @@
 package com.phoneguard.data.settings
 
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import android.os.Environment
 import com.phoneguard.model.FirewallLog
@@ -20,7 +21,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SettingsRepository @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     val exportLogs: Flow<File?> = flow {
         emit(null)

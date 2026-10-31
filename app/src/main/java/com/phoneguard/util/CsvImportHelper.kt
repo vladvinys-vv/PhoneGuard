@@ -1,5 +1,6 @@
 package com.phoneguard.util
 
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +12,7 @@ import javax.inject.Singleton
 
 @Singleton
 class CsvImportHelper @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     suspend fun importBlockedNumbers(uri: Uri, isWhitelist: Boolean): List<String> = withContext(Dispatchers.IO) {
         val numbers = mutableListOf<String>()

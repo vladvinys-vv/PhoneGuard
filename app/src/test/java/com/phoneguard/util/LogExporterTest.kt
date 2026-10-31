@@ -20,7 +20,7 @@ class LogExporterTest {
         every { context.getExternalFilesDir(null) } returns tempDir
 
         val blockedLogs = listOf(BlockedLog(phoneNumber = "123", isSms = false))
-        val firewallLogs = listOf(FirewallLog(packageName = "com.test", appName = "Test", timestamp = 0, connectionType = "WIFI"))
+        val firewallLogs = listOf(FirewallLog(packageName = "com.test", appName = "Test", timestamp = 0, connectionType = FirewallLog.ConnectionType.WIFI))
         val scanHistory = listOf(ScanHistory(timestamp = 0, riskScore = 50, issuesFound = 1, reportJson = "{}"))
 
         val file = LogExporter.exportToJson(context, blockedLogs, firewallLogs, scanHistory)

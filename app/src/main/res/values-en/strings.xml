@@ -281,4 +281,17 @@
     <string name="sim_swap_sms_sent">Notification sent to backup number</string>
     <string name="sim_swap_sms_failed">Failed to prepare SMS</string>
 
+
+    <!-- Intrusion response -->
+    <string name="intrusion_warning_title">Intrusion attempt detected</string>
+    <string name="intrusion_warning_message">Device is protected. Suspicious activity was blocked.</string>
+    <string name="intrusion_stop_alarm">Stop alarm</string>
+    <string name="intrusion_auto_response">Automatic threat response</string>
+    <string name="intrusion_auto_response_description">Automatically block, notify and contain HIGH/CRITICAL threats</string>
+    <string name="intrusion_alarm">Threat alarm</string>
+    <string name="intrusion_photo">Intruder photo</string>
+    <string name="intrusion_sms">SMS to trusted contacts</string>
+    <string name="intrusion_block_network">Network block for threat</string>
+    <string name="intrusion_honeypot">Honeypot decoys</string>
+
 </resources>

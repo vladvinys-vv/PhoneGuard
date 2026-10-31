@@ -27,6 +27,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -219,6 +220,7 @@ fun FirewallScreen(
         }
     )
 }
+}
 
 @Composable
 private fun AppFirewallItem(
@@ -229,12 +231,12 @@ private fun AppFirewallItem(
     var showDomainDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    val blockWifi = rule?.blockWifi ?: false
-    val blockMobile = rule?.blockMobile ?: false
-    val blockAll = rule?.blockAll ?: false
-    val allowWifiOnly = rule?.allowWifiOnly ?: false
-    val allowMobileOnly = rule?.allowMobileOnly ?: false
-    val blockBackground = rule?.blockBackground ?: false
+    var blockWifi = rule?.blockWifi ?: false
+    var blockMobile = rule?.blockMobile ?: false
+    var blockAll = rule?.blockAll ?: false
+    var allowWifiOnly = rule?.allowWifiOnly ?: false
+    var allowMobileOnly = rule?.allowMobileOnly ?: false
+    var blockBackground = rule?.blockBackground ?: false
 
     fun updateRule() {
         val newRule = (rule ?: com.phoneguard.model.FirewallRule(

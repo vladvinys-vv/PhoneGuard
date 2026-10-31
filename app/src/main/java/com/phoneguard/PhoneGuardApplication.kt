@@ -1,15 +1,18 @@
 package com.phoneguard
 
 import android.app.Application
+import android.content.Context
 import android.os.Build
 import android.os.StrictMode
-import androidx.room.Room
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.phoneguard.data.local.AppDatabase
+import com.phoneguard.intrusion.IntrusionRepository
 import com.phoneguard.util.CrashHandler
 import com.phoneguard.worker.DataCleanupWorker
 import com.phoneguard.worker.ScheduledFullScanWorker
@@ -17,13 +20,37 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
 
 @HiltAndroidApp
-class PhoneGuardApplication : Application() {
+class PhoneGuardApplication : Application(), Configuration.Provider {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        net.sqlcipher.database.SQLiteDatabase.loadLibs(this)
+    }
+
+    @Inject
+    lateinit var crashHandler: CrashHandler
+
+    @Inject
+    lateinit var database: AppDatabase
+
+    @Inject
+    lateinit var intrusionRepository: IntrusionRepository
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -41,25 +68,29 @@ class PhoneGuardApplication : Application() {
                     .build()
             )
         }
-        CrashHandler().install()
+        crashHandler.install()
         scheduleDataCleanup()
         scheduleScheduledFullScan()
         seedSpamDatabase()
+        scanIntrusions()
+    }
+
+    private fun scanIntrusions() {
+        applicationScope.launch {
+            try {
+                intrusionRepository.scan(this@PhoneGuardApplication)
+            } catch (_: Exception) {
+                // ignore intrusion scan failure
+            }
+        }
     }
 
     private fun seedSpamDatabase() {
         applicationScope.launch {
             try {
-                val db = Room.databaseBuilder(
-                    this@PhoneGuardApplication,
-                    AppDatabase::class.java,
-                    "phoneguard_db"
-                ).build()
-                val dao = db.spamNumberDao()
-                val existing = dao.getAllSpamNumbers().let { flow ->
-                    kotlinx.coroutines.flow.firstOrNull { it }
-                }
-                if (existing.isNullOrEmpty()) {
+                val dao = database.spamNumberDao()
+                val existing = dao.getAllSpamNumbers().first()
+                if (existing.isEmpty()) {
                     val json = assets.open("spam_numbers.json").bufferedReader().use { it.readText() }
                     val array = JSONArray(json)
                     for (i in 0 until array.length()) {
@@ -77,7 +108,6 @@ class PhoneGuardApplication : Application() {
                         }
                     }
                 }
-                db.close()
             } catch (e: Exception) {
                 // ignore seed failure
             }

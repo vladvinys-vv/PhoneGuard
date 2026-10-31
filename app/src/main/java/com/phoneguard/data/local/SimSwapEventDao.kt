@@ -15,7 +15,7 @@ interface SimSwapEventDao {
     suspend fun latest(): SimSwapEvent?
 
     @Insert
-    suspend fun insert(event: SimSwapEvent)
+    suspend fun insert(event: SimSwapEvent): Long
 
     @Query("UPDATE sim_swap_events SET isConfirmed = 1 WHERE id = :id")
     suspend fun markConfirmed(id: Long)

@@ -55,7 +55,7 @@ class VaultViewModelTest {
 
     @Test
     fun `allItems emits repository list`() = runTest {
-        val items = listOf(VaultItem(1, "file1", 100, "image/jpeg", "key1", 0, VaultItemCategory.IMAGE))
+        val items = listOf(VaultItem(id = 1, fileName = "file1", fileSize = 100, mimeType = "image/jpeg", encryptionKeyAlias = "key1", createdAt = 0, category = VaultItemCategory.IMAGE))
         every { repository.allItems } returns flowOf(items)
 
         viewModel.allItems.test {

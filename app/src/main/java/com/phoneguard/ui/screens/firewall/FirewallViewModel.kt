@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
 import android.net.VpnService
 import android.os.Build
 import androidx.lifecycle.ViewModel
@@ -22,7 +21,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -68,7 +66,7 @@ class FirewallViewModel @Inject constructor(
     private fun loadStats() {
         viewModelScope.launch {
             val today = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
-            val logs = repository.getAllLogs().first()
+            val logs = repository.getAllLogs()
             val todayBlocks = logs.count { it.timestamp > today }
             val topPackage = logs.groupingBy { it.packageName }.eachCount().maxByOrNull { it.value }?.key
             _stats.value = FirewallStats(
@@ -155,30 +153,6 @@ class FirewallViewModel @Inject constructor(
         }
         context.startService(intent)
         _isVpnActive.value = false
-    }
-
-    /**
-     * Возвращает UID для обновления правил – вызывается из `handlePacket`.
-     * На API 29+ используем ConnectivityManager.getConnectionOwnerUid().
-     */
-    fun getAppUidForConnection(destIp: String, destPort: Int, protocol: Int): Int? {
-        return try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && cm != null) {
-                // Пытаемся определить UID через сокетную информацию
-                InetAddress.getByName(destIp)?.let { address ->
-                    val network = cm.activeNetwork
-                    val caps = cm.getNetworkCapabilities(network)
-                    val ownerUid = cm.getConnectionOwnerUid(
-                        address,
-                        destPort,
-                        protocol,
-                        null, 0
-                    )
-                    if (ownerUid > 0) ownerUid else null
-                }
-            } else null
-        } catch (_: Exception) { null }
     }
 }
 

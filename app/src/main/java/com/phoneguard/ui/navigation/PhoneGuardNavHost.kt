@@ -22,6 +22,7 @@ import com.phoneguard.ui.screens.callblocker.CallBlockerScreen
 import com.phoneguard.ui.screens.dashboard.DashboardScreen
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel
 import com.phoneguard.ui.screens.firewall.FirewallScreen
+import com.phoneguard.ui.screens.fullscan.FullScanScreen
 import com.phoneguard.ui.screens.privacyscanner.PrivacyScannerScreen
 import com.phoneguard.ui.screens.settings.SettingsScreen
 import com.phoneguard.ui.screens.spywarecheck.SpywareCheckScreen
@@ -174,4 +175,3 @@ fun PhoneGuardNavHost(
             }
         }
     }
-}

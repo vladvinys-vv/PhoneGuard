@@ -1,6 +1,7 @@
 package com.phoneguard.util
 
 import android.content.Context
+import android.os.Bundle
 import com.google.firebase.analytics.FirebaseAnalytics
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -10,27 +11,28 @@ import javax.inject.Singleton
 class AnalyticsHelper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val firebaseAnalytics: FirebaseAnalytics by lazy {
-        FirebaseAnalytics.getInstance(context)
+    private val firebaseAnalytics: FirebaseAnalytics? by lazy {
+        runCatching { FirebaseAnalytics.getInstance(context) }.getOrNull()
     }
 
     fun logScreenView(screenName: String) {
-        firebaseAnalytics.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW) {
-            param(FirebaseAnalytics.Param.SCREEN_NAME, screenName)
+        val params = Bundle().apply {
+            putString(FirebaseAnalytics.Param.SCREEN_NAME, screenName)
         }
+        firebaseAnalytics?.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW, params)
     }
 
     fun logEvent(eventName: String, params: Map<String, Any> = emptyMap()) {
-        firebaseAnalytics.logEvent(eventName) {
-            params.forEach { (key, value) ->
-                when (value) {
-                    is String -> param(key, value)
-                    is Int -> param(key, value.toLong())
-                    is Long -> param(key, value)
-                    is Boolean -> param(key, value)
-                }
+        val bundle = Bundle()
+        params.forEach { (key, value) ->
+            when (value) {
+                is String -> bundle.putString(key, value)
+                is Int -> bundle.putLong(key, value.toLong())
+                is Long -> bundle.putLong(key, value)
+                is Boolean -> bundle.putBoolean(key, value)
             }
         }
+        firebaseAnalytics?.logEvent(eventName, bundle)
     }
 
     fun logCallBlocked(phoneNumber: String, isSms: Boolean) {

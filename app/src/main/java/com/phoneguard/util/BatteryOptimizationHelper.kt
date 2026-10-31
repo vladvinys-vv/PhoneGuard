@@ -1,5 +1,6 @@
 package com.phoneguard.util
 
+import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -9,7 +10,7 @@ import javax.inject.Singleton
 
 @Singleton
 class BatteryOptimizationHelper @Inject constructor(
-    private val context: android.content.Context
+    @ApplicationContext private val context: android.content.Context
 ) {
 
     fun isBatteryLow(): Boolean {

@@ -62,7 +62,7 @@ class FullScanViewModel @Inject constructor(
         _comparison.value = null
 
         val trace = performanceMonitor.startTrace(PerformanceMonitor.TRACE_SCAN)
-        trace.start()
+        trace?.start()
 
         viewModelScope.launch {
             try {
@@ -74,13 +74,13 @@ class FullScanViewModel @Inject constructor(
                             _isScanning.value = false
                             loadHistory()
                             compareWithPrevious(state.report)
-                            trace.stop()
+                            trace?.stop()
                         }
                     }
                 }
             } catch (e: Exception) {
                 _isScanning.value = false
-                trace.stop()
+                trace?.stop()
             }
         }
     }

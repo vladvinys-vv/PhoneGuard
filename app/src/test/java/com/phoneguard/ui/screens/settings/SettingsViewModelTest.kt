@@ -1,9 +1,10 @@
 package com.phoneguard.ui.screens.settings
 
+import androidx.work.WorkManager
 import app.cash.turbine.test
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.local.BlockedLog
-import com.phoneguard.data.local.ScanHistory
+import com.phoneguard.model.ScanHistory
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.data.settings.SettingsRepository
@@ -33,11 +34,13 @@ class SettingsViewModelTest {
     private val settingsRepository: SettingsRepository = mockk()
     private val appDatabase: AppDatabase = mockk()
     private val firewallRepository: FirewallRepository = mockk()
+    private val workManager: WorkManager = mockk(relaxed = true)
 
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         every { preferencesManager.isDarkTheme } returns MutableStateFlow(false)
+        every { preferencesManager.isScheduledScanEnabled } returns MutableStateFlow(false)
         coEvery { preferencesManager.setDarkTheme(any()) } returns Unit
         coEvery { preferencesManager.setLanguage(any()) } returns Unit
         coEvery { settingsRepository.exportLogs(any(), any(), any()) } returns null
@@ -48,7 +51,7 @@ class SettingsViewModelTest {
             every { getAllScans() } returns flowOf(emptyList())
         }
         every { firewallRepository.allLogs } returns flowOf(emptyList())
-        viewModel = SettingsViewModel(preferencesManager, settingsRepository, appDatabase, firewallRepository)
+        viewModel = SettingsViewModel(preferencesManager, settingsRepository, appDatabase, firewallRepository, workManager)
     }
 
     @After
@@ -69,7 +72,7 @@ class SettingsViewModelTest {
     @Test
     fun `exportLogs calls repository with real data`() = runTest {
         val blockedLogs = listOf(BlockedLog(phoneNumber = "123", isSms = false))
-        val firewallLogs = listOf(FirewallLog(packageName = "com.test", appName = "Test", timestamp = 0, connectionType = "WIFI"))
+        val firewallLogs = listOf(FirewallLog(packageName = "com.test", appName = "Test", timestamp = 0, connectionType = FirewallLog.ConnectionType.WIFI))
         val scanHistory = listOf(ScanHistory(timestamp = 0, riskScore = 50, issuesFound = 1, reportJson = "{}"))
 
         every { appDatabase.blockedLogDao().getAllBlockedLogs() } returns flowOf(blockedLogs)

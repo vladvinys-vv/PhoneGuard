@@ -11,33 +11,37 @@ import javax.inject.Singleton
 class CrashHandler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val crashlytics = FirebaseCrashlytics.getInstance()
+    private val crashlytics: FirebaseCrashlytics? by lazy {
+        runCatching { FirebaseCrashlytics.getInstance() }.getOrNull()
+    }
+    private var previousHandler: Thread.UncaughtExceptionHandler? = null
 
+    @Synchronized
     fun install() {
+        if (previousHandler != null) return
+        previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            crashlytics.recordException(throwable)
-            crashlytics.log("Uncaught exception in thread: ${thread.name}")
-            Thread.currentThread().also {
-                it.uncaughtExceptionHandler?.uncaughtException(it, throwable)
-            }
+            crashlytics?.recordException(throwable)
+            crashlytics?.log("Uncaught exception in thread: ${thread.name}")
+            previousHandler?.uncaughtException(thread, throwable)
         }
     }
 
     fun log(message: String) {
-        crashlytics.log(message)
+        crashlytics?.log(message)
     }
 
     fun recordException(throwable: Throwable) {
-        crashlytics.recordException(throwable)
+        crashlytics?.recordException(throwable)
     }
 
     fun setUserId(userId: String) {
-        crashlytics.setUserId(userId)
+        crashlytics?.setUserId(userId)
     }
 
     companion object {
         val coroutineExceptionHandler = CoroutineExceptionHandler { _, exception ->
-            FirebaseCrashlytics.getInstance().recordException(exception)
+            runCatching { FirebaseCrashlytics.getInstance().recordException(exception) }
         }
     }
 }

@@ -2,6 +2,8 @@ package com.phoneguard.di
 
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.local.AppDatabaseProvider
+import com.phoneguard.data.local.SpamNumberDao
+import com.phoneguard.data.local.IntrusionEventDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -29,4 +31,10 @@ object DatabaseModule {
 
     @Provides
     fun provideScanHistoryDao(db: AppDatabase) = db.scanHistoryDao()
+
+    @Provides
+    fun provideSpamNumberDao(db: AppDatabase): SpamNumberDao = db.spamNumberDao()
+
+    @Provides
+    fun provideIntrusionEventDao(db: AppDatabase): IntrusionEventDao = db.intrusionEventDao()
 }

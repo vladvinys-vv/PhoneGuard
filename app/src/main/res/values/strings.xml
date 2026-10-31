@@ -287,4 +287,17 @@
     <string name="log_entries_count">%1$d записей</string>
     <string name="no_blocked_connections">Пока нет заблокированных подключений</string>
 
+
+    <!-- Intrusion response -->
+    <string name="intrusion_warning_title">Обнаружена попытка взлома</string>
+    <string name="intrusion_warning_message">Устройство защищено. Подозрительная активность заблокирована.</string>
+    <string name="intrusion_stop_alarm">Остановить сигнал</string>
+    <string name="intrusion_auto_response">Автоответ на угрозы</string>
+    <string name="intrusion_auto_response_description">Автоматически блокировать, оповещать и сдерживать при HIGH/CRITICAL</string>
+    <string name="intrusion_alarm">Сигнал при угрозе</string>
+    <string name="intrusion_photo">Фото злоумышленника</string>
+    <string name="intrusion_sms">SMS доверенным контактам</string>
+    <string name="intrusion_block_network">Блокировка сети для угрозы</string>
+    <string name="intrusion_honeypot">Honeypot-приманки</string>
+
 </resources>

@@ -8,8 +8,6 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.phoneguard.data.local.AppDatabase
-import com.phoneguard.data.local.BlockedLog
-import com.phoneguard.data.local.ScanHistory
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.data.settings.SettingsRepository
@@ -17,9 +15,11 @@ import com.phoneguard.model.FirewallLog
 import com.phoneguard.worker.ScheduledFullScanWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -34,8 +34,23 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val isDarkTheme: StateFlow<Boolean> = preferencesManager.isDarkTheme
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
 
     val isScheduledScanEnabled: StateFlow<Boolean> = preferencesManager.isScheduledScanEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
+    val isAutoIntrusionResponseEnabled: StateFlow<Boolean> = preferencesManager.isAutoIntrusionResponseEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val isIntrusionAlarmEnabled: StateFlow<Boolean> = preferencesManager.isIntrusionAlarmEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val isIntrusionPhotoEnabled: StateFlow<Boolean> = preferencesManager.isIntrusionPhotoEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val isIntrusionSmsEnabled: StateFlow<Boolean> = preferencesManager.isIntrusionSmsEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val isIntrusionBlockNetworkEnabled: StateFlow<Boolean> = preferencesManager.isIntrusionBlockNetworkEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val isIntrusionHoneypotEnabled: StateFlow<Boolean> = preferencesManager.isIntrusionHoneypotEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
 
     private val _exportResult = MutableStateFlow<String?>(null)
     val exportResult: StateFlow<String?> = _exportResult.asStateFlow()
@@ -72,6 +87,13 @@ class SettingsViewModel @Inject constructor(
             cancelPeriodicScan()
         }
     }
+
+    fun setAutoIntrusionResponse(enabled: Boolean) = viewModelScope.launch { preferencesManager.setAutoIntrusionResponseEnabled(enabled) }
+    fun setIntrusionAlarm(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionAlarmEnabled(enabled) }
+    fun setIntrusionPhoto(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionPhotoEnabled(enabled) }
+    fun setIntrusionSms(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionSmsEnabled(enabled) }
+    fun setIntrusionBlockNetwork(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionBlockNetworkEnabled(enabled) }
+    fun setIntrusionHoneypot(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionHoneypotEnabled(enabled) }
 
     fun deleteAllData() = viewModelScope.launch {
         appDatabase.blockedNumberDao().deleteAll()

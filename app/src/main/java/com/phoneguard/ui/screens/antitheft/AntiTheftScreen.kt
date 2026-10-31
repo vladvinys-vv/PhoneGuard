@@ -55,6 +55,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.antitheft.DeviceAdminReceiverImpl
+import com.phoneguard.ui.common.Event
 import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)

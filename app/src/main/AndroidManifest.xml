@@ -91,7 +91,7 @@
 
     <application
         android:name=".PhoneGuardApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="${appLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -103,9 +103,21 @@
             android:name="android.app.shortcuts"
             android:resource="@xml/shortcuts" />
 
+        <!-- Use HiltWorkerFactory instead of the default WorkManager initializer -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
         <!-- Main Activity -->
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.PhoneGuard">
             <intent-filter>
@@ -185,6 +197,20 @@
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
+
+        <!-- Intrusion Warning Activity -->
+        <activity
+            android:name=".ui.IntrusionWarningActivity"
+            android:exported="false"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.PhoneGuard" />
+
+        <!-- Intrusion Response Service -->
+        <service
+            android:name=".intrusion.IntrusionResponseService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
 
         <!-- SIM Swap Receiver -->
         <receiver

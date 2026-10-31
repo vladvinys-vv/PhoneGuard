@@ -4,6 +4,7 @@ import android.content.Context
 import com.phoneguard.data.local.SimSwapEventDao
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.simswap.SimSwapDetector
+import androidx.work.WorkManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,6 +24,11 @@ object AppModule {
     fun providePreferencesManager(@ApplicationContext context: Context): PreferencesManager {
         return PreferencesManager(context)
     }
+
+    @Provides
+    @Singleton
+    fun provideWorkManager(@ApplicationContext context: Context): WorkManager =
+        WorkManager.getInstance(context)
 
     @Provides
     @Singleton
