@@ -239,7 +239,8 @@
   `compileSdk 34`, — **4.16.0** (16 КБ страницы в ней поддерживаются: `APP_SUPPORT_FLEXIBLE_PAGE_SIZES`
   есть), `androidx.sqlite:sqlite` приведён к её compile-зависимости **2.6.2**. В `gradle_check.py`
   добавлена проверка «версия зависимости против `compileSdk`» — такая несовместимость теперь
-  ловится статически, а не на `CheckAarMetadataTask`.
+  ловится статически, а не на `CheckAarMetadataTask`. Правило покрыто самотестом
+  (`python3 tools/gradle_check.py --self-test`, вызывается из `./tools/check_all.sh`).
 - **Codemagic падал на шаге `Lint`: `Task 'lintDebug' is ambiguous`.** У проекта два flavor'а
   (`staging`, `production`), поэтому задач без flavor'а не существует: Gradle предлагал
   `lintProductionDebug`, `lintStagingDebug` и ещё десяток кандидатов. `lintDebug` заменён на

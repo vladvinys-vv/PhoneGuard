@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -502,6 +503,34 @@ def check_aar_metadata(files: list[Path], ext: dict[str, str], errors: list[str]
                 )
 
 
+def self_test() -> int:
+    """Проверка правила AAR-metadata на синтетических build.gradle (без сети и Gradle)."""
+    cases = [
+        ("compileSdk 35", "net.zetetic:sqlcipher-android:4.19.1", 1),
+        ("compileSdk 35", "net.zetetic:sqlcipher-android:5.0.0", 1),
+        ("compileSdk 35", "net.zetetic:sqlcipher-android:4.16.0", 0),
+        ("compileSdk 35", "net.zetetic:sqlcipher-android:4.18.0", 0),
+        ("compileSdkVersion 34", "net.zetetic:sqlcipher-android:4.16.0", 0),
+        ("compileSdk 36", "net.zetetic:sqlcipher-android:4.19.1", 0),
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        for index, (sdk, dependency, expected) in enumerate(cases):
+            path = Path(tmp) / f"case{index}" / "build.gradle"
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                f"android {{\n    {sdk}\n}}\n\ndependencies {{\n"
+                f'    implementation "{dependency}"\n}}\n',
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            check_aar_metadata([path], {}, errors)
+            if len(errors) != expected:
+                print(f"self-test: {sdk} + {dependency} -> {len(errors)} ошибок, ожидалось {expected}")
+                return 1
+    print("gradle_check --self-test: ok (AAR-metadata: версия зависимости против compileSdk)")
+    return 0
+
+
 def check_androidx_flags(files: list[Path], errors: list[str]) -> None:
     properties = read(ROOT / "gradle.properties")
     uses_androidx = any("androidx." in read(path) for path in files)
@@ -512,7 +541,11 @@ def check_androidx_flags(files: list[Path], errors: list[str]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--warnings-as-errors", action="store_true")
+    parser.add_argument("--self-test", action="store_true", help="прогнать самотест правил без Gradle")
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
 
     files = gradle_files()
     errors: list[str] = []

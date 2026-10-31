@@ -100,7 +100,7 @@ unzip -l app/build/outputs/apk/production/release/*.apk | grep 'lib/.*sqlcipher'
 zipalign -c -P 16 -v 4 app/build/outputs/apk/production/release/*.apk             # 16 КБ-выравнивание
 ```
 
-Если появится новое native-содержащее зависимое (или собственный NDK-код), проверять так же.
+Если появится новая зависимость с native-кодом (или собственный NDK-код), проверять так же.
 
 ## Post-Release
 - Ask users to export local crash reports (`adb pull /data/data/com.phoneguard/files/crash-reports`) if they hit issues

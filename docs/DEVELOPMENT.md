@@ -126,6 +126,18 @@ Gradle wrapper'а и `compileSdk` (с учётом `android.suppressUnsupportedC
 Проверяется и сам `app/proguard-rules.pro`: неизвестная директива R8 (опечатка вида `-dontwarns`)
 не видна до релизной сборки, а падает уже на `assembleProductionRelease`.
 
+Ещё одна проверка — **версия зависимости против `compileSdk`**. AAR-metadata каждой библиотеки
+записывает минимальный `compileSdk`, который она требует, и несовпадение валит сборку на
+`CheckAarMetadataTask` ещё до компиляции. Так падало в Codemagic:
+`Dependency 'net.zetetic:sqlcipher-android:4.19.1' requires ... compile against version 36 or later`,
+а проект на `compileSdk 35`. Таблица `AAR_MIN_COMPILE_SDK` в `gradle_check.py` знает такие пары
+(сейчас — `sqlcipher-android ≥ 4.19 → compileSdk 36`) и выдаёт ошибку заранее. Само правило
+проверяется самотестом на синтетических скриптах:
+
+```bash
+python3 tools/gradle_check.py --self-test
+```
+
 Отдельно проверяются пары «рантайм ↔ обработчик» — их версии обязаны совпадать, иначе kapt падает
 на несовместимом API: `hilt-android` ↔ `hilt-android-compiler`, `room-runtime` ↔ `room-compiler`,
 `hilt-work` ↔ `hilt-compiler`. Предупреждения (не ошибки) выдаются про предрелизные версии
