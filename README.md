@@ -32,7 +32,7 @@ Android-приложение для защиты устройства: пров�
 | Подписи APK | [apk-parser](https://github.com/hsiafan/apk-parser) `2.6.10` | Цепочка сертификатов, алгоритм подписи, срок действия — `PackageManager` этого не отдаёт | Apache-2.0 |
 | Threat intelligence | [URLhaus](https://urlhaus.abuse.ch/) + [OpenPhish](https://openphish.com/) через OkHttp | Проверка доменов из подозрительных SMS. Наружу уходит **только имя хоста**; выключено по умолчанию | free for non-commercial use |
 | Сеть | [OkHttp](https://square.github.io/okhttp/) `4.12.0` | HTTP-клиент для threat intel (+ `logging-interceptor` в debug) | Apache-2.0 |
-| БД | Room `2.7.2` + [SQLCipher for Android](https://github.com/sqlcipher/sqlcipher-android) `4.19.1` | Локальная зашифрованная база (версия схемы 8, миграции 1→8). Native-библиотеки собраны с поддержкой 16 КБ страниц (требование Play для `targetSdk 35`) | Apache-2.0 / BSD |
+| БД | Room `2.7.2` + [SQLCipher for Android](https://github.com/sqlcipher/sqlcipher-android) `4.16.0` | Локальная зашифрованная база (версия схемы 8, миграции 1→8). Native-библиотеки собраны с поддержкой 16 КБ страниц (требование Play для `targetSdk 35`) | Apache-2.0 / BSD |
 | Файлы сейфа | AndroidX Security Crypto | AES-256-GCM для файлов | Apache-2.0 |
 | Геолокация | Google Play Services Location | Последняя известная точка для анти-вора | proprietary SDK |
 | Детектор подглядывания | ML Kit face detection | Определение второго лица в кадре | proprietary SDK |

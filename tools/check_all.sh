@@ -15,6 +15,7 @@ step "gradle_check.py"
 # Конфигурация Gradle: ошибка здесь валит lint/тесты/сборку ещё до компиляции
 # (так падал mapOf() из Kotlin stdlib в Groovy-скрипте).
 python3 tools/gradle_check.py || failed=1
+python3 tools/gradle_check.py --self-test || failed=1
 
 step "static_audit.py"
 python3 tools/static_audit.py || failed=1

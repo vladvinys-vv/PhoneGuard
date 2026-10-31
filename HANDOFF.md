@@ -21,7 +21,7 @@ except an opt-in host-name lookup (threat intelligence, off by default).
   `codemagic.yaml` (то же + webhook о статусе сборки), `build_release.sh`.
   `jules.yml` only validates `.jules` config.
 - 16 КБ страницы памяти: закрытый `android-database-sqlcipher:4.5.4` заменён на
-  `net.zetetic:sqlcipher-android:4.19.1` (`APP_SUPPORT_FLEXIBLE_PAGE_SIZES`), пакет
+  `net.zetetic:sqlcipher-android:4.16.0` (`APP_SUPPORT_FLEXIBLE_PAGE_SIZES`), пакет
   `net.zetetic.database.sqlcipher`, `System.loadLibrary("sqlcipher")`. Проверка —
   `zipalign -c -P 16` (см. `docs/RELEASE.md`).
 - Known, documented limitation: domain/IP lists in the firewall are stored but not enforced
