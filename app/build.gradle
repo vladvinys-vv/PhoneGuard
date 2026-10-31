@@ -170,9 +170,14 @@ dependencies {
     // SQLCipher for Android (преемник закрытого android-database-sqlcipher): пакет
     // net.zetetic.database.sqlcipher, native-библиотеки собраны с
     // APP_SUPPORT_FLEXIBLE_PAGE_SIZES — требование Play к 16 КБ страницам при targetSdk 35.
-    // androidx.sqlite нужен как compile-зависимость библиотеки (см. её README).
-    implementation "net.zetetic:sqlcipher-android:4.19.1"
-    implementation "androidx.sqlite:sqlite:2.7.0"
+    //
+    // Версия 4.16.0 — последняя, собранная с compileSdk 34. Начиная с 4.19 библиотека собрана
+    // с compileSdk 36, и её AAR-metadata требует от потребителя compileSdk ≥ 36, иначе
+    // CheckAarMetadataTask валит сборку («requires ... compile against version 36 or later»).
+    // Поднимать до 4.19+ можно только вместе с AGP ≥ 8.9.1, Gradle ≥ 8.11.1 и compileSdk 36.
+    // androidx.sqlite — compile-зависимость библиотеки (для 4.16.0 это 2.6.2).
+    implementation "net.zetetic:sqlcipher-android:4.16.0"
+    implementation "androidx.sqlite:sqlite:2.6.2"
 
     // JSON serialization for scan reports
     implementation "com.google.code.gson:gson:2.11.0"

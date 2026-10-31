@@ -79,13 +79,19 @@ the parser installed the script prints a hint and exits 0.
 
 | | было | стало |
 |---|---|---|
-| зависимость | `net.zetetic:android-database-sqlcipher:4.5.4` | `net.zetetic:sqlcipher-android:4.19.1` (+ `androidx.sqlite:sqlite:2.7.0` как compile-зависимость библиотеки) |
+| зависимость | `net.zetetic:android-database-sqlcipher:4.5.4` | `net.zetetic:sqlcipher-android:4.16.0` (+ `androidx.sqlite:sqlite:2.6.2` как compile-зависимость библиотеки) |
 | пакет | `net.sqlcipher.database.*` | `net.zetetic.database.sqlcipher.*` |
 | загрузка ядра | `SQLiteDatabase.loadLibs(context)` | `System.loadLibrary("sqlcipher")` |
 | фабрика для Room | `SupportFactory(passphrase)` | `SupportOpenHelperFactory(passphrase)` |
 
 16 КБ-выравнивание обеспечено самой библиотекой: в её `Application.mk` стоит
-`APP_SUPPORT_FLEXIBLE_PAGE_SIZES := true`.
+`APP_SUPPORT_FLEXIBLE_PAGE_SIZES := true` (есть начиная с 4.6.1).
+
+**Почему 4.16.0, а не последняя.** С версии 4.19 библиотека собирается с `compileSdk 36`, и её
+AAR-metadata требует `compileSdk ≥ 36` у потребителя — на AGP 8.5.2 / `compileSdk 35` сборка падает
+на `CheckAarMetadataTask`. 4.16.0 — последняя версия, собранная с `compileSdk 34` (и с поддержкой
+16 КБ). Переход на 4.19+ возможен только вместе с AGP ≥ 8.9.1, Gradle ≥ 8.11.1 и `compileSdk 36`;
+`gradle_check.py` ловит такую несовместимость заранее.
 
 Проверка после сборки релиза:
 

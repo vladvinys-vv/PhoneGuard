@@ -469,6 +469,39 @@ def check_task_names(errors: list[str]) -> None:
                 )
 
 
+# Артефакт -> минимальный compileSdk, который требует его AAR-metadata (CheckAarMetadataTask).
+# Проверять обязательно: несовпадение валит сборку до компиляции, а текст ошибки у Gradle
+# начинается с середины («requires ... compile against version N or later»).
+AAR_MIN_COMPILE_SDK = {
+    # 4.19+ собран с compileSdk 36; 4.16.0 — с 34, поэтому и выбран.
+    "net.zetetic:sqlcipher-android": (4, 19, 36),
+}
+
+
+def check_aar_metadata(files: list[Path], ext: dict[str, str], errors: list[str]) -> None:
+    """Версии зависимостей против compileSdk: иначе CheckAarMetadataTask роняет сборку."""
+    compile_sdk: int | None = None
+    for path in files:
+        match = re.search(r"^\s*compileSdk(?:Version)?\s*=?\s*(\d+)", read(path), re.M)
+        if match:
+            compile_sdk = int(match.group(1))
+            break
+    if compile_sdk is None:
+        return
+
+    dependencies = collect_dependencies(files, ext)
+    for coordinate, (min_major, min_minor, required_sdk) in AAR_MIN_COMPILE_SDK.items():
+        for _, _, version in dependencies.get(coordinate, []):
+            parsed = version_tuple(version)
+            if parsed[:2] >= (min_major, min_minor) and compile_sdk < required_sdk:
+                errors.append(
+                    f"`{coordinate}:{version}` собран с compileSdk {required_sdk}, его AAR-metadata "
+                    f"требует compileSdk ≥ {required_sdk}, а проект на {compile_sdk} — "
+                    f"сборка упадёт на CheckAarMetadataTask; используйте версию < "
+                    f"{min_major}.{min_minor} или поднимите AGP/compileSdk"
+                )
+
+
 def check_androidx_flags(files: list[Path], errors: list[str]) -> None:
     properties = read(ROOT / "gradle.properties")
     uses_androidx = any("androidx." in read(path) for path in files)
@@ -495,6 +528,7 @@ def main() -> int:
     check_dependencies(files, ext, errors, warnings)
     check_androidx_flags(files, errors)
     check_task_names(errors)
+    check_aar_metadata(files, ext, errors)
 
     for problem in errors:
         print(f"error: {problem}")
