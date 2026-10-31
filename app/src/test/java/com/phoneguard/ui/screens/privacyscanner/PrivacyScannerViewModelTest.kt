@@ -1,13 +1,14 @@
 package com.phoneguard.ui.screens.privacyscanner
 
-import app.cash.turbine.test
+import android.graphics.drawable.Drawable
 import com.phoneguard.data.repository.PrivacyScannerRepository
-import com.phoneguard.model.AppPermission
 import com.phoneguard.model.AppCategory
+import com.phoneguard.model.AppPermission
 import com.phoneguard.model.PrivacyApp
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -18,18 +19,26 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
+/**
+ * Сканер приватности: загрузка списка и фильтры.
+ *
+ * Раньше тесты перезаглушали `repository.getInstalledApps()` уже **после**
+ * создания ViewModel: `init` успевал подписаться на пустой поток, поэтому
+ * список оставался пустым и проверки падали. Здесь ViewModel создаётся после
+ * заглушки. Иконка `PrivacyApp` не nullable (`Drawable`), поэтому вместо `null`
+ * используется mockk — иначе файл не компилировался.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PrivacyScannerViewModelTest {
 
     private val dispatcher = UnconfinedTestDispatcher()
-    private lateinit var viewModel: PrivacyScannerViewModel
     private val repository: PrivacyScannerRepository = mockk()
+    private val icon: Drawable = mockk(relaxed = true)
 
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         coEvery { repository.getInstalledApps() } returns flowOf(emptyList())
-        viewModel = PrivacyScannerViewModel(repository)
     }
 
     @After
@@ -37,51 +46,51 @@ class PrivacyScannerViewModelTest {
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
+    private fun newViewModel(): PrivacyScannerViewModel {
+        return PrivacyScannerViewModel(repository)
+    }
+
+    private fun app(packageName: String, excessive: Boolean): PrivacyApp = PrivacyApp(
+        packageName = packageName,
+        appName = packageName.uppercase(),
+        icon = icon,
+        permissions = listOf(AppPermission("android.permission.CAMERA", true, null)),
+        hasExcessivePermissions = excessive,
+        installTime = 0,
+        category = AppCategory.UNKNOWN
+    )
+
     @Test
-    fun `apps start empty then load from repository`() = runTest {
-        val apps = listOf(
-            PrivacyApp(
-                packageName = "com.example.app",
-                appName = "Example",
-                icon = null,
-                permissions = listOf(AppPermission("CAMERA", true, null)),
-                hasExcessivePermissions = false,
-                installTime = 0,
-                category = AppCategory.TOOLS
-            )
-        )
+    fun `apps load from repository`() = runTest {
+        val apps = listOf(app("com.example.app", excessive = false))
         coEvery { repository.getInstalledApps() } returns flowOf(apps)
 
-        viewModel.apps.test {
-            assertEquals(apps, awaitItem())
-        }
+        val viewModel = newViewModel()
+
+        assertEquals(apps, viewModel.apps.value)
     }
 
     @Test
     fun `filter All returns all apps`() = runTest {
-        val apps = listOf(
-            PrivacyApp("com.a", "A", null, emptyList(), false, 0, AppCategory.UNKNOWN),
-            PrivacyApp("com.b", "B", null, emptyList(), true, 0, AppCategory.UNKNOWN)
-        )
+        val apps = listOf(app("com.a", false), app("com.b", true))
         coEvery { repository.getInstalledApps() } returns flowOf(apps)
 
-        viewModel.filteredApps.test {
-            assertEquals(2, awaitItem().size)
-        }
+        val viewModel = newViewModel()
+
+        // `filteredApps` — `stateIn(WhileSubscribed())`, поэтому проверяем через
+        // подписку (`first {}`), а не через `.value`: до подписки там initialValue.
+        assertEquals(2, viewModel.filteredApps.first { it.size == 2 }.size)
     }
 
     @Test
     fun `filter Excessive returns only excessive apps`() = runTest {
-        val apps = listOf(
-            PrivacyApp("com.a", "A", null, emptyList(), false, 0, AppCategory.UNKNOWN),
-            PrivacyApp("com.b", "B", null, emptyList(), true, 0, AppCategory.UNKNOWN)
-        )
+        val apps = listOf(app("com.a", false), app("com.b", true))
         coEvery { repository.getInstalledApps() } returns flowOf(apps)
 
+        val viewModel = newViewModel()
         viewModel.setFilter(PrivacyFilter.Excessive)
-        viewModel.filteredApps.test {
-            assertEquals(1, awaitItem().size)
-            assertEquals("com.b", awaitItem().first().packageName)
-        }
+
+        val filtered = viewModel.filteredApps.first { it.size == 1 }
+        assertEquals(listOf("com.b"), filtered.map { it.packageName })
     }
 }

@@ -40,6 +40,22 @@ class PatternRulesTest {
     }
 
     @Test
+    fun `regex metacharacters in pattern are treated literally`() {
+        // Скобки — часть записи номера, а не группа регулярного выражения.
+        assertTrue(PatternRules.matchesPattern("+49 (170) 1234567", "+49 (170) 1234567"))
+        assertFalse(PatternRules.matchesPattern("49170", "+49 (170)"))
+        // `|` не должен превращаться в «или».
+        assertFalse(PatternRules.matchesPattern("+491701234567", "+7|+49"))
+        assertTrue(PatternRules.matchesPattern("+7|+49", "+7|+49"))
+    }
+
+    @Test
+    fun `wildcards still work next to literal characters`() {
+        assertTrue(PatternRules.matchesPattern("+49 (170) 1234567", "+49 (170)*"))
+        assertFalse(PatternRules.matchesPattern("+49 (171) 1234567", "+49 (170)*"))
+    }
+
+    @Test
     fun `validatePattern returns false for invalid pattern`() {
         assertFalse(PatternRules.validatePattern(""))
         assertFalse(PatternRules.validatePattern("   "))

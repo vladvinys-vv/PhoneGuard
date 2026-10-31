@@ -2,7 +2,6 @@ package com.phoneguard.data.repository
 
 import app.cash.turbine.test
 import com.phoneguard.data.local.AppDatabase
-import com.phoneguard.model.ScanHistory
 import com.phoneguard.model.SimSwapEvent
 import io.mockk.coEvery
 import io.mockk.every

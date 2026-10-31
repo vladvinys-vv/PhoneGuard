@@ -1,13 +1,12 @@
 package com.phoneguard.ui.screens.callblocker
 
-import app.cash.turbine.test
-import com.phoneguard.data.local.BlockedLog
 import com.phoneguard.data.local.BlockedLogDao
-import com.phoneguard.data.local.BlockedNumber
 import com.phoneguard.data.local.BlockedNumberDao
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.util.CsvImportHelper
+import com.phoneguard.util.PhoneNumberNormalizer
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -32,6 +32,7 @@ class CallBlockerViewModelTest {
     private val csvImportHelper: CsvImportHelper = mockk(relaxed = true)
     private val blockedNumberDao: BlockedNumberDao = mockk(relaxed = true)
     private val blockedLogDao: BlockedLogDao = mockk(relaxed = true)
+    private val phoneNumberNormalizer = PhoneNumberNormalizer(context)
 
     @Before
     fun setup() {
@@ -41,11 +42,13 @@ class CallBlockerViewModelTest {
         every { preferencesManager.blockInternationalNumbers } returns flowOf(false)
         every { appDatabase.blockedNumberDao() } returns blockedNumberDao
         every { appDatabase.blockedLogDao() } returns blockedLogDao
-        coEvery { blockedNumberDao.getPagedBlockedNumbers(any(), any()) } returns emptyList()
-        coEvery { blockedNumberDao.getBlockedNumbersCount() } returns 0
+        coEvery { blockedNumberDao.getPagedBlacklist(any(), any()) } returns emptyList()
+        coEvery { blockedNumberDao.getBlacklistCount() } returns 0
+        coEvery { blockedNumberDao.getPagedWhitelist(any(), any()) } returns emptyList()
+        coEvery { blockedNumberDao.getWhitelistCount() } returns 0
         coEvery { blockedLogDao.getPagedBlockedLogs(any(), any()) } returns emptyList()
         coEvery { blockedLogDao.getBlockedLogsCount() } returns 0
-        viewModel = CallBlockerViewModel(preferencesManager, appDatabase, context, csvImportHelper)
+        viewModel = CallBlockerViewModel(preferencesManager, appDatabase, context, csvImportHelper, phoneNumberNormalizer)
     }
 
     @After
@@ -61,12 +64,25 @@ class CallBlockerViewModelTest {
     }
 
     @Test
-    fun `addNumber adds to list`() = runTest {
-        viewModel.blacklist.test {
-            assertEquals(emptyList(), awaitItem())
-            viewModel.addNumber("+79991234567", "Spam", false)
-            // Note: actual DAO is mocked, so list stays empty in this test
-            assertEquals(emptyList(), awaitItem())
+    fun `invalid number is rejected before touching the database`() = runTest {
+        viewModel.addNumber("not-a-number", "Bogus", false)
+        assertEquals(CallBlockerViewModel.ERROR_INVALID_NUMBER, viewModel.error.value)
+    }
+
+    @Test
+    fun `valid number is inserted into the blacklist`() = runTest {
+        // Раньше тест ждал второго события от `blacklist`, хотя DAO замокан и
+        // список не меняется: Turbine просто истекал по таймауту. Проверяем
+        // то, что действительно происходит — запись в DAO.
+        viewModel.addNumber("+79991234567", "Spam", false)
+
+        assertNull(viewModel.error.value)
+        coVerify {
+            blockedNumberDao.insertBlockedNumber(
+                match {
+                    it.phoneNumber == "+79991234567" && it.name == "Spam" && !it.isWhitelist
+                }
+            )
         }
     }
 }

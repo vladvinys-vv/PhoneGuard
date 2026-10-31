@@ -3,15 +3,28 @@ package com.phoneguard.ui.screens.settings
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.test.platform.app.InstrumentationRegistry
+import com.phoneguard.R
 import com.phoneguard.ui.theme.PhoneGuardTheme
 import org.junit.Rule
 import org.junit.Test
 
+/**
+ * Экран настроек: заголовок и ключевые секции.
+ *
+ * Тексты берутся из ресурсов, а не хардкодятся по-русски: на устройстве с
+ * английской локалью прежние проверки («Настройки», «Язык») падали, хотя экран
+ * был в порядке.
+ */
 class SettingsScreenTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
     fun settingsScreen_displaysTitle() {
@@ -20,7 +33,9 @@ class SettingsScreenTest {
                 SettingsScreenPreview()
             }
         }
-        composeTestRule.onNodeWithText("Настройки").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.settings))
+            .assertIsDisplayed()
     }
 
     @Test
@@ -30,7 +45,11 @@ class SettingsScreenTest {
                 SettingsScreenPreview()
             }
         }
-        composeTestRule.onNodeWithText("Язык").assertIsDisplayed()
+        // «Язык» встречается дважды: заголовок секции и подпись выпадающего списка.
+        composeTestRule
+            .onAllNodesWithText(context.getString(R.string.language))
+            .onFirst()
+            .assertIsDisplayed()
     }
 
     @Test
@@ -40,7 +59,9 @@ class SettingsScreenTest {
                 SettingsScreenPreview()
             }
         }
-        composeTestRule.onNodeWithText("Тёмная тема").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.dark_theme))
+            .assertIsDisplayed()
     }
 }
 

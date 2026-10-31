@@ -1,6 +1,5 @@
 package com.phoneguard.intrusion
 
-import com.phoneguard.data.local.IntrusionEventDao
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Test

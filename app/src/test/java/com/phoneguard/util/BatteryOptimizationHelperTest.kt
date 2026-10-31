@@ -46,6 +46,17 @@ class BatteryOptimizationHelperTest {
     }
 
     @Test
+    fun `unavailable battery level is treated as full`() {
+        val batteryManager = mockk<BatteryManager>()
+        every { context.getSystemService(Context.BATTERY_SERVICE) } returns batteryManager
+        every { batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) } returns Int.MIN_VALUE
+
+        val helper = BatteryOptimizationHelper(context)
+        assertEquals(100, helper.getBatteryLevel())
+        assertFalse("неизвестный заряд не должен включать экономный режим", helper.isBatteryLow())
+    }
+
+    @Test
     fun `getBatteryLevel returns capacity`() {
         val batteryManager = mockk<BatteryManager>()
         every { context.getSystemService(Context.BATTERY_SERVICE) } returns batteryManager

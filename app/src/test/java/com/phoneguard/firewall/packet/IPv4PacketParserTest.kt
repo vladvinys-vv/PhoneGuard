@@ -112,4 +112,19 @@ class IPv4PacketParserTest {
         packet[offset] = (value ushr 8).toByte()
         packet[offset + 1] = value.toByte()
     }
+
+    @Test
+    fun `empty and truncated packets are rejected without exception`() {
+        assertNull(IPv4PacketParser.parse(ByteArray(0)))
+        assertNull(IPv4PacketParser.parse(ByteArray(1)))
+        assertNull(IPv4PacketParser.parse(ByteArray(19)))
+    }
+
+    @Test
+    fun `ipv6 packet is not parsed as ipv4`() {
+        // Версия 6 в старшем ниббле первого байта: туннель фаервола забирает такие
+        // пакеты (маршрут ::/0), и они должны просто отбрасываться.
+        val ipv6Header = ByteArray(40).apply { this[0] = 0x60 }
+        assertNull(IPv4PacketParser.parse(ipv6Header))
+    }
 }

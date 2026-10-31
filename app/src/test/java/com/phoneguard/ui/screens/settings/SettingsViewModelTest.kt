@@ -9,6 +9,8 @@ import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.data.settings.SettingsRepository
 import com.phoneguard.model.FirewallLog
+import com.phoneguard.threatintel.ThreatIntelRepository
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -35,12 +37,23 @@ class SettingsViewModelTest {
     private val appDatabase: AppDatabase = mockk()
     private val firewallRepository: FirewallRepository = mockk()
     private val workManager: WorkManager = mockk(relaxed = true)
+    private val threatIntelRepository: ThreatIntelRepository = mockk(relaxed = true)
 
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         every { preferencesManager.isDarkTheme } returns MutableStateFlow(false)
+        every { preferencesManager.language } returns MutableStateFlow("ru")
         every { preferencesManager.isScheduledScanEnabled } returns MutableStateFlow(false)
+        // ViewModel инициализирует stateIn для всех переключателей приватности,
+        // поэтому флоу должны быть заглушены до создания ViewModel.
+        every { preferencesManager.isAutoIntrusionResponseEnabled } returns MutableStateFlow(true)
+        every { preferencesManager.isIntrusionAlarmEnabled } returns MutableStateFlow(true)
+        every { preferencesManager.isIntrusionPhotoEnabled } returns MutableStateFlow(true)
+        every { preferencesManager.isIntrusionSmsEnabled } returns MutableStateFlow(true)
+        every { preferencesManager.isIntrusionBlockNetworkEnabled } returns MutableStateFlow(true)
+        every { preferencesManager.isIntrusionHoneypotEnabled } returns MutableStateFlow(true)
+        every { preferencesManager.isThreatIntelEnabled } returns MutableStateFlow(false)
         coEvery { preferencesManager.setDarkTheme(any()) } returns Unit
         coEvery { preferencesManager.setLanguage(any()) } returns Unit
         coEvery { settingsRepository.exportLogs(any(), any(), any()) } returns null
@@ -51,12 +64,24 @@ class SettingsViewModelTest {
             every { getAllScans() } returns flowOf(emptyList())
         }
         every { firewallRepository.allLogs } returns flowOf(emptyList())
-        viewModel = SettingsViewModel(preferencesManager, settingsRepository, appDatabase, firewallRepository, workManager)
+        viewModel = SettingsViewModel(
+            preferencesManager,
+            settingsRepository,
+            appDatabase,
+            firewallRepository,
+            workManager,
+            threatIntelRepository
+        )
     }
 
     @After
     fun tearDown() {
         kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `threat intel is disabled by default`() = runTest {
+        assertEquals(false, viewModel.isThreatIntelEnabled.value)
     }
 
     @Test
