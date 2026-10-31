@@ -105,13 +105,13 @@ PhoneGuard/
 
 ```bash
 # Debug-сборка
-./gradlew :app:assembleDebug
+./gradlew :app:assembleProductionDebug
 
 # Юнит-тесты (JVM, без устройства)
-./gradlew :app:testDebugUnitTest
+./gradlew :app:testProductionDebugUnitTest
 
 # Инструментальные тесты (нужен эмулятор или устройство)
-./gradlew :app:connectedDebugAndroidTest
+./gradlew :app:connectedProductionDebugAndroidTest
 
 # Release: production/staging → подписанный APK и AAB
 cp keystore.properties.example keystore.properties   # вписать свои ключи, не коммитить

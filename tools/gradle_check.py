@@ -402,6 +402,73 @@ def check_proguard_rules(files: list[Path], errors: list[str], warnings: list[st
                             )
 
 
+# Задачи Gradle, которые существуют только в проекте БЕЗ flavor'ов. При наличии productFlavors
+# Gradle создаёт `lintProductionDebug`/`testProductionDebugUnitTest`, а `lintDebug` становится
+# неоднозначным (`Task 'lintDebug' is ambiguous`) — сборка падает ещё до компиляции.
+VARIANTLESS_TASK = re.compile(
+    r"^:?(?:app:)?(assemble|bundle|install|uninstall|test|lint|lintVital|connected|compile|kapt|ksp|"
+    r"merge|package|minify|shrink)(Debug|Release)(AndroidTest|UnitTest)?$"
+)
+
+
+def read_flavors() -> list[str]:
+    """Имена flavor'ов из `productFlavors { … }` в `app/build.gradle`."""
+    text = read(ROOT / "app/build.gradle")
+    if "productFlavors" not in text:
+        return []
+    block = text[text.index("productFlavors"):]
+    flavors: list[str] = []
+    depth = 0
+    for line in block.splitlines():
+        stripped = line.strip()
+        match = re.fullmatch(r"(\w+)\s*\{", stripped)
+        if depth == 1 and match:
+            flavors.append(match.group(1))
+        depth += line.count("{") - line.count("}")
+        if depth <= 0 and flavors:
+            break
+    return flavors
+
+
+def check_task_names(errors: list[str]) -> None:
+    """`./gradlew lintDebug` в CI/доках при наличии flavor'ов — гарантированное падение."""
+    flavors = read_flavors()
+    if not flavors:
+        return
+    sources = [
+        *sorted((ROOT / ".github/workflows").glob("*.yml")),
+        ROOT / "codemagic.yaml",
+        *sorted(ROOT.glob("*.sh")),
+        *sorted((ROOT / "tools").glob("*.sh")),
+        ROOT / "README.md",
+        ROOT / "AGENTS.md",
+        ROOT / "HANDOFF.md",
+        # CHANGELOG описывает прошлые ошибки — исторические упоминания задач не проверяем.
+        *[path for path in sorted((ROOT / "docs").glob("*.md")) if path.name != "CHANGELOG.md"],
+    ]
+    for path in sources:
+        if not path.exists():
+            continue
+        for number, line in enumerate(read(path).splitlines(), start=1):
+            if "gradlew" not in line:
+                continue
+            for raw in line.split("gradlew", 1)[1].split():
+                task = raw.strip("\"'`")
+                if not task or task.startswith("-") or "$" in task:
+                    continue
+                if not VARIANTLESS_TASK.match(task):
+                    continue
+                if any(flavor.lower() in task.lower() for flavor in flavors):
+                    continue
+                preferred = "production" if "production" in flavors else flavors[0]
+                example = f"lint{preferred.capitalize()}Debug" if task.startswith("lint") else ""
+                hint = f" (например `{example}`)" if example else ""
+                errors.append(
+                    f"{path.relative_to(ROOT)}:{number}: `{task}` неоднозначна при flavor'ах "
+                    f"{flavors} — нужен вариант с flavor{hint}"
+                )
+
+
 def check_androidx_flags(files: list[Path], errors: list[str]) -> None:
     properties = read(ROOT / "gradle.properties")
     uses_androidx = any("androidx." in read(path) for path in files)
@@ -427,6 +494,7 @@ def main() -> int:
     check_proguard_rules(files, errors, warnings)
     check_dependencies(files, ext, errors, warnings)
     check_androidx_flags(files, errors)
+    check_task_names(errors)
 
     for problem in errors:
         print(f"error: {problem}")

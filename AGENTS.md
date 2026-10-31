@@ -27,7 +27,8 @@ Facts here must match the code; the authoritative docs are `README.md`,
   real `android.*` signatures. `./tools/fetch_android_jar.sh` fetches `android.jar`
   where `dl.google.com` is blocked.
 - Build / test / lint (needs the Android SDK and Maven access):
-  `./gradlew assembleProductionDebug`, `./gradlew testDebugUnitTest`, `./gradlew lintDebug`.
+  `./gradlew assembleProductionDebug`, `./gradlew testProductionDebugUnitTest`,
+  `./gradlew lintProductionDebug` (имена задач обязаны включать flavor: у проекта их два).
   CI (`.github/workflows/android-ci.yml`) runs the static checks, the Kotlin frontend,
   lint, unit tests and both production builds.
 

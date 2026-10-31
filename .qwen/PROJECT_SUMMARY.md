@@ -30,7 +30,8 @@ Android-приложение для защиты устройства: полн�
 строк, компилятор Kotlin, aapt2, опционально tree-sitter) и
 `python3 tools/kotlin_frontend_check.py --android-jar <jar>`.
 `./tools/fetch_android_jar.sh` достаёт `android.jar` из GitHub-зеркала, если `dl.google.com`
-недоступен. Сборка и тесты — `./gradlew assembleProductionDebug testDebugUnitTest lintDebug`
+недоступен. Сборка и тесты —
+`./gradlew assembleProductionDebug testProductionDebugUnitTest lintProductionDebug`
 (в CI: `.github/workflows/android-ci.yml`).
 
 ## Status
