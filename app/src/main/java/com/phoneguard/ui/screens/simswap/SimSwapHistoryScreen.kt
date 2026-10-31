@@ -1,6 +1,5 @@
 package com.phoneguard.ui.screens.simswap
 
-import android.app.Application
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -61,8 +60,15 @@ fun SimSwapHistoryScreen(
                 )
             }
             Button(onClick = {
-                exportCsv(context, history.history)
-                Toast.makeText(context, R.string.sim_swap_export, Toast.LENGTH_SHORT).show()
+                // Раньше сообщение об успехе показывалось всегда, даже если файл
+                // не записался (например, внешнее хранилище отмонтировано).
+                val path = exportCsv(context, history.history)
+                val message = if (path != null) {
+                    context.getString(R.string.export_logs_saved, path)
+                } else {
+                    context.getString(R.string.export_logs_failed)
+                }
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
             }) {
                 Icon(imageVector = Icons.Default.Download, contentDescription = null)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -70,7 +76,7 @@ fun SimSwapHistoryScreen(
             }
         }
         LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(history.history) { event ->
+            items(history.history, key = { event -> event.id }) { event ->
                 SimSwapEventCard(event = event)
             }
         }
@@ -93,24 +99,47 @@ private fun SimSwapEventCard(event: SimSwapEvent) {
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = status, fontWeight = FontWeight.Bold)
-            Text(text = "old: ${event.oldImsi ?: "?"} -> new: ${event.newImsi ?: "?"}")
+            Text(
+                text = stringResource(
+                    R.string.sim_swap_imsi_change,
+                    event.oldImsi ?: "?",
+                    event.newImsi ?: "?"
+                )
+            )
             Text(text = event.addressString ?: stringResource(R.string.sim_swap_unknown))
         }
     }
 }
 
-private fun exportCsv(context: android.content.Context, history: List<SimSwapEvent>) {
-    runCatching {
-        val file = File(context.getExternalFilesDir(null), "sim_swap_history.csv")
+/**
+ * Пишет историю подмен SIM в CSV рядом с приложением.
+ *
+ * @return путь к файлу либо `null`, если записать не удалось
+ */
+private fun exportCsv(context: android.content.Context, history: List<SimSwapEvent>): String? {
+    val externalDir = context.getExternalFilesDir(null) ?: return null
+    val file = File(externalDir, "sim_swap_history.csv")
+    return runCatching {
         FileWriter(file).use { writer ->
             writer.appendLine("id,timestamp,old_imsi,new_imsi,lat,lng,address,confirmed,attack_suspected")
-            history.forEach { e ->
+            history.forEach { event ->
+                // Кавычки в адресе удваиваются — иначе CSV ломается на запятой/кавычке.
+                val address = (event.addressString ?: "").replace("\"", "\"\"")
                 writer.appendLine(
-                    "${e.id},${e.timestamp},${e.oldImsi ?: ""},${e.newImsi ?: ""},${e.latitude ?: ""}," +
-                        "${e.longitude ?: ""},\"${e.addressString ?: ""}\",${e.isConfirmed},${e.isAttackSuspected}"
+                    listOf(
+                        event.id.toString(),
+                        event.timestamp.toString(),
+                        event.oldImsi.orEmpty(),
+                        event.newImsi.orEmpty(),
+                        event.latitude?.toString().orEmpty(),
+                        event.longitude?.toString().orEmpty(),
+                        "\"$address\"",
+                        event.isConfirmed.toString(),
+                        event.isAttackSuspected.toString()
+                    ).joinToString(",")
                 )
             }
         }
-    }
-    Unit
+        file.absolutePath
+    }.getOrNull()
 }

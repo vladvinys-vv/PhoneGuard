@@ -9,13 +9,10 @@ import javax.inject.Singleton
 class ShoulderSurferUseCase @Inject constructor(
     private val repository: ShoulderSurferRepository
 ) {
-    fun start() {
-        repository.startService()
-    }
+    /** @return `false`, если ОС не разрешила запуск (Android 12+, фон). */
+    fun start(): Boolean = repository.startService()
 
-    fun stop() {
-        repository.stopService()
-    }
+    fun stop(): Boolean = repository.stopService()
 
     fun isRunning(): Flow<Boolean> {
         return kotlinx.coroutines.flow.flowOf(repository.isServiceRunning())

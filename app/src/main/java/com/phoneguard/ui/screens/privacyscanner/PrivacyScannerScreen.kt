@@ -3,14 +3,15 @@ package com.phoneguard.ui.screens.privacyscanner
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,17 +20,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.phoneguard.R
 import com.phoneguard.model.PrivacyApp
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import com.phoneguard.util.IntentUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -152,11 +150,7 @@ fun PrivacyAppItem(
 ) {
     ListItem(
         modifier = Modifier.fillMaxWidth(),
-        leadingContent = {
-            // Drawable to painter would be here; for simplicity we use placeholder
-            // We'll implement it later or use a placeholder icon
-            androidx.compose.material3.Icon(Icons.Default.Settings, contentDescription = null)
-        },
+        leadingContent = { AppIcon(packageName = app.packageName) },
         headlineContent = { Text(app.appName) },
         supportingContent = {
             Text("${stringResource(R.string.dangerous_permissions)}: ${app.dangerousPermissionCount}")
@@ -202,7 +196,7 @@ fun PrivacyScannerDetailScreen(
                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                     data = Uri.fromParts("package", packageName, null)
                 }
-                context.startActivity(intent)
+                IntentUtils.open(context, intent)
             }) {
                 Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.open_app_settings))
             }
@@ -218,10 +212,7 @@ fun PrivacyScannerDetailScreen(
                     ListItem(
                         headlineContent = { Text(app.appName) },
                         supportingContent = { Text(stringResource(R.string.package_name, packageName)) },
-                        leadingContent = {
-                            // App icon placeholder again
-                            androidx.compose.material3.Icon(Icons.Default.Settings, contentDescription = null)
-                        }
+                        leadingContent = { AppIcon(packageName = packageName) }
                     )
                     Divider()
                 }
@@ -264,3 +255,39 @@ fun PermissionItem(
         }
     )
 }
+
+/**
+ * Иконка установленного приложения.
+ *
+ * Раньше на её месте рисовалась одна и та же «шестерёнка», поэтому в списке
+ * приложений с опасными разрешениями нельзя было понять, о каком приложении речь.
+ * Иконка берётся из `PackageManager` один раз на пакет и декодируется в bitmap;
+ * если пакет удалили — показываем нейтральную иконку.
+ */
+@Composable
+private fun AppIcon(packageName: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val bitmap = remember(packageName) {
+        runCatching {
+            context.packageManager.getApplicationIcon(packageName)
+                .toBitmap(width = ICON_SIZE_PX, height = ICON_SIZE_PX)
+                .asImageBitmap()
+        }.getOrNull()
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = null,
+            modifier = modifier.size(ICON_DISPLAY_SIZE)
+        )
+    } else {
+        Icon(
+            imageVector = Icons.Default.Settings,
+            contentDescription = null,
+            modifier = modifier.size(ICON_DISPLAY_SIZE)
+        )
+    }
+}
+
+private const val ICON_SIZE_PX = 96
+private val ICON_DISPLAY_SIZE = 40.dp

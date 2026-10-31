@@ -14,14 +14,17 @@ import javax.inject.Singleton
 class InstalledAppsCache @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    @Volatile
     private var cachedApps: List<ApplicationInfo>? = null
-    private var cacheTimestamp: Long = 0
+    @Volatile
+    private var cacheTimestamp: Long = 0L
     private val cacheValidityMs = TimeUnit.HOURS.toMillis(24)
 
     suspend fun getInstalledApps(): List<ApplicationInfo> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        if (cachedApps != null && (now - cacheTimestamp) < cacheValidityMs) {
-            return@withContext cachedApps!!
+        val cached = cachedApps
+        if (cached != null && (now - cacheTimestamp) < cacheValidityMs) {
+            return@withContext cached
         }
 
         val pm = context.packageManager

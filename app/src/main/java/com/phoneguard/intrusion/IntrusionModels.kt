@@ -1,6 +1,5 @@
 package com.phoneguard.intrusion
 
-import java.util.Locale
 
 enum class IntrusionSeverity { LOW, MEDIUM, HIGH, CRITICAL }
 
@@ -10,6 +9,9 @@ enum class IntrusionType {
     ANALYSIS_OR_PARSER_ATTEMPT,
     BRUTE_FORCE,
     FIREWALL_BYPASS,
+
+    /** Кто-то открыл файл-приманку (honeypot): признак вредоносного ПО. */
+    HONEYPOT_ACCESSED,
     UNKNOWN
 }
 

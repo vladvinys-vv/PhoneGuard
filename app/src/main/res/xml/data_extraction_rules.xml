@@ -1,12 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Правила для Android 12+ (cloud backup и перенос на новое устройство).
+
+    PhoneGuard хранит только чувствительные данные: зашифрованный сейф,
+    фото/записи вторжений, хэш PIN и парольную фразу базы. Поэтому наружу
+    не выгружается НИЧЕГО — ни в облако, ни через Device-to-Device transfer.
+
+    Важно: `android:allowBackup="false"` сам по себе не запрещает D2D-перенос
+    на Android 12+, для него нужны именно эти правила, поэтому файл обязан
+    быть подключён в манифесте через `android:dataExtractionRules`.
+-->
 <data-extraction-rules>
     <cloud-backup>
-        <include domain="sharedpref" path="."/>
-        <exclude domain="sharedpref" path="device.xml"/>
-        <exclude domain="sharedpref" path="pin.xml"/>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
-        <include domain="sharedpref" path="."/>
-        <exclude domain="sharedpref" path="pin.xml"/>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </device-transfer>
 </data-extraction-rules>

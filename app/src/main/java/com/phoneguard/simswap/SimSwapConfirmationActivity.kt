@@ -1,6 +1,7 @@
 package com.phoneguard.simswap
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,9 @@ import dagger.hilt.android.AndroidEntryPoint
 class SimSwapConfirmationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // На экране — координаты и адрес подмены SIM: запрещаем скриншоты и превью
+        // в списке недавних задач.
+        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             PhoneGuardTheme {
                 Surface(modifier = androidx.compose.ui.Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

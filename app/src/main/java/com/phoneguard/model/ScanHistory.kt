@@ -14,13 +14,6 @@ data class ScanHistory(
     val reportJson: String = ""
 )
 
-data class ScanProgress(
-    val step: Int,
-    val totalSteps: Int,
-    val stageName: String,
-    val isFinished: Boolean = false
-)
-
 data class ScanIssue(
     val severity: IssueSeverity,
     val title: String,

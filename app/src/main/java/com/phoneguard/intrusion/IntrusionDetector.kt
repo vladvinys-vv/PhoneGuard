@@ -1,8 +1,9 @@
 package com.phoneguard.intrusion
 
 import android.content.Context
-import android.provider.Settings
 import android.os.Build
+import android.provider.Settings
+import com.phoneguard.util.DeviceHeuristics
 import java.io.File
 
 class IntrusionDetector {
@@ -41,10 +42,9 @@ class IntrusionDetector {
                 severity = IntrusionSeverity.LOW
             )
         }
-        val suspiciousPackages = listOf("frida", "xposed", "magisk", "substrate", "cydia")
         try {
             context.packageManager.getInstalledApplications(0).forEach { app ->
-                if (suspiciousPackages.any { app.packageName.contains(it, ignoreCase = true) }) {
+                if (DeviceHeuristics.isSuspiciousPackage(app.packageName)) {
                     signals += IntrusionSignal(
                         type = IntrusionType.HOOKING_DETECTED,
                         evidence = mapOf("package" to app.packageName),
@@ -64,12 +64,25 @@ class IntrusionDetector {
             }
         } catch (_: Exception) {}
         try {
-            val enabledServices = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
-            if (enabledServices.isNotBlank() && !enabledServices.contains(context.packageName)) {
+            val enabledServices = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            )
+            val untrusted = DeviceHeuristics.untrustedAccessibilityPackages(
+                enabledServices,
+                context.packageName
+            )
+            if (untrusted.isNotEmpty()) {
+                // Не RAT и не HIGH: включённая сторонняя служба доступности — повод
+                // посмотреть, но не повод для сирены и SMS. TalkBack и прочие
+                // системные службы отфильтрованы в эвристике.
                 signals += IntrusionSignal(
-                    type = IntrusionType.RAT_DETECTED,
-                    evidence = mapOf("reason" to "external_accessibility_service", "services" to enabledServices),
-                    severity = IntrusionSeverity.MEDIUM
+                    type = IntrusionType.ANALYSIS_OR_PARSER_ATTEMPT,
+                    evidence = mapOf(
+                        "reason" to "external_accessibility_service",
+                        "services" to untrusted.joinToString(",")
+                    ),
+                    severity = IntrusionSeverity.LOW
                 )
             }
         } catch (_: Exception) {}

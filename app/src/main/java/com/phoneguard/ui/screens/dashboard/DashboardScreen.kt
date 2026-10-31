@@ -1,24 +1,32 @@
 package com.phoneguard.ui.screens.dashboard
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.phoneguard.R
-import com.phoneguard.ui.theme.*
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel.FullScanSummary
-import kotlinx.coroutines.flow.first
+import com.phoneguard.ui.theme.*
 
 @Composable
 fun DashboardScreen(
@@ -28,10 +36,23 @@ fun DashboardScreen(
     onNavigateToPrivacyScanner: () -> Unit,
     onNavigateToSpywareCheck: () -> Unit,
     onNavigateToFullScan: () -> Unit,
-    onNavigateToSimSwap: () -> Unit
+    onNavigateToSimSwap: () -> Unit,
+    onNavigateToPhoneCheck: () -> Unit
 ) {
     val score by viewModel.securityScore.collectAsState()
     val fullScanSummary by viewModel.fullScanSummary.collectAsState()
+    val phoneCheckSummary by viewModel.phoneCheckSummary.collectAsState()
+
+    // Сводка последнего сканирования читалась только в init: после возврата с
+    // экрана сканирования дашборд продолжал показывать старую дату и оценку.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.recalculateScore()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(
         modifier = Modifier
@@ -50,6 +71,11 @@ fun DashboardScreen(
         FullScanCard(
             summary = fullScanSummary,
             onClick = onNavigateToFullScan
+        )
+
+        PhoneCheckCard(
+            summary = phoneCheckSummary,
+            onClick = onNavigateToPhoneCheck
         )
 
         SecurityFeatureCards(
@@ -118,7 +144,7 @@ fun FullScanCard(summary: FullScanSummary, onClick: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = summary.dateText ?: "Сканирование ещё не выполнялось",
+                    text = summary.dateText ?: stringResource(R.string.scan_not_performed_yet),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -174,7 +200,7 @@ fun SecurityScoreCard(score: Int) {
                 modifier = Modifier.size(150.dp)
             ) {
                 CircularProgressIndicator(
-                    progress = score / 100f,
+                    progress = { scoreFraction(score) },
                     modifier = Modifier.size(150.dp),
                     color = color,
                     strokeWidth = 12.dp,
@@ -278,7 +304,7 @@ fun FeatureCard(
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
-                    progress = score / 100f,
+                    progress = { scoreFraction(score) },
                     modifier = Modifier.size(50.dp),
                     color = getScoreColor(score),
                     strokeWidth = 6.dp,
@@ -295,6 +321,14 @@ fun FeatureCard(
     }
 }
 
+/**
+ * Доля заполнения круга 0..1.
+ *
+ * Без `coerceIn` оценка вне 0..100 (например, из старой записи в истории после
+ * смены формулы) отрисовывала дугу «на 130%» — визуально кольцо залезало само на себя.
+ */
+private fun scoreFraction(score: Int): Float = (score / 100f).coerceIn(0f, 1f)
+
 private fun getScoreColor(score: Int): Color {
     return when {
         score >= 80 -> ScoreExcellent
@@ -302,5 +336,40 @@ private fun getScoreColor(score: Int): Color {
         score >= 40 -> ScoreFair
         score >= 20 -> ScorePoor
         else -> ScoreCritical
+    }
+}
+
+/** Карточка «чек всего телефона»: состояние устройства и число проблем. */
+@Composable
+fun PhoneCheckCard(summary: DeviceAuditSummary, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.phone_check_run),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = summary.score?.let {
+                        stringResource(R.string.phone_check_score_short, it, summary.issues)
+                    } ?: stringResource(R.string.phone_check_card_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = stringResource(R.string.phone_check),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }

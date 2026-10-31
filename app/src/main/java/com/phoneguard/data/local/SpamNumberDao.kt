@@ -23,4 +23,8 @@ interface SpamNumberDao {
 
     @Query("DELETE FROM spam_numbers WHERE id = :id")
     suspend fun deleteSpamNumber(id: Long)
+
+    /** Полная очистка базы спам-номеров (пункт «Удалить все данные»). */
+    @Query("DELETE FROM spam_numbers")
+    suspend fun deleteAll()
 }

@@ -1,5 +1,6 @@
 package com.phoneguard.util
 
+import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
@@ -28,6 +29,25 @@ object SecurityUtils {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * SHA-256 отпечаток в hex. Используется для сравнения сертификатов подписи APK
+     * (стабильнее, чем MD5, который отдаёт apk-parser).
+     */
+    fun sha256Hex(data: ByteArray): String? = try {
+        MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { byte ->
+            "%02x".format(byte)
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Криптостойкий случайный токен (hex), например для имён одноразовых honeypot-файлов. */
+    fun randomToken(bytes: Int = 16): String {
+        val buffer = ByteArray(bytes)
+        SecureRandom().nextBytes(buffer)
+        return buffer.joinToString("") { "%02x".format(it) }
     }
 
     private fun generateSalt(): ByteArray {

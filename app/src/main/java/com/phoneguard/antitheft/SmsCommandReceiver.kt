@@ -1,48 +1,85 @@
 package com.phoneguard.antitheft
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.location.Location
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.os.Bundle
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.provider.Telephony
-import android.telephony.SmsManager
-import android.telephony.SmsMessage
 import android.telephony.TelephonyManager
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.phoneguard.R
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.util.SmsSender
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
+/**
+ * Обработка удалённых SMS-команд вида `#PG:PIN:COMMAND`.
+ *
+ * Исправлено относительно прежней версии:
+ *  - `preferencesManager.backupNumber` (Flow) читался как значение и никуда не
+ *    использовался, поэтому «прощальное» SMS перед вайпом не отправлялось;
+ *  - `telephonyManager.imei` на Android 10+ бросает SecurityException без
+ *    READ_PHONE_STATE (а для обычных приложений недоступен вовсе) — вместо
+ *    него используется `Settings.Secure.ANDROID_ID`;
+ *  - многочастные SMS обрабатывались по отдельности, поэтому одна команда
+ *    могла выполниться несколько раз; теперь части собираются в одно сообщение;
+ *  - `startForegroundService` из фона на Android 12+ бросает исключение —
+ *    вызов обёрнут в try/catch;
+ *  - процесс больше не убивается сразу после `onReceive` благодаря `goAsync()`.
+ */
 @AndroidEntryPoint
 class SmsCommandReceiver : BroadcastReceiver() {
 
     @Inject
     lateinit var preferencesManager: PreferencesManager
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Inject
+    lateinit var locationProvider: LocationProvider
 
     // Формат команды: #PG:PIN:COMMAND (PG = PhoneGuard)
     // Пример: #PG:1234:LOCK
     private val commandPattern = Regex("""#PG:(\d+):(\w+)""", RegexOption.IGNORE_CASE)
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (Telephony.Sms.Intents.SMS_RECEIVED_ACTION == intent.action) {
-            val smsMessages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            smsMessages.forEach { message ->
-                val sender = message.originatingAddress ?: return@forEach
-                val messageBody = message.displayMessageBody ?: return@forEach
-                scope.launch {
-                    processCommand(context, messageBody, sender)
-                }
+        if (Telephony.Sms.Intents.SMS_RECEIVED_ACTION != intent.action) return
+
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
+        if (messages.isEmpty()) return
+
+        val sender = messages.firstNotNullOfOrNull { it.originatingAddress } ?: return
+        // Многочастное SMS приходит как несколько SmsMessage в одном интенте.
+        val body = messages.mapNotNull { it.displayMessageBody }.joinToString("")
+        if (!commandPattern.containsMatchIn(body)) return
+
+        val pendingResult = goAsync()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope.launch {
+            try {
+                processCommand(context, body, sender)
+            } catch (e: Exception) {
+                Log.w(TAG, "SMS command failed", e)
+            } finally {
+                pendingResult.finish()
             }
         }
     }
@@ -50,10 +87,16 @@ class SmsCommandReceiver : BroadcastReceiver() {
     private suspend fun processCommand(context: Context, command: String, sender: String) {
         val match = commandPattern.find(command) ?: return
         val pin = match.groupValues[1]
-        val cmd = match.groupValues[2].uppercase()
+        // `Locale.US`: в турецкой локали `uppercase()` превращает «i» в «İ»,
+        // и команда вида «wipe» перестаёт совпадать с «WIPE».
+        val cmd = match.groupValues[2].uppercase(java.util.Locale.US)
 
+        // PIN проверяется до любой реакции: без него команда игнорируется.
         if (!preferencesManager.verifyPin(pin)) {
-            // Неверный PIN — логируем попытку
+            Log.w(TAG, "SMS command rejected: wrong PIN")
+            // Подбор PIN по SMS больше не бесконечен (см. PinAttemptLimiter), но
+            // пользователь должен узнать о попытках: показываем локальное уведомление.
+            notifyRejectedCommand(context)
             return
         }
 
@@ -61,7 +104,7 @@ class SmsCommandReceiver : BroadcastReceiver() {
             "LOCK" -> lockDevice(context, sender)
             "ALARM" -> triggerAlarm(context)
             "LOCATION" -> sendLocation(context, sender)
-            "WIPE" -> wipeDevice(context)
+            "WIPE" -> wipeDevice(context, sender)
             "PHOTO" -> takeStealthPhoto(context, sender)
             "STATUS" -> sendDeviceStatus(context, sender)
         }
@@ -73,85 +116,177 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
         if (devicePolicyManager.isAdminActive(componentName)) {
             devicePolicyManager.lockNow()
-            sendSms(context, sender, "PhoneGuard: Устройство заблокировано.")
+            sendSms(context, sender, context.getString(R.string.sms_reply_device_locked))
         } else {
-            sendSms(context, sender, "PhoneGuard: Device Admin не активен. Блокировка невозможна.")
+            sendSms(context, sender, context.getString(R.string.sms_reply_lock_unavailable))
         }
     }
 
     private fun triggerAlarm(context: Context) {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.setStreamVolume(
+                AudioManager.STREAM_ALARM,
+                audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                0
+            )
 
-        val notification: Ringtone = RingtoneManager.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
-        notification.play()
+            val ringtone: Ringtone = RingtoneManager.getRingtone(
+                context,
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ) ?: return
+            ringtone.play()
 
-        // Stop after 60 seconds
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            notification.stop()
-        }, 60000)
-    }
-
-    private fun sendLocation(context: Context, sender: String) {
-        scope.launch {
-            val locationDetector = com.phoneguard.antitheft.LocationProvider(context)
-            val location = locationDetector.getLastLocation()
-            if (location != null) {
-                val lat = location.latitude
-                val lon = location.longitude
-                val accuracy = location.accuracy
-                val mapsUrl = "https://maps.google.com/?q=$lat,$lon"
-                sendSms(context, sender, "PhoneGuard: Местоположение — $lat, $lon (точность: ${accuracy.toInt()}м). $mapsUrl")
-            } else {
-                sendSms(context, sender, "PhoneGuard: Не удалось определить местоположение.")
-            }
+            Handler(Looper.getMainLooper()).postDelayed({ ringtone.stop() }, ALARM_DURATION_MS)
+        } catch (e: SecurityException) {
+            // На Android 15+ изменение громкости сторонним приложением запрещено —
+            // сигнал всё равно проигрываем.
+            Log.w(TAG, "Cannot raise alarm volume", e)
         }
     }
 
-    private fun wipeDevice(context: Context) {
+    private suspend fun sendLocation(context: Context, sender: String) {
+        val location = locationProvider.getLastLocation()
+        if (location != null) {
+            // Locale.US: в немецкой локали координаты получились бы «52,52», и ссылка
+            // на карту ломается.
+            val lat = String.format(java.util.Locale.US, "%.5f", location.latitude)
+            val lon = String.format(java.util.Locale.US, "%.5f", location.longitude)
+            sendSms(
+                context,
+                sender,
+                context.getString(
+                    R.string.location_share_sms,
+                    lat,
+                    lon,
+                    "https://maps.google.com/?q=$lat,$lon"
+                )
+            )
+        } else {
+            sendSms(context, sender, context.getString(R.string.location_share_unavailable))
+        }
+    }
+
+    private suspend fun wipeDevice(context: Context, sender: String) {
         val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         val componentName = ComponentName(context, DeviceAdminReceiverImpl::class.java)
 
-        if (devicePolicyManager.isAdminActive(componentName)) {
-            // Отправляем SMS перед вайпом
-            val backupNumber = preferencesManager.backupNumber
-            // wipeData запускается асинхронно — система перезагрузится
+        if (!devicePolicyManager.isAdminActive(componentName)) {
+            Log.w(TAG, "Wipe requested but Device Admin is not active")
+            return
+        }
+
+        // Отправляем подтверждение на резервный номер (если он задан) до вайпа:
+        // после wipeData устройство уже не сможет отправить SMS.
+        val backupNumber = preferencesManager.backupNumber.first()
+        if (!backupNumber.isNullOrBlank()) {
+            sendSms(context, backupNumber, context.getString(R.string.sms_reply_wipe_pending))
+        }
+
+        Log.w(TAG, "Executing remote wipe (API level ${android.os.Build.VERSION.SDK_INT})")
+        try {
+            @Suppress("DEPRECATION")
             devicePolicyManager.wipeData(0)
+        } catch (e: Exception) {
+            // wipeData доступен только device owner; для обычного Device Admin это
+            // SecurityException. Раньше исключение молча проглатывалось внешним
+            // catch, и владелец был уверен, что данные стёрты.
+            Log.w(TAG, "Remote wipe failed", e)
+            sendSms(context, sender, context.getString(R.string.wipe_failed_sms))
         }
     }
 
     private fun takeStealthPhoto(context: Context, sender: String) {
-        // Запуск сервиса для фото с задней камеры
         val intent = Intent(context, StealthCameraService::class.java).apply {
             action = StealthCameraService.ACTION_TAKE_PHOTO
             putExtra(StealthCameraService.EXTRA_SENDER, sender)
         }
-        context.startForegroundService(intent)
+        try {
+            context.startForegroundService(intent)
+        } catch (e: Exception) {
+            // Android 12+: запуск foreground-сервиса из фона запрещён без исключения.
+            Log.w(TAG, "Cannot start stealth camera service", e)
+            sendSms(context, sender, context.getString(R.string.sms_reply_photo_failed))
+        }
     }
 
     private fun sendDeviceStatus(context: Context, sender: String) {
         val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        val simState = when (telephonyManager.simState) {
-            android.telephony.TelephonyManager.SIM_STATE_READY -> "SIM активна"
-            android.telephony.TelephonyManager.SIM_STATE_ABSENT -> "SIM отсутствует"
-            android.telephony.TelephonyManager.SIM_STATE_PIN_REQUIRED -> "PIN требуется"
-            else -> "Неизвестно"
+        // На Android 10+ simState может потребовать READ_PHONE_STATE.
+        val stateValue = runCatching { telephonyManager.simState }
+            .getOrDefault(TelephonyManager.SIM_STATE_UNKNOWN)
+        // Ответ уходит на телефон владельца — он тоже должен быть на языке устройства.
+        val simState = when (stateValue) {
+            TelephonyManager.SIM_STATE_READY -> context.getString(R.string.sim_state_ready)
+            TelephonyManager.SIM_STATE_ABSENT -> context.getString(R.string.sim_state_absent)
+            TelephonyManager.SIM_STATE_PIN_REQUIRED -> context.getString(R.string.sim_state_pin_required)
+            TelephonyManager.SIM_STATE_PUK_REQUIRED -> context.getString(R.string.sim_state_puk_required)
+            TelephonyManager.SIM_STATE_NETWORK_LOCKED -> context.getString(R.string.sim_state_network_locked)
+            else -> context.getString(R.string.sim_state_unknown)
         }
-        val statusMsg = "PhoneGuard: $simState. IMEI: ${telephonyManager.imei ?: "N/A"}."
+        val deviceId = runCatching {
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        }.getOrNull() ?: "N/A"
+        val battery = context.registerReceiver(
+            null,
+            android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        )?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+
+        val statusMsg = buildString {
+            append(context.getString(R.string.sms_status_line, simState, deviceId))
+            if (battery >= 0) append(context.getString(R.string.sms_status_battery, battery))
+        }
         sendSms(context, sender, statusMsg)
     }
 
-    private fun sendSms(context: Context, destination: String, text: String) {
-        try {
-            val smsManager = SmsManager.getDefault()
-            val parts = smsManager.divideMessage(text)
-            if (parts.size == 1) {
-                smsManager.sendTextMessage(destination, null, text, null, null)
-            } else {
-                smsManager.sendMultipartTextMessage(destination, null, parts, null, null)
+
+    /**
+     * Локальное уведомление о попытке управлять телефоном с неверным PIN.
+     *
+     * Ничего не отправляется наружу: владелец узнаёт о подборе только на самом
+     * устройстве (канал `sms_command_channel`, `IMPORTANCE_HIGH`).
+     */
+    private fun notifyRejectedCommand(context: Context) {
+        runCatching {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        ALERT_CHANNEL_ID,
+                        context.getString(R.string.sms_command_channel_name),
+                        NotificationManager.IMPORTANCE_HIGH
+                    )
+                )
             }
-        } catch (e: Exception) {
-            // SMS отправка может быть ограничена на Android 10+
-        }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+            val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_warning)
+                .setContentTitle(context.getString(R.string.sms_command_rejected_title))
+                .setContentText(context.getString(R.string.sms_command_rejected_text))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            manager.notify(ALERT_NOTIFICATION_ID, notification)
+        }.onFailure { Log.w(TAG, "Failed to show PIN attempt notification", it) }
+    }
+
+    private fun sendSms(context: Context, destination: String, text: String) {
+        // Раньше здесь была своя копия логики; теперь она одна — в [SmsSender],
+        // чтобы ответы на команды и тревоги уходили одинаково.
+        SmsSender.send(context, destination, text)
+    }
+
+    companion object {
+        private const val TAG = "SmsCommandReceiver"
+        private const val ALARM_DURATION_MS = 60_000L
+
+        /** Канал уведомлений о попытках подбора PIN по SMS. */
+        private const val ALERT_CHANNEL_ID = "sms_command_channel"
+        private const val ALERT_NOTIFICATION_ID = 8101
     }
 }

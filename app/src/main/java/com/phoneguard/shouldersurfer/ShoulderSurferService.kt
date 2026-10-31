@@ -1,18 +1,16 @@
 package com.phoneguard.shouldersurfer
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
 import android.os.Build
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -21,7 +19,6 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.phoneguard.R
-import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.util.BatteryOptimizationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -35,21 +32,22 @@ import javax.inject.Inject
 class ShoulderSurferService : LifecycleService() {
 
     @Inject
-    lateinit var preferencesManager: PreferencesManager
-
-    @Inject
     lateinit var batteryOptimizationHelper: BatteryOptimizationHelper
 
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var analysisJob: Job? = null
     private var lastDetectionTime = 0L
+    private var lastAlertTime = 0L
     private var adaptiveIntervalMs = 2000L
 
     private val faceDetector by lazy {
         FaceDetection.getClient(
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+                // Контуры не нужны (и заметно дороже): для «смотрит в экран» достаточно
+                // углов поворота головы и вероятности открытых глаз.
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
                 .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
                 .build()
         )
@@ -57,6 +55,9 @@ class ShoulderSurferService : LifecycleService() {
 
     companion object {
         private const val TAG = "ShoulderSurfer"
+        /** Минимальный интервал между предупреждениями «кто-то смотрит в экран». */
+        private const val MIN_ALERT_INTERVAL_MS = 30_000L
+
         private const val CHANNEL_ID = "shoulder_surfer_channel"
         private const val NOTIFICATION_ID = 1002
         private const val ALERT_CHANNEL_ID = "shoulder_surfer_alert_channel"
@@ -64,22 +65,41 @@ class ShoulderSurferService : LifecycleService() {
         const val ACTION_START = "com.phoneguard.shouldersurfer.START"
         const val ACTION_STOP = "com.phoneguard.shouldersurfer.STOP"
 
-        fun start(context: Context) {
+        /**
+         * Запускает детектор «подглядывающего».
+         *
+         * @return `false`, если система запретила запуск foreground-сервиса из фона
+         *         (Android 12+, `ForegroundServiceStartNotAllowedException`) или сервис
+         *         недоступен — вызывающая сторона не должна показывать «включено».
+         */
+        fun start(context: Context): Boolean {
             val intent = Intent(context, ShoulderSurferService::class.java).apply {
                 action = ACTION_START
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            return try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "Shoulder surfer service start rejected by system", e)
+                false
             }
         }
 
-        fun stop(context: Context) {
+        fun stop(context: Context): Boolean {
             val intent = Intent(context, ShoulderSurferService::class.java).apply {
                 action = ACTION_STOP
             }
-            context.startService(intent)
+            return try {
+                context.startService(intent)
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "Shoulder surfer service stop failed", e)
+                false
+            }
         }
     }
 
@@ -111,17 +131,17 @@ class ShoulderSurferService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Защита от подглядывания",
+                getString(R.string.shoulder_surfer_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Мониторинг окружения для обнаружения подглядывания"
+                description = getString(R.string.shoulder_surfer_channel_desc)
             }
             val alertChannel = NotificationChannel(
                 ALERT_CHANNEL_ID,
-                "Оповещения о подглядывании",
+                getString(R.string.shoulder_surfer_alert_channel_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Уведомления при обнаружении посторонних за экраном"
+                description = getString(R.string.shoulder_surfer_alert_channel_desc)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 250, 250, 250)
             }
@@ -139,8 +159,8 @@ class ShoulderSurferService : LifecycleService() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Защита от подглядывания активна")
-            .setContentText("Камера анализирует окружение...")
+            .setContentTitle(getString(R.string.shoulder_surfer_active_title))
+            .setContentText(getString(R.string.shoulder_surfer_active_text))
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -157,7 +177,6 @@ class ShoulderSurferService : LifecycleService() {
                     ProcessCameraProvider.getInstance(this@ShoulderSurferService).get()
                 }
 
-                val preview = Preview.Builder().build()
                 val imageAnalyzer = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .setTargetResolution(android.util.Size(320, 240))
@@ -171,7 +190,6 @@ class ShoulderSurferService : LifecycleService() {
                 cameraProvider.bindToLifecycle(
                     this@ShoulderSurferService,
                     cameraSelector,
-                    preview,
                     imageAnalyzer
                 )
 
@@ -256,9 +274,17 @@ class ShoulderSurferService : LifecycleService() {
     }
 
     private fun notifySurferDetected() {
+        // Раньше уведомление приходило на каждый кадр с лицом (раз в ~2 секунды) —
+        // телефон буквально «пищал» постоянно. Теперь не чаще раза в 30 секунд.
+        val now = System.currentTimeMillis()
+        if (now - lastAlertTime < MIN_ALERT_INTERVAL_MS) return
+        lastAlertTime = now
+
         val intent = packageManager.getLaunchIntentForPackage(packageName)
             ?: Intent(this, com.phoneguard.ui.MainActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        // CLEAR_TASK перезапускал приложение с потерей состояния; SINGLE_TOP просто
+        // поднимает уже открытый экран наверх.
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
 
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,

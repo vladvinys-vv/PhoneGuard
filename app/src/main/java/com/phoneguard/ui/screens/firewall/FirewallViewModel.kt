@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import androidx.lifecycle.ViewModel
@@ -19,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -53,6 +53,10 @@ class FirewallViewModel @Inject constructor(
 
     private val _stats = MutableStateFlow(FirewallStats())
     val stats: StateFlow<FirewallStats> = _stats.asStateFlow()
+
+    /** Идентификатор строки с причиной, по которой VPN не запущен. */
+    private val _vpnStartError = MutableStateFlow<Int?>(null)
+    val vpnStartError: StateFlow<Int?> = _vpnStartError.asStateFlow()
 
     private val logPageSize = 20
     private val logOffset = MutableStateFlow(0)
@@ -135,23 +139,64 @@ class FirewallViewModel @Inject constructor(
         }
     }
 
+    fun clearVpnStartError() {
+        _vpnStartError.value = null
+    }
+
     private fun launchVpnService() {
-        val intent = Intent(context, PhoneGuardVpnService::class.java).apply {
-            action = PhoneGuardVpnService.ACTION_CONNECT
+        viewModelScope.launch {
+            // Без приложений, которым нужна блокировка, VPN-туннель оборвал бы
+            // всю сеть. Сервис в этом случае просто завершается, поэтому
+            // предупреждаем пользователя заранее.
+            if (!hasBlockingRules()) {
+                _vpnStartError.value = com.phoneguard.R.string.firewall_no_blocked_apps
+                _isVpnActive.value = false
+                return@launch
+            }
+
+            _vpnStartError.value = null
+            val intent = Intent(context, PhoneGuardVpnService::class.java).apply {
+                action = PhoneGuardVpnService.ACTION_CONNECT
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+                _isVpnActive.value = true
+            } catch (e: Exception) {
+                // Background service start restrictions (Android 12+).
+                _isVpnActive.value = false
+            }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+    }
+
+    private suspend fun hasBlockingRules(): Boolean {
+        val rules = repository.allRules.first()
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val network = cm?.activeNetwork
+        val onWifi = cm?.getNetworkCapabilities(network)
+            ?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ?: false
+        return rules.any { rule ->
+            rule.blockAll ||
+                !rule.allowByDefault ||
+                (onWifi && rule.blockWifi) ||
+                (!onWifi && rule.blockMobile) ||
+                (rule.allowWifiOnly && !onWifi) ||
+                (rule.allowMobileOnly && onWifi)
         }
-        _isVpnActive.value = true
     }
 
     fun stopVpn() {
         val intent = Intent(context, PhoneGuardVpnService::class.java).apply {
             action = PhoneGuardVpnService.ACTION_DISCONNECT
         }
-        context.startService(intent)
+        try {
+            context.startService(intent)
+        } catch (e: Exception) {
+            // Сервис мог быть уже остановлен системой.
+        }
         _isVpnActive.value = false
     }
 }

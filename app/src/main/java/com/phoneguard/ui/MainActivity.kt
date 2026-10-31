@@ -1,26 +1,61 @@
 package com.phoneguard.ui
 
+import android.content.Context
+import android.content.res.Configuration
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.fragment.app.FragmentActivity
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.ui.navigation.PhoneGuardNavHost
 import com.phoneguard.ui.screens.onboarding.ConsentScreen
 import com.phoneguard.ui.screens.onboarding.OnboardingScreen
 import com.phoneguard.ui.theme.PhoneGuardTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
+/**
+ * Единственная Activity приложения.
+ *
+ * Наследуется от [FragmentActivity] (а не от `ComponentActivity`), потому что
+ * `BiometricPrompt` из androidx.biometric требует FragmentActivity — раньше
+ * хранилище пыталось привести Context к FragmentActivity и падало с
+ * ClassCastException на реальном устройстве. FragmentActivity — наследник
+ * ComponentActivity, поэтому `setContent` работает как раньше.
+ */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+
     @Inject
     lateinit var preferencesManager: PreferencesManager
+
+    /**
+     * Применяет выбранный в настройках язык до создания ресурсов Activity.
+     *
+     * Раньше переключатель языка вызывал `resources.updateConfiguration()` на
+     * уже работающей Activity: строки не обновлялись, а после перезапуска
+     * процесса выбор терялся. Теперь язык хранится в SharedPreferences-зеркале
+     * и применяется здесь — до `onCreate`.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        val language = PreferencesManager.readLanguage(newBase)
+        if (language.isNullOrBlank()) {
+            super.attachBaseContext(newBase)
+            return
+        }
+        val locale = Locale(language)
+        Locale.setDefault(locale)
+        val config = Configuration(newBase.resources.configuration).apply { setLocale(locale) }
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,27 +63,23 @@ class MainActivity : ComponentActivity() {
             val isDarkTheme by preferencesManager.isDarkTheme.collectAsState(initial = false)
             val isFirstLaunch by preferencesManager.isFirstLaunch.collectAsState(initial = true)
             val isConsentDone by preferencesManager.isConsentDone.collectAsState(initial = false)
+            val scope = rememberCoroutineScope()
+
             PhoneGuardTheme(darkTheme = isDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     when {
-                        isFirstLaunch -> {
-                            OnboardingScreen(onCompleted = {
-                                // State will update automatically via isFirstLaunch collectAsState
-                            })
-                        }
-                        !isConsentDone -> {
-                            ConsentScreen(
-                                onAccept = {
-                                    preferencesManager.setConsentDone()
-                                },
-                                onDecline = {
-                                    preferencesManager.setConsentDone()
-                                }
-                            )
-                        }
-                        else -> {
-                            PhoneGuardNavHost()
-                        }
+                        isFirstLaunch -> OnboardingScreen()
+                        !isConsentDone -> ConsentScreen(
+                            onAccept = {
+                                scope.launch { preferencesManager.setConsentDone() }
+                            },
+                            onDecline = {
+                                // Отказ от разрешений не блокирует приложение: функции,
+                                // требующие разрешений, останутся выключенными.
+                                scope.launch { preferencesManager.setConsentDone() }
+                            }
+                        )
+                        else -> PhoneGuardNavHost()
                     }
                 }
             }

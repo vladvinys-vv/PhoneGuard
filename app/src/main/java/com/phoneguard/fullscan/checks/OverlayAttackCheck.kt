@@ -1,8 +1,11 @@
 package com.phoneguard.fullscan.checks
 
+import android.app.AppOpsManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import com.phoneguard.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,6 +15,13 @@ import javax.inject.Singleton
  *
  * Malware использует SYSTEM_ALERT_WINDOW для наложения невидимых окон
  * поверх легитимных приложений, перехватывая клики пользователя.
+ *
+ * Исправление: раньше проверка вообще не смотрела на разрешение оверлея — она
+ * перебирала все установленные приложения и искала слова вроде `overlay`/`bubble` в
+ * имени пакета. В отчёт попадали безобидные лаунчеры «Bubble Browser» без права
+ * рисовать поверх других окон, а настоящее вредоносное ПО с нейтральным именем —
+ * нет. Теперь кандидат обязан реально иметь `SYSTEM_ALERT_WINDOW` (проверяется
+ * через `AppOpsManager`), и уже среди таких приложений ищутся подозрительные имена.
  */
 @Singleton
 class OverlayAttackCheck @Inject constructor(
@@ -28,13 +38,6 @@ class OverlayAttackCheck @Inject constructor(
         val riskReason: String
     )
 
-    // Приложения, которые могут использовать оверлеи для атак
-    private val suspiciousOverlayPatterns = listOf(
-        "screen.filter", "bluelight", "dimmer", "night.filter",
-        "screen.dim", "overlay", "floating", "bubble",
-        "chat.head", "pop-up"
-    )
-
     fun performCheck(): OverlayResult {
         val pm = context.packageManager
         val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -44,28 +47,70 @@ class OverlayAttackCheck @Inject constructor(
             pm.getInstalledApplications(0)
         }
 
-        val suspicious = installedApps.filter { appInfo ->
-            val pkg = appInfo.packageName
-            val appName = pm.getApplicationLabel(appInfo).toString()
+        val suspicious = installedApps
+            .asSequence()
+            .filterNot { it.isSystemApp() }
+            .mapNotNull { appInfo ->
+                // Сначала дешёвое сравнение по имени, затем системный вызов AppOps.
+                val appName = pm.getApplicationLabel(appInfo).toString()
+                val matchedPattern = matchingPattern(appInfo.packageName, appName)
+                    ?: return@mapNotNull null
+                if (!hasOverlayPermission(appInfo)) return@mapNotNull null
 
-            // Проверка: системное ли приложение
-            val isSystemApp = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 ||
-                              (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-
-            // Suspicious если: не системное + подозрительное имя
-            !isSystemApp && suspiciousOverlayPatterns.any { pattern ->
-                pkg.contains(pattern, ignoreCase = true) ||
-                appName.contains(pattern, ignoreCase = true)
+                SuspiciousOverlayApp(
+                    packageName = appInfo.packageName,
+                    appName = appName,
+                    riskReason = context.getString(R.string.overlay_reason, matchedPattern)
+                )
             }
-        }.map { appInfo ->
-            val pkg = appInfo.packageName
-            val appName = pm.getApplicationLabel(appInfo).toString()
-            SuspiciousOverlayApp(pkg, appName, "Возможное использование overlay для tapjacking")
-        }
+            .distinctBy { it.packageName }
+            .toList()
 
-        return OverlayResult(
-            suspicious,
-            suspicious.isNotEmpty()
+        return OverlayResult(suspicious, suspicious.isNotEmpty())
+    }
+
+    private fun ApplicationInfo.isSystemApp(): Boolean =
+        (flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
+            (flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+
+    /** Разрешено ли приложению рисовать поверх других окон (SYSTEM_ALERT_WINDOW). */
+    private fun hasOverlayPermission(appInfo: ApplicationInfo): Boolean {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
+            ?: return false
+        val mode = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOps.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    appInfo.uid,
+                    appInfo.packageName
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                appOps.checkOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    appInfo.uid,
+                    appInfo.packageName
+                )
+            }
+        } catch (_: Exception) {
+            return false
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    internal companion object {
+        // Приложения, которые могут использовать оверлеи для атак
+        private val SUSPICIOUS_OVERLAY_PATTERNS = listOf(
+            "screen.filter", "bluelight", "dimmer", "night.filter",
+            "screen.dim", "overlay", "floating", "bubble",
+            "chat.head", "pop-up"
         )
+
+        /** Первый совпавший признак имени пакета/приложения (видимость для тестов). */
+        fun matchingPattern(packageName: String, appLabel: String): String? =
+            SUSPICIOUS_OVERLAY_PATTERNS.firstOrNull { pattern ->
+                packageName.contains(pattern, ignoreCase = true) ||
+                    appLabel.contains(pattern, ignoreCase = true)
+            }
     }
 }

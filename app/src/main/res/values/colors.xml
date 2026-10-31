@@ -30,4 +30,8 @@
     <color name="score_poor">#FFFF9800</color>
     <color name="score_critical">#FFF44336</color>
     
+    <!-- Окно до отрисовки Compose (согласовано со светлой темой) -->
+    <color name="window_background">#FFF7F9FC</color>
+    <color name="window_background_dark">#FF101418</color>
+    <color name="transparent">#00000000</color>
 </resources>

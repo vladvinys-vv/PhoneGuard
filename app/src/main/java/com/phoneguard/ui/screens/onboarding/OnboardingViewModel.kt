@@ -18,9 +18,15 @@ class OnboardingViewModel @Inject constructor(
     private val _isCompleted = MutableStateFlow(false)
     val isCompleted: StateFlow<Boolean> = _isCompleted.asStateFlow()
 
+    /**
+     * Завершает онбординг.
+     *
+     * Флаг выставляется даже если запись в DataStore упала: иначе при ошибке ввода-вывода
+     * пользователь навсегда оставался на экране приветствия.
+     */
     fun completeOnboarding() {
         viewModelScope.launch {
-            preferencesManager.setFirstLaunchDone()
+            runCatching { preferencesManager.setFirstLaunchDone() }
             _isCompleted.value = true
         }
     }

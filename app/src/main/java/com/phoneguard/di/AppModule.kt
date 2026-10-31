@@ -2,6 +2,7 @@ package com.phoneguard.di
 
 import android.content.Context
 import com.phoneguard.data.local.SimSwapEventDao
+import com.phoneguard.data.repository.SimSwapRepository
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.simswap.SimSwapDetector
 import androidx.work.WorkManager
@@ -38,12 +39,12 @@ object AppModule {
     @Singleton
     fun provideSimSwapDetector(
         @ApplicationContext context: Context,
-        dao: SimSwapEventDao,
+        simSwapRepository: SimSwapRepository,
         preferencesManager: PreferencesManager,
         securityService: com.phoneguard.antitheft.SecurityService
     ): SimSwapDetector = SimSwapDetector(
         context,
-        dao,
+        simSwapRepository,
         preferencesManager,
         securityService,
         CoroutineScope(SupervisorJob() + Dispatchers.IO)

@@ -15,13 +15,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Battery3
+import androidx.compose.material.icons.filled.Brightness3
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.PhonelinkSetup
 import androidx.compose.material.icons.filled.Policy
-import androidx.compose.material.icons.filled.Brightness3
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Battery3
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,16 +34,19 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,14 +54,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.phoneguard.BuildConfig
 import com.phoneguard.R
-import com.phoneguard.data.preferences.PreferencesManager
-import java.util.Locale
+import com.phoneguard.util.IntentUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    /** Переход на чек всего телефона; `null` — экран открыт отдельно, ссылку не рисуем. */
+    onNavigateToPhoneCheck: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -71,6 +79,16 @@ fun SettingsScreen(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Чек всего телефона
+            if (onNavigateToPhoneCheck != null) {
+                SettingsLinkCard(
+                    title = stringResource(R.string.phone_check_run),
+                    description = stringResource(R.string.phone_check_card_desc),
+                    icon = Icons.Default.PhonelinkSetup,
+                    onClick = onNavigateToPhoneCheck
+                )
+            }
+
             // Language Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -112,7 +130,7 @@ fun SettingsScreen(
                         checked = isDarkTheme,
                         onCheckedChange = { checked ->
                             settingsViewModel.setDarkTheme(checked)
-                            (context as? android.app.Activity)?.recreate()
+                            context.findActivity()?.recreate()
                         }
                     )
                 }
@@ -150,6 +168,47 @@ fun SettingsScreen(
                 }
             }
 
+            // Threat intelligence (opt-in, сеть)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Search, contentDescription = stringResource(R.string.threat_intel_title))
+                            Text(
+                                text = stringResource(R.string.threat_intel_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        val isThreatIntelEnabled by settingsViewModel.isThreatIntelEnabled.collectAsState()
+                        Switch(
+                            checked = isThreatIntelEnabled,
+                            onCheckedChange = { checked -> settingsViewModel.setThreatIntelEnabled(checked) }
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.threat_intel_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = stringResource(R.string.threat_intel_opt_in_note),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             // Intrusion response toggles
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -159,7 +218,9 @@ fun SettingsScreen(
                     Text(text = stringResource(R.string.intrusion_auto_response), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(text = stringResource(R.string.intrusion_auto_response_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val auto by settingsViewModel.isAutoIntrusionResponseEnabled.collectAsState()
-                    IntrusionToggleRow("Автоответ", auto) { settingsViewModel.setAutoIntrusionResponse(it) }
+                    IntrusionToggleRow(stringResource(R.string.intrusion_auto_response_short), auto) {
+                        settingsViewModel.setAutoIntrusionResponse(it)
+                    }
                     val alarm by settingsViewModel.isIntrusionAlarmEnabled.collectAsState()
                     IntrusionToggleRow(stringResource(R.string.intrusion_alarm), alarm) { settingsViewModel.setIntrusionAlarm(it) }
                     val photo by settingsViewModel.isIntrusionPhotoEnabled.collectAsState()
@@ -180,7 +241,7 @@ fun SettingsScreen(
                 icon = Icons.Default.Policy,
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://phoneguard.app/privacy"))
-                    context.startActivity(intent)
+                    IntentUtils.open(context, intent)
                 }
             )
 
@@ -191,7 +252,7 @@ fun SettingsScreen(
                 icon = Icons.Default.Info,
                 onClick = {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://phoneguard.app/terms"))
-                    context.startActivity(intent)
+                    IntentUtils.open(context, intent)
                 }
             )
 
@@ -199,7 +260,12 @@ fun SettingsScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(text = stringResource(R.string.about), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(text = "PhoneGuard v1.0.0", style = MaterialTheme.typography.bodyMedium)
+                    // Версия берётся из сборки: раньше здесь была строка «v1.0.0»,
+                    // которая расходилась с реальной версией в манифесте.
+                    Text(
+                        text = "PhoneGuard v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                     Text(text = stringResource(R.string.about_description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(text = stringResource(R.string.version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -208,8 +274,36 @@ fun SettingsScreen(
 
             // Export Logs
             val exportResult by settingsViewModel.exportResult.collectAsState()
-            exportResult?.let { message ->
-                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            val dataCleared by settingsViewModel.dataCleared.collectAsState()
+            LaunchedEffect(dataCleared) {
+                if (dataCleared) {
+                    Toast.makeText(context, R.string.data_deleted, Toast.LENGTH_SHORT).show()
+                    settingsViewModel.consumeDataCleared()
+                }
+            }
+            val dataClearFailed by settingsViewModel.dataClearFailed.collectAsState()
+            LaunchedEffect(dataClearFailed) {
+                if (dataClearFailed) {
+                    Toast.makeText(context, R.string.error_generic, Toast.LENGTH_LONG).show()
+                    settingsViewModel.consumeDataClearFailed()
+                }
+            }
+            LaunchedEffect(exportResult) {
+                when (val result = exportResult) {
+                    is ExportResult.Success -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.export_logs_saved, result.path),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        settingsViewModel.consumeExportResult()
+                    }
+                    ExportResult.Failure -> {
+                        Toast.makeText(context, R.string.export_logs_failed, Toast.LENGTH_LONG).show()
+                        settingsViewModel.consumeExportResult()
+                    }
+                    null -> Unit
+                }
             }
             Button(
                 onClick = {
@@ -258,7 +352,7 @@ fun SettingsScreen(
                     val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                         data = Uri.parse("package:${context.packageName}")
                     }
-                    context.startActivity(intent)
+                    IntentUtils.open(context, intent)
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -313,8 +407,14 @@ private fun SettingsLinkCard(
 @Composable
 private fun LanguageSelector(settingsViewModel: SettingsViewModel) {
     val context = LocalContext.current
-    val languages = listOf("Русский" to "ru", "English" to "en")
-    var selectedLanguage by remember { mutableStateOf("Русский") }
+    // Названия языков — самоназвания (не переводятся: пользователь должен узнать
+    // свой язык в списке, даже если интерфейс на незнакомом ему языке).
+    val languages = listOf("Русский" to "ru", "English" to "en", "Deutsch" to "de")
+    // Язык берётся из настроек, а не из константы: раньше после перезапуска
+    // селектор всегда показывал «Русский», даже если выбран English.
+    val currentLanguage by settingsViewModel.language.collectAsState()
+    val selectedLanguage = languages.firstOrNull { it.second == currentLanguage }?.first
+        ?: languages.first().first
     var expanded by remember { mutableStateOf(false) }
 
     ExposedDropdownMenuBox(
@@ -337,10 +437,11 @@ private fun LanguageSelector(settingsViewModel: SettingsViewModel) {
                 DropdownMenuItem(
                     text = { Text(name) },
                     onClick = {
-                        selectedLanguage = name
                         expanded = false
                         settingsViewModel.setLanguage(code)
-                        setLocale(code, context)
+                        // Пересоздаём Activity, чтобы строки применились:
+                        // attachBaseContext прочитает язык из зеркала.
+                        context.findActivity()?.recreate()
                     }
                 )
             }
@@ -348,10 +449,11 @@ private fun LanguageSelector(settingsViewModel: SettingsViewModel) {
     }
 }
 
-private fun setLocale(language: String, context: Context) {
-    val locale = Locale(language)
-    Locale.setDefault(locale)
-    val config = Configuration(context.resources.configuration)
-    config.setLocale(locale)
-    context.resources.updateConfiguration(config, context.resources.displayMetrics)
+
+
+/** Разворачивает обёртки Context, чтобы добраться до Activity для `recreate()`. */
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

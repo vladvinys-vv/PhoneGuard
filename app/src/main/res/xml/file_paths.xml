@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Наружу открыт только каталог расшифрованного предпросмотра сейфа
+    (`cacheDir/vault_preview`, см. `EncryptionManager.PREVIEW_DIR_NAME`).
+    Весь `cacheDir` и `filesDir` (где лежат зашифрованные файлы) наружу не отдаются.
+-->
+<paths>
+    <cache-path name="vault_preview" path="vault_preview/" />
+</paths>

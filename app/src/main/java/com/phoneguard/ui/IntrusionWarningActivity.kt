@@ -12,6 +12,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.phoneguard.util.IntentUtils
 
 @AndroidEntryPoint
 class IntrusionWarningActivity : Activity() {
@@ -64,7 +65,8 @@ class IntrusionWarningActivity : Activity() {
                 putExtra(EXTRA_MESSAGE, message)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
-            context.startActivity(intent)
+            // Явный интент, но активити может быть отключена политикой устройства.
+            IntentUtils.open(context, intent)
         }
     }
 }

@@ -36,6 +36,4 @@ class VaultRepository @Inject constructor(
     suspend fun decryptFileFromVault(item: VaultItem): File? = withContext(Dispatchers.IO) {
         encryptionManager.decryptFileFromVault(item)
     }
-
-    fun decryptItem(item: VaultItem): File? = encryptionManager.decryptFileFromVault(item)
 }

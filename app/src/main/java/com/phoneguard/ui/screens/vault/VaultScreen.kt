@@ -10,7 +10,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,12 +24,15 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.VaultItem
 import com.phoneguard.model.VaultItemCategory
+import com.phoneguard.util.IntentUtils
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -37,6 +44,9 @@ fun VaultScreen(
     val isUnlocked by viewModel.isUnlocked.collectAsState()
     val items by viewModel.allItems.collectAsState()
     val importError by viewModel.importError.collectAsState()
+    val authError by viewModel.authError.collectAsState()
+    val previewError by viewModel.previewError.collectAsState()
+    val previewIntent by viewModel.previewIntent.collectAsState()
     val context = LocalContext.current
     val view = LocalView.current
 
@@ -52,6 +62,13 @@ fun VaultScreen(
         }
     }
 
+    LaunchedEffect(previewIntent) {
+        previewIntent?.let { intent ->
+            IntentUtils.open(context, intent, R.string.vault_preview_failed)
+            viewModel.consumePreview()
+        }
+    }
+
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -60,16 +77,21 @@ fun VaultScreen(
         }
     }
 
+    // Автоблокировка: раньше сейф оставался разблокированным, если приложение
+    // уходило в фон с открытым экраном сейфа (переключение задач, блокировка экрана).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) viewModel.lock()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Scaffold(
-        scaffoldState = scaffoldState,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.secure_vault)) },
-                actions = {
-                    IconButton(onClick = { /* Room flows are reactive */ }, contentDescription = stringResource(R.string.scan_now)) {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
-                    }
-                }
+                title = { Text(stringResource(R.string.secure_vault)) }
             )
         },
         floatingActionButton = {
@@ -103,7 +125,10 @@ fun VaultScreen(
                             if (context is FragmentActivity) {
                                 viewModel.authenticateUser(
                                     activity = context,
-                                    executor = ContextCompat.getMainExecutor(context)
+                                    executor = ContextCompat.getMainExecutor(context),
+                                    promptTitle = context.getString(R.string.vault_unlock),
+                                    promptSubtitle = context.getString(R.string.vault_unlock_subtitle),
+                                    promptNegative = context.getString(R.string.cancel)
                                 )
                             }
                         }
@@ -113,9 +138,23 @@ fun VaultScreen(
                 }
             }
         } else {
+            authError?.let { error ->
+                Text(
+                    text = vaultErrorMessage(error),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
             importError?.let { error ->
                 Text(
-                    text = error,
+                    text = vaultErrorMessage(error),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            previewError?.let { error ->
+                Text(
+                    text = vaultErrorMessage(error),
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(16.dp)
                 )
@@ -127,7 +166,7 @@ fun VaultScreen(
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Хранилище пусто")
+                    Text(stringResource(R.string.vault_empty))
                 }
             } else {
                 LazyColumn(
@@ -154,19 +193,19 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Удалить файл?") },
-            text = { Text("Это действие нельзя отменить.") },
+            title = { Text(stringResource(R.string.delete_file_title)) },
+            text = { Text(stringResource(R.string.delete_irreversible)) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(item)
                     showDeleteDialog = false
                 }) {
-                    Text("Удалить")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Отмена")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -197,15 +236,33 @@ fun VaultItemCard(item: VaultItem, onDelete: (VaultItem) -> Unit) {
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (item.category == VaultItemCategory.IMAGE) {
-                    IconButton(onClick = { /* preview placeholder */ }, contentDescription = stringResource(R.string.preview)) {
-                        Icon(Icons.Default.Visibility, contentDescription = null)
-                    }
+                IconButton(
+                    onClick = {
+                        viewModel.clearPreviewError()
+                        viewModel.previewItem(item)
+                    },
+                    contentDescription = stringResource(R.string.preview)
+                ) {
+                    Icon(Icons.Default.Visibility, contentDescription = null)
                 }
-                IconButton(onClick = { showDeleteDialog = true }, contentDescription = "Удалить") {
+                IconButton(onClick = { showDeleteDialog = true }, contentDescription = stringResource(R.string.delete)) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                 }
             }
         }
     )
+}
+
+/** Текст ошибки хранилища — локализуется на уровне UI. */
+@Composable
+private fun vaultErrorMessage(error: VaultError): String = when (error) {
+    VaultError.AuthenticationFailed -> stringResource(R.string.vault_auth_failed)
+    VaultError.BiometricUnavailable -> stringResource(R.string.vault_biometric_unavailable)
+    VaultError.AuthenticationNotPossible -> stringResource(R.string.vault_auth_not_possible)
+    VaultError.FileTooLarge ->
+        stringResource(R.string.vault_file_too_large, VaultViewModel.MAX_FILE_SIZE_MB.toInt())
+    is VaultError.PlatformFailure -> error.text.orEmpty()
+    is VaultError.ImportFailure ->
+        stringResource(R.string.vault_import_failed, error.text ?: stringResource(R.string.error_generic))
+    VaultError.PreviewFailure -> stringResource(R.string.vault_preview_failed)
 }

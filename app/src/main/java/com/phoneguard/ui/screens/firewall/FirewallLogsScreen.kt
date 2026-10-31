@@ -17,7 +17,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.FirewallLog
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +66,7 @@ fun FirewallLogsScreen(
                     .padding(padding)
                     .padding(horizontal = 8.dp)
             ) {
-                items(logs) { log ->
+                items(logs, key = { log -> log.id }) { log ->
                     FirewallLogItem(log, sdf)
                     HorizontalDivider()
                 }
@@ -73,6 +74,9 @@ fun FirewallLogsScreen(
         }
     }
 }
+
+/** Длина имени приложения в строке журнала (остальное уводит разметку). */
+private const val MAX_APP_NAME_LENGTH = 40
 
 @Composable
 fun FirewallLogItem(log: FirewallLog, sdf: SimpleDateFormat) {
@@ -92,19 +96,15 @@ fun FirewallLogItem(log: FirewallLog, sdf: SimpleDateFormat) {
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    log.appName.takeLast(40),
+                    // takeLast обрезал начало имени («com.example.foo» → хвост),
+                    // а смысл в первых символах — поэтому берём префикс.
+                    log.appName.take(MAX_APP_NAME_LENGTH),
                     fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Badge {
-                    Text(
-                        when (log.connectionType) {
-                            FirewallLog.ConnectionType.WIFI -> stringResource(R.string.connection_type_wifi)
-                            FirewallLog.ConnectionType.MOBILE -> stringResource(R.string.connection_type_mobile)
-                            else -> stringResource(R.string.connection_type_unknown)
-                        }
-                    )
+                    Text(connectionTypeLabel(log.connectionType))
                 }
             }
             Text(

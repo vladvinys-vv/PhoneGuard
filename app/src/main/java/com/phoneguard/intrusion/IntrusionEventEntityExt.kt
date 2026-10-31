@@ -18,3 +18,17 @@ fun IntrusionEventEntity.toIntrusionEvent(): IntrusionEvent =
         photoPath = photoPath,
         handled = handled
     )
+
+fun IntrusionEvent.toEntity(): IntrusionEventEntity =
+    IntrusionEventEntity(
+        id = id,
+        timestamp = timestamp,
+        type = type,
+        severity = severity,
+        evidence = evidence.entries.joinToString(";") { "${it.key}=${it.value}" },
+        uid = uid,
+        packageName = packageName,
+        ipAddress = ipAddress,
+        photoPath = photoPath,
+        handled = handled
+    )

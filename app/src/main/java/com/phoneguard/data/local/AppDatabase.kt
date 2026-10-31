@@ -1,6 +1,7 @@
 package com.phoneguard.data.local
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -45,6 +46,28 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun intrusionEventDao(): IntrusionEventDao
 
     companion object {
+        /** Целевая версия схемы (должна совпадать с `version` в `@Database`). */
+        const val LATEST_VERSION = 8
+
+        /**
+         * Все миграции по порядку.
+         *
+         * Единый список: и `AppDatabaseProvider`, и тест конфигурации берут его
+         * отсюда, поэтому «забыли добавить новую миграцию в провайдер» больше
+         * не проходит незамеченным (раньше список дублировался руками).
+         */
+        val ALL_MIGRATIONS: Array<Migration> by lazy {
+            arrayOf(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7,
+                MIGRATION_7_8
+            )
+        }
+
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
@@ -192,6 +215,8 @@ abstract class AppDatabase : RoomDatabase() {
     }
 }
 
+private const val TAG = "AppDatabase"
+
 @Singleton
 class AppDatabaseProvider @Inject constructor(
     @ApplicationContext context: Context,
@@ -200,19 +225,20 @@ class AppDatabaseProvider @Inject constructor(
     val database: AppDatabase = Room.databaseBuilder(
         context,
         AppDatabase::class.java,
-        "phoneguard_db"
+        DatabaseKeyManager.DATABASE_NAME
     )
-        .addMigrations(
-            AppDatabase.MIGRATION_1_2,
-            AppDatabase.MIGRATION_2_3,
-            AppDatabase.MIGRATION_3_4,
-            AppDatabase.MIGRATION_4_5,
-            AppDatabase.MIGRATION_5_6,
-            AppDatabase.MIGRATION_6_7,
-            AppDatabase.MIGRATION_7_8
-        )
+        .addMigrations(*AppDatabase.ALL_MIGRATIONS)
         .openHelperFactory { config ->
-            SupportFactory(databaseKeyManager.getDatabasePassphrase()).create(config)
+            val passphrase = try {
+                databaseKeyManager.getDatabasePassphrase()
+            } catch (e: DatabaseKeyManager.DatabaseKeyException) {
+                // Ключ AndroidKeyStore утерян (восстановление бэкапа на другом
+                // устройстве, сброс keystore) — иначе приложение не запускалось бы
+                // вообще и у пользователя не было бы даже экрана с объяснением.
+                Log.w(TAG, "Ключ БД недоступен — пересоздаём локальную базу", e)
+                databaseKeyManager.resetWithNewPassphrase()
+            }
+            SupportFactory(passphrase).create(config)
         }
         .build()
 }
