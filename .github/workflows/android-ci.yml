@@ -56,8 +56,10 @@ jobs:
         run: python3 tools/kotlin_frontend_check.py
 
       # aapt2 (из build-tools) проверяет ресурсы и манифест — то же, что processDebugResources.
+      # Платформа android-35 ставится шагом setup-android выше, поэтому здесь строгий режим:
+      # если android.jar окажется старее compileSdk, это ошибка, а не тихий пропуск link.
       - name: Resources and manifest (aapt2)
-        run: python3 tools/aapt2_check.py
+        run: python3 tools/aapt2_check.py --require-compile-sdk
 
   lint:
     name: Lint

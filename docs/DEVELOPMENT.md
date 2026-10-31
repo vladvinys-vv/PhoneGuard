@@ -181,6 +181,20 @@ python3 tools/aapt2_check.py --compile-only
 PyPI-пакет `aapt2` даёт версию 2.19 — `compile` с ним работает, но `link` не читает
 `resources.arsc` современного `android.jar`, поэтому нужен 2.20+ (npm `aaptjs3` или build-tools).
 
+**`android.jar` выбирается по `compileSdk`, а не по имени папки.** Платформы сортируются
+численно: при лексикографической сортировке `platforms/android-9` оказывается «новее»
+`android-35`, и манифест проверяется против древнего API — aapt2 выдаёт ложную ошибку вида
+`'specialUse' is incompatible with attribute foregroundServiceType` (атрибут появился только
+в API 34, а `compileSdk` = 35). Приоритет: точное совпадение с `compileSdk`, затем ближайший
+больший, затем самый новый доступный `android.jar`. Если jar всё же старее `compileSdk`, `link`
+пропускается с пояснением (ресурсы при этом проверяются), а `--require-compile-sdk` превращает
+это в ошибку — флаг для CI, где нужная платформа ставится явно:
+
+```bash
+sdkmanager "platforms;android-35" "build-tools;35.0.0"
+python3 tools/aapt2_check.py --require-compile-sdk
+```
+
 ### `tools/kotlin_analysis.py` (опционально)
 
 Разбор настоящим парсером (tree-sitter): синтаксис всех `.kt` и вызовы `suspend`-функций вне

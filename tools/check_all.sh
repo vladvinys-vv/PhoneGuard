@@ -35,6 +35,8 @@ step "aapt2_check.py (опционально)"
 # Ресурсы и манифест так, как их проверяет Gradle. Нужен aapt2 ≥ 2.20 и android.jar:
 # см. docstring tools/aapt2_check.py (npm pack aaptjs3 / Android SDK build-tools).
 if command -v aapt2 >/dev/null 2>&1 || [ -n "${AAPT2:-}" ] || [ -n "${ANDROID_HOME:-}" ] || [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+    # Регресс-тест выбора android.jar: android-9 не должен считаться новее android-35.
+    python3 tools/aapt2_check.py --self-test || failed=1
     python3 tools/aapt2_check.py || failed=1
 else
     echo "skip: aapt2 не найден (Android SDK build-tools или npm-пакет aaptjs3)"

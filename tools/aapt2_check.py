@@ -76,24 +76,96 @@ def find_aapt2(explicit: str | None) -> str | None:
     return None
 
 
-def find_android_jar(explicit: str | None) -> str | None:
+API_DIR_RE = re.compile(r"android-(\d+)")
+
+
+def read_compile_sdk() -> int | None:
+    """`compileSdk 35` из `app/build.gradle` — эталон версии `android.jar` для link."""
+    try:
+        text = (ROOT / "app/build.gradle").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r"\bcompileSdk(?:Version)?\s*=?\s*(\d+)", text)
+    return int(match.group(1)) if match else None
+
+
+def jar_api_level(jar: str | Path) -> int | None:
+    """Уровень API по пути `.../android-35/android.jar` (иначе None — версия неизвестна)."""
+    match = API_DIR_RE.search(str(jar))
+    return int(match.group(1)) if match else None
+
+
+def _platform_jars(roots: list[Path]) -> list[tuple[int, Path]]:
+    """Все `platforms/android-NN/android.jar` с ЧИСЛОВОЙ сортировкой по API.
+
+    Лексикографическая сортировка путей опасна: `android-9` оказывается «новее»
+    `android-35`, и тогда манифест проверяется против древнего android.jar — именно
+    из-за этого Codemagic получал ложную ошибку про `specialUse`.
+    """
+    found: list[tuple[int, Path]] = []
+    for root in roots:
+        for candidate in (root / "platforms").glob("android-*/android.jar"):
+            level = jar_api_level(candidate)
+            if level is not None and candidate.is_file():
+                found.append((level, candidate))
+    return sorted(found, key=lambda item: item[0])
+
+
+def find_android_jar(explicit: str | None, prefer: int | None = None) -> str | None:
     if explicit:
         return explicit if Path(explicit).is_file() else None
     env = os.environ.get("ANDROID_JAR")
     if env and Path(env).is_file():
         return env
-    for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
-        root = os.environ.get(var)
-        if not root:
-            continue
-        for candidate in sorted((Path(root) / "platforms").glob("android-*/android.jar"), reverse=True):
-            if candidate.is_file():
-                return str(candidate)
+
+    roots = [
+        Path(value)
+        for value in (os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT"))
+        if value
+    ]
     cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-    for candidate in sorted((cache / "phoneguard/android-jar").glob("android-*/android.jar"), reverse=True):
-        if candidate.is_file():
-            return str(candidate)
-    return None
+    roots.append(cache / "phoneguard/android-jar")
+
+    jars = _platform_jars(roots)
+    if not jars:
+        return None
+    # 1) точное совпадение с compileSdk, 2) ближайший больший, 3) самый новый доступный
+    for level, path in jars:
+        if prefer is not None and level == prefer:
+            return str(path)
+    if prefer is not None:
+        newer = [item for item in jars if item[0] >= prefer]
+        if newer:
+            return str(newer[0][1])
+    return str(jars[-1][1])
+
+
+def self_test() -> int:
+    """Регресс-тест выбора `android.jar`: `android-9` не должен побеждать `android-35`."""
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        sdk = Path(tmp_dir) / "sdk"
+        for level in (9, 35):
+            target = sdk / "platforms" / f"android-{level}" / "android.jar"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"")
+        jars = [level for level, _ in _platform_jars([sdk])]
+        if jars != [9, 35]:
+            problems.append(f"числовая сортировка платформ сломалась: {jars}")
+        best = _platform_jars([sdk])[-1][1]
+        if jar_api_level(best) != 35:
+            problems.append(f"выбран android.jar уровня {jar_api_level(best)}, ожидался 35")
+        old = sdk / "platforms" / "android-9" / "android.jar"
+        if jar_api_level(old) != 9:
+            problems.append("уровень API определяется по пути неверно")
+
+    for problem in problems:
+        print(f"error: {problem}")
+    if problems:
+        print("\naapt2_check --self-test: провален")
+        return 1
+    print("aapt2_check --self-test: ok (android-9 не считается новее android-35)")
+    return 0
 
 
 def prepare_manifest(target: Path) -> None:
@@ -148,7 +220,16 @@ def main() -> int:
     parser.add_argument("--aapt2", default=None, help="путь к aapt2 (иначе $AAPT2/PATH/SDK)")
     parser.add_argument("--android-jar", default=None, help="android.jar для link")
     parser.add_argument("--compile-only", action="store_true", help="не линковать манифест")
+    parser.add_argument("--self-test", action="store_true", help="проверить выбор android.jar")
+    parser.add_argument(
+        "--require-compile-sdk",
+        action="store_true",
+        help="падать, если android.jar старее compileSdk (для CI, где SDK ставится явно)",
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
 
     aapt2 = find_aapt2(args.aapt2)
     if aapt2 is None:
@@ -173,12 +254,30 @@ def main() -> int:
             print("aapt2_check: ресурсы компилируются")
             return 0
 
-        android_jar = find_android_jar(args.android_jar)
+        compile_sdk = read_compile_sdk()
+        android_jar = find_android_jar(args.android_jar, compile_sdk)
         if android_jar is None:
             print(
                 "aapt2_check: ресурсы компилируются, link пропущен — нет android.jar "
                 "(см. tools/fetch_android_jar.sh)"
             )
+            return 0
+
+        # Проверять манифест против android.jar старее compileSdk бессмысленно: aapt2
+        # отвергает атрибуты, которых в этом API ещё нет (`specialUse` появился в 34).
+        # Gradle линкует настоящий compileSdk, поэтому это предупреждение, а не ошибка.
+        jar_level = jar_api_level(android_jar)
+        if compile_sdk is not None and jar_level is not None and jar_level < compile_sdk:
+            message = (
+                f"aapt2_check: android.jar API {jar_level} < compileSdk {compile_sdk} "
+                f"({android_jar}) — манифест не линкуется, чтобы не ловить ложные ошибки "
+                f"(`specialUse` и другие атрибуты появились позже); "
+                f"ресурсы проверены, полную проверку манифеста делает Gradle"
+            )
+            if args.require_compile_sdk:
+                print(f"error: {message}")
+                return 1
+            print(message)
             return 0
 
         manifest = tmp / "AndroidManifest.xml"

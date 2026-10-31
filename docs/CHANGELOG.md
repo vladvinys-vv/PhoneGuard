@@ -194,6 +194,15 @@
   инициализации; `crashHandler.install()` больше не вызывается после StrictMode.
 
 ### Fixed
+- **Ложное падение `aapt2_check` в Codemagic: `'specialUse' is incompatible with attribute
+  foregroundServiceType`.** Причина — не манифест, а выбор `android.jar`: платформы
+  сортировались лексикографически, поэтому `platforms/android-9` считался «новее»
+  `android-35`, и манифест линковался против API ≤ 33, где `specialUse` (API 34) ещё нет.
+  Теперь платформы сортируются численно, приоритет — точное совпадение с `compileSdk`
+  (из `app/build.gradle`), затем ближайший больший, затем самый новый jar. Если jar всё же
+  старее `compileSdk`, `link` пропускается с пояснением (ресурсы проверены), а новый флаг
+  `--require-compile-sdk` делает это ошибкой — он включён в GitHub Actions, где `android-35`
+  ставится явно; в `codemagic.yaml` добавлен шаг `sdkmanager "platforms;android-35"`.
 - **`.pyc` больше не в репозитории.** `tools/__pycache__/*.pyc` были закоммичены (и менялись при
   каждом запуске проверок) — удалены из индекса, в `.gitignore` добавлены `__pycache__/` и `*.py[cod]`.
 - **Найдено компилятором с `android.jar` (три реальные ошибки):**

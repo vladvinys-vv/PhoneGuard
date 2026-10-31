@@ -48,13 +48,23 @@ workflows:
           else
             echo "kotlinc не установлен — компиляторная проверка пропущена"
           fi
-      - name: Resources and manifest (aapt2)
+      # На образах Codemagic может не быть android-35: ставим платформу явно, иначе
+      # манифест линкуется против старого android.jar (ложная ошибка про specialUse).
+      - name: Ensure Android SDK platform 35
         script: |
-          if [ -x "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2" ]; then
-            python3 tools/aapt2_check.py
-          else
-            echo "aapt2 не найден — проверка ресурсов пропущена"
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager || true)"
           fi
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+            "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null || \
+              echo "sdkmanager: не удалось обновить платформу — aapt2_check сам решит, что проверять"
+          else
+            echo "sdkmanager не найден — оставляем платформы как есть"
+          fi
+      - name: Resources and manifest (aapt2)
+        script: python3 tools/aapt2_check.py
       - name: Lint
         script: ./gradlew lintDebug --no-daemon --stacktrace
       - name: Unit tests
