@@ -99,6 +99,23 @@
 -keep class com.google.mlkit.vision.face.** { *; }
 -dontwarn com.google.mlkit.vision.face.**
 
+# apk-parser (локальный анализ подписей APK)
+-keep class net.dongliu.apk.parser.** { *; }
+-keep class net.dongliu.commons.io.** { *; }
+-dontwarn net.dongliu.apk.parser.**
+-dontwarn net.dongliu.commons.**
+
+# libphonenumber (нормализация номеров, офлайн metadata)
+-keep class com.google.i18n.phonenumbers.** { *; }
+-dontwarn com.google.i18n.phonenumbers.**
+
+# OkHttp / Okio (проверка доменов threat intel)
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
+
 # Optimization
 -optimizationpasses 5
 -allowaccessmodification

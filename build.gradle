@@ -14,6 +14,9 @@ buildscript {
         espresso_version = '3.6.1'
         mockk_version = '1.13.16'
         roboversion = '4.14.1'
+        libphonenumber_version = '9.0.42'
+        okhttp_version = '4.12.0'
+        apk_parser_version = '2.6.10'
     }
     repositories {
         google()
@@ -24,8 +27,6 @@ buildscript {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0"
         classpath "com.google.dagger:hilt-android-gradle-plugin:$hilt_version"
         classpath "org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.1.0"
-        classpath "com.google.firebase:firebase-bom:33.1.0"
-        classpath "com.google.firebase:firebase-crashlytics-gradle:3.0.2"
     }
 }
 
