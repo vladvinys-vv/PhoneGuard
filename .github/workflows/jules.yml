@@ -1,34 +1,26 @@
-name: Google Jules Verification
+name: Jules configuration check
 
 on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
+# Тесты и сборка живут в android-ci.yml — здесь только проверка конфигурации,
+# чтобы не дублировать дорогие job'ы (раньше этот workflow глотал падения тестов
+# через `|| echo`).
 jobs:
-  jules-check:
+  jules-config:
+    name: Validate .jules
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Validate Jules configuration
+      - name: Config files exist
         run: |
-          test -f .jules/config.json || exit 1
-          test -f .jules/rules.md || exit 1
-          echo "Jules configuration validated successfully."
+          test -f .jules/config.json || { echo "::error::.jules/config.json отсутствует"; exit 1; }
+          test -f .jules/rules.md || { echo "::error::.jules/rules.md отсутствует"; exit 1; }
+          echo "Jules configuration validated."
 
-      - name: Run Unit Tests
-        run: ./gradlew test --no-daemon || echo "Tests ran or skipped based on environment"
+      - name: config.json is valid JSON
+        run: python3 -c "import json; json.load(open('.jules/config.json', encoding='utf-8')); print('config.json: OK')"

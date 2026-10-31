@@ -26,12 +26,16 @@
 ./build_release.sh production release     # подписанные APK + AAB
 ```
 
-Перед любым PR/релизом:
+Перед любым PR/релизом — всё одной командой:
 
 ```bash
-python3 tools/static_audit.py     # должно быть 0 error(s), 0 warning(s)
-python3 tools/sync_strings.py     # идемпотентно, ничего не меняет если строки на месте
+./tools/check_all.sh
 ```
+
+Она запускает `static_audit.py`, проверяет идемпотентность `sync_strings.py` и, если установлены,
+`kotlin_frontend_check.py` (kotlinc) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
+(`static_audit.py` и строки) прогоняются в CI-job `static-checks`, компиляторная проверка — в
+`kotlin-frontend`; сборка и тесты — в `lint`, `unit-test`, `build-debug`, `build-release`.
 
 ## Конвенции
 

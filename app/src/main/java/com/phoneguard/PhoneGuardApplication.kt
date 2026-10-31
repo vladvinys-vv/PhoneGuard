@@ -52,6 +52,9 @@ class PhoneGuardApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // Порядок важен: обработчик падений ставится первым, чтобы ловить сбои
+        // последующей инициализации (StrictMode, WorkManager, DataStore, БД).
+        crashHandler.install()
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()
@@ -66,7 +69,8 @@ class PhoneGuardApplication : Application(), Configuration.Provider {
                     .build()
             )
         }
-        crashHandler.install()
+        // WorkManager здесь уже инициализирован (Application.onCreate отрабатывает раньше
+        // ContentProvider'ов, а конфигурация берётся из Configuration.Provider выше).
         scheduleDataCleanup()
         scheduleScheduledFullScan()
         seedSpamDatabase()

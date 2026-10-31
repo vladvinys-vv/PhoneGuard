@@ -1,7 +1,8 @@
 # Release Checklist
 
 ## Before Building
-**Static checks first:** `python3 tools/static_audit.py` must report `0 error(s), 0 warning(s)`.
+**Static checks first:** `./tools/check_all.sh` (or at least `python3 tools/static_audit.py`, which
+must report `0 error(s), 0 warning(s)`).
 It validates unresolved/missing imports in Compose code, `R.*` references, XML validity, Room `@Query`
 tables/columns, Room-DAO call sites, Hilt bindings, manifest components and `android:exported`,
 requested vs declared permissions, locale parity of `strings.xml`, `getString` argument counts vs
@@ -39,9 +40,12 @@ the parser installed the script prints a hint and exits 0.
    - Never commit `keystore.properties` or `.jks` to version control
 
 3. **Build Flavors**
-   - `./gradlew assembleProductionRelease` — production APK/AAB
+   - `./build_release.sh production release` — проверки, затем APK **и** AAB одной командой
+     (`app/build/outputs/apk/production/release/*.apk`, `app/build/outputs/bundle/*/*.aab`);
+     без `keystore.properties`/`KEYSTORE_PATH` скрипт предупреждает, что APK неподписанный
+   - `./gradlew assembleProductionRelease` — только production APK
    - `./gradlew assembleStagingRelease` — staging build for testing
-   - `./gradlew bundleProductionRelease` — Play Store App Bundle
+   - `./gradlew bundleProductionRelease` — только Play Store App Bundle
 
 4. **Play Store Assets**
    - Screenshots: phone (320dp, 384dp, 480dp), tablet (600dp, 720dp), foldable

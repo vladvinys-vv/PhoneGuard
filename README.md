@@ -125,6 +125,8 @@ cp keystore.properties.example keystore.properties   # вписать свои �
 В песочнице без Android SDK доступны статические проверки:
 
 ```bash
+./tools/check_all.sh                     # аудит + строки (+ компилятор/парсер, если установлены)
+
 python3 tools/static_audit.py            # обязательно: 0 error(s), 0 warning(s)
 python3 tools/sync_strings.py            # идемпотентная синхронизация строк в 4 локалях
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор без Android SDK
@@ -138,6 +140,17 @@ python3 tools/kotlin_analysis.py         # опционально: парсер 
 отсутствующими библиотеками — им найдены семь реальных ошибок сборки, в том числе в тестах.
 `kotlin_analysis.py` дополнительно разбирает файлы парсером и ищет вызовы `suspend`-функций вне
 suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+## CI
+
+`.github/workflows/android-ci.yml` — единственный обязательный workflow (остальные не дублируют сборку):
+
+| Job | Что делает |
+|---|---|
+| `static-checks` | `static_audit.py` + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` |
+| `kotlin-frontend` | ставит Kotlin 2.1.0 и прогоняет `kotlin_frontend_check.py` (без Android SDK) |
+| `lint`, `unit-test` | `lintDebug`, `testDebugUnitTest` (отчёты тестов выгружаются при падении) |
+| `build-debug`, `build-release` | `assembleProductionDebug`, `assembleProductionRelease` (APK как артефакт) |
 
 ## Документация
 
