@@ -7,9 +7,12 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
+// ВАЖНО: это Groovy DSL, а не Kotlin DSL. Здесь нет `mapOf(...)`, `listOf(...)` и прочих
+// функций stdlib Kotlin — их вызов падает на этапе конфигурации с MissingMethodException
+// (именно так ломался `./gradlew lintDebug`). Все свойства задаются через `=`.
 android {
-    namespace 'com.phoneguard'
-    compileSdk 35
+    namespace = 'com.phoneguard'
+    compileSdk = 35
 
     def keystorePropertiesFile = rootProject.file("keystore.properties")
     def keystoreProperties = new Properties()
@@ -20,21 +23,21 @@ android {
     def hasReleaseKeystore = releaseStorePath != null && file(releaseStorePath).exists()
 
     defaultConfig {
-        applicationId "com.phoneguard"
-        minSdk 26
-        targetSdk 35
-        versionCode 1
-        versionName "1.0.0"
+        applicationId = "com.phoneguard"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
 
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables {
-            useSupportLibrary true
-        }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables.useSupportLibrary = true
 
-        // Room schema export location
+        // Room schema export location. `arguments` — живой MutableMap, поэтому put() работает
+        // без сеттера (его может не быть в публичном API AGP). Главное — не `mapOf(...)`
+        // из Kotlin stdlib: в Groovy такого метода нет (см. комментарий в начале файла).
         javaCompileOptions {
             annotationProcessorOptions {
-                arguments += mapOf("room.schemaLocation" to "$projectDir/schemas".toString())
+                arguments.put("room.schemaLocation", projectDir.absolutePath + "/schemas")
             }
         }
     }
@@ -42,41 +45,41 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             release {
-                storeFile file(releaseStorePath)
-                storePassword keystoreProperties['storePassword'] ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
-                keyAlias keystoreProperties['keyAlias'] ?: System.getenv("KEY_ALIAS") ?: ""
-                keyPassword keystoreProperties['keyPassword'] ?: System.getenv("KEY_PASSWORD") ?: ""
+                storeFile = file(releaseStorePath)
+                storePassword = keystoreProperties['storePassword'] ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias = keystoreProperties['keyAlias'] ?: System.getenv("KEY_ALIAS") ?: ""
+                keyPassword = keystoreProperties['keyPassword'] ?: System.getenv("KEY_PASSWORD") ?: ""
             }
         }
     }
-
 
     buildTypes {
         release {
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled = true
+            shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (hasReleaseKeystore) {
-                signingConfig signingConfigs.release
+                signingConfig = signingConfigs.release
             }
         }
         debug {
-            applicationIdSuffix ".debug"
+            applicationIdSuffix = ".debug"
         }
     }
 
+    // У `flavorDimensions` нет сеттера в публичном API AGP — только метод с vararg.
     flavorDimensions "environment"
     productFlavors {
         staging {
-            dimension "environment"
-            applicationIdSuffix ".staging"
-            versionNameSuffix "-staging"
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
             manifestPlaceholders = [
                 appLabel: "PhoneGuard Staging"
             ]
         }
         production {
-            dimension "environment"
+            dimension = "environment"
             manifestPlaceholders = [
                 appLabel: "PhoneGuard"
             ]
@@ -84,8 +87,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
@@ -93,8 +96,8 @@ android {
     }
 
     buildFeatures {
-        compose true
-        buildConfig true
+        compose = true
+        buildConfig = true
     }
 
     sourceSets {
@@ -102,20 +105,27 @@ android {
         // миграций снова появятся. В репозитории схем пока нет — они создаются первой
         // сборкой, поэтому актуальную цепочку миграций проверяет JVM-тест
         // AppDatabaseMigrationConfigTest.
-        androidTest.assets.srcDirs += files("$projectDir/schemas")
+        // srcDir(), а не `srcDirs +=`: добавление на месте не зависит от наличия сеттера.
+        androidTest.assets.srcDir("$projectDir/schemas")
     }
 
     packaging {
         resources {
-            excludes += ['/META-INF/{AL2.0,LGPL2.1}', '/META-INF/DEPENDENCIES', '/META-INF/LICENSE*', '/META-INF/NOTICE*']
+            excludes.addAll([
+                '/META-INF/{AL2.0,LGPL2.1}',
+                '/META-INF/DEPENDENCIES',
+                '/META-INF/LICENSE*',
+                '/META-INF/NOTICE*',
+            ])
         }
     }
 
     lint {
         // Локализация неполная умышленно: отсутствующие строки берутся из values/ (fallback).
-        disable += ['MissingTranslation', 'UnusedResources']
-        abortOnError true
-        checkReleaseBuilds true
+        // addAll() вместо `disable +=`: мутация на месте не требует сеттера.
+        disable.addAll(['MissingTranslation', 'UnusedResources'])
+        abortOnError = true
+        checkReleaseBuilds = true
     }
 
     testOptions {
@@ -138,7 +148,7 @@ dependencies {
     implementation "androidx.compose.ui:ui-tooling-preview"
     implementation "androidx.compose.material3:material3:$rootProject.ext.material3_version"
     implementation "androidx.compose.material:material-icons-extended"
-    
+
     // Lifecycle
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:$rootProject.ext.lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:$rootProject.ext.lifecycle_version"
@@ -148,11 +158,11 @@ dependencies {
     // Navigation
     implementation "androidx.navigation:navigation-compose:$rootProject.ext.navigation_version"
     implementation "androidx.hilt:hilt-navigation-compose:1.2.0"
-    
+
     // Hilt
     implementation "com.google.dagger:hilt-android:$rootProject.ext.hilt_version"
     kapt "com.google.dagger:hilt-android-compiler:$rootProject.ext.hilt_version"
-    
+
     // Room
     implementation "androidx.room:room-runtime:$rootProject.ext.room_version"
     implementation "androidx.room:room-ktx:$rootProject.ext.room_version"
@@ -160,7 +170,7 @@ dependencies {
     implementation "net.zetetic:android-database-sqlcipher:4.5.4"
     // Force newer kotlinx-metadata-jvm for Room kapt compatibility with Kotlin 2.1
     kapt "org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.7.0"
-    
+
     // JSON serialization for scan reports
     implementation "com.google.code.gson:gson:2.11.0"
 
@@ -179,11 +189,11 @@ dependencies {
     implementation "androidx.work:work-runtime-ktx:$rootProject.ext.work_version"
     implementation "androidx.hilt:hilt-work:1.1.0"
     kapt "androidx.hilt:hilt-compiler:1.1.0"
-    
+
     // Coroutines
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$rootProject.ext.coroutines_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$rootProject.ext.coroutines_version"
-    
+
     // DataStore
     implementation "androidx.datastore:datastore-preferences:1.0.0"
 
@@ -216,7 +226,7 @@ dependencies {
     debugImplementation "androidx.compose.ui:ui-tooling"
     debugImplementation "androidx.compose.ui:ui-test-manifest"
     debugImplementation "com.squareup.leakcanary:leakcanary-android:2.14"
-    
+
     // Mocking
     testImplementation "io.mockk:mockk:$rootProject.ext.mockk_version"
     androidTestImplementation "io.mockk:mockk-android:$rootProject.ext.mockk_version"
@@ -229,5 +239,5 @@ dependencies {
 }
 
 kapt {
-    correctErrorTypes true
+    correctErrorTypes = true
 }

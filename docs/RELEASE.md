@@ -71,6 +71,47 @@ the parser installed the script prints a hint and exits 0.
    - Support email configured
    - Data safety form filled in Play Console
 
+## 16 КБ страницы памяти (блокер для Play при `targetSdk 35`)
+
+Начиная с 1 ноября 2025 Play **не принимает** новые версии приложений с `targetSdk 35`, чьи native-библиотеки
+не поддерживают страницы памяти 16 КБ (Android 15+ на устройствах с 16 КБ ядром). У нас `targetSdk 35`,
+поэтому требование действует.
+
+Сейчас в `app/build.gradle` подключён `net.zetetic:android-database-sqlcipher:4.5.4` — артефакт
+**закрыт** (последний релиз 2023) и собран без поддержки гибкого размера страниц, то есть
+`libsqlcipher.so` в APK не выровнен под 16 КБ → загрузка в Play будет отклонена.
+
+Замена — новый артефакт `net.zetetic:sqlcipher-android` (репозиторий `sqlcipher/sqlcipher-android`):
+в его `Application.mk` стоит `APP_SUPPORT_FLEXIBLE_PAGE_SIZES := true`, пакет переименован в
+`net.zetetic.database.sqlcipher`, интеграция с Room 2 — через `SupportOpenHelperFactory`.
+
+Шаги миграции (делать отдельным коммитом и **после** первого зелёного прогона CI):
+
+```groovy
+// app/build.gradle
+implementation "net.zetetic:sqlcipher-android:4.19.1"      // версия — по актуальному релизу
+implementation "androidx.sqlite:sqlite:2.7.0"              // требует README библиотеки
+```
+
+```kotlin
+// PhoneGuardApplication.kt
+System.loadLibrary("sqlcipher")                            // вместо SQLiteDatabase.loadLibs(this)
+
+// AppDatabase.kt
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
+.setOpenHelperFactory(SupportOpenHelperFactory(passphrase))  // вместо net.sqlcipher.database.SupportFactory
+```
+
+Проверка после сборки:
+
+```bash
+unzip -l app/build/outputs/apk/production/release/*.apk | grep 'lib/.*sqlcipher'   # .so на месте
+zipalign -c -P 16 -v 4 app/build/outputs/apk/production/release/*.apk             # 16 КБ-выравнивание
+```
+
+До миграции `tools/gradle_check.py` печатает предупреждение про закрытый артефакт — это напоминание,
+а не ошибка сборки.
+
 ## Post-Release
 - Ask users to export local crash reports (`adb pull /data/data/com.phoneguard/files/crash-reports`) if they hit issues
 - Verify release build has no network calls except the opt-in threat intel endpoints

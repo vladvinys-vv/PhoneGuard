@@ -15,8 +15,11 @@ Facts here must match the code; the authoritative docs are `README.md`,
 
 ## Commands (run from the repository root)
 - All checks available without Android SDK: `./tools/check_all.sh`
-  (`static_audit.py`, `sync_strings.py --check`, optionally `kotlin_frontend_check.py`
-  and `kotlin_analysis.py`).
+  (`gradle_check.py` — Groovy DSL/Kotlin-DSL-ошибки, версии плагинов и зависимостей,
+  `static_audit.py`, `sync_strings.py --check`, optionally `kotlin_frontend_check.py`,
+  `aapt2_check.py` and `kotlin_analysis.py`).
+- Gradle scripts only: `python3 tools/gradle_check.py` — runs first, because a DSL mistake
+  fails every task at configuration time with an unrelated Groovy stacktrace.
 - Strings: `python3 tools/sync_strings.py` (writes) / `--check` (reports only).
   After editing strings run the check and commit the result.
 - Compiler check: `python3 tools/kotlin_frontend_check.py` — needs `kotlinc` 2.1+ and

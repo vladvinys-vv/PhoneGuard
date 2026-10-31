@@ -32,10 +32,11 @@
 ./tools/check_all.sh
 ```
 
-Она запускает `static_audit.py`, проверяет `sync_strings.py --check` и, если установлены,
-`kotlin_frontend_check.py` (kotlinc), `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
-(`static_audit.py` и строки) прогоняются в CI-job `static-checks`, компиляторная проверка — в
-`kotlin-frontend`; сборка и тесты — в `lint`, `unit-test`, `build-debug`, `build-release`.
+Она запускает `gradle_check.py`, `static_audit.py`, проверяет `sync_strings.py --check` и, если
+установлены, `kotlin_frontend_check.py` (kotlinc), `aapt2_check.py` (aapt2) и `kotlin_analysis.py`
+(tree-sitter). Обязательные проверки (`gradle_check.py`, `static_audit.py` и строки) прогоняются в
+CI-job `static-checks`, компиляторная проверка — в `kotlin-frontend`; сборка и тесты — в `lint`,
+`unit-test`, `build-debug`, `build-release`.
 
 Если job'ы падают за 1–2 секунды **без запущенных шагов**, это не YAML: GitHub в этом случае
 пишет в аннотации check-run «The job was not started because your account is locked due to a
@@ -94,6 +95,41 @@ billing issue». Проверить: `gh api repos/<owner>/<repo>/check-runs/<id
 | 9001 | `StealthCameraService` | скрытая съёмка |
 
 ## Инструменты
+
+### `tools/gradle_check.py`
+
+Проверяет **конфигурацию** Gradle, потому что её ошибки валят любую задачу (`lintDebug`,
+`testDebugUnitTest`, `assembleRelease`) ещё до компиляции — с многоэкранным стектрейсом Groovy
+вместо понятного сообщения. Главный кейс: функции Kotlin stdlib в Groovy-скриптах. Так реально
+падало `./gradlew lintDebug` в Codemagic:
+
+```groovy
+arguments += mapOf("room.schemaLocation" to "…")   // Kotlin DSL; в Groovy метода mapOf() нет
+arguments = ["room.schemaLocation": projectDir.absolutePath + "/schemas"]   // правильно
+```
+
+Что проверяется: `mapOf`/`listOf`/`val`/`.let { }` и прочие Kotlin-конструкции в `.gradle`;
+`rootProject.ext.X`, которого нет в `ext`; `id 'plugin'` без classpath в `buildscript`;
+расхождение версий `kotlin-gradle-plugin` и `compose-compiler-gradle-plugin`; AGP против версии
+Gradle wrapper'а и `compileSdk` (с учётом `android.suppressUnsupportedCompileSdk`);
+`minSdk ≤ targetSdk ≤ compileSdk`; согласованность `sourceCompatibility` и `jvmTarget`;
+отсутствующий файл из `proguardFiles`; дубликаты зависимостей с разными версиями; отсутствие
+`android.useAndroidX=true`; `kapt`/Hilt без соответствующих плагинов.
+
+Проверяется и сам `app/proguard-rules.pro`: неизвестная директива R8 (опечатка вида `-dontwarns`)
+не видна до релизной сборки, а падает уже на `assembleProductionRelease`.
+
+Отдельно проверяются пары «рантайм ↔ обработчик» — их версии обязаны совпадать, иначе kapt падает
+на несовместимом API: `hilt-android` ↔ `hilt-android-compiler`, `room-runtime` ↔ `room-compiler`,
+`hilt-work` ↔ `hilt-compiler`. Предупреждения (не ошибки) выдаются про предрелизные версии
+(`security-crypto`, `biometric`), про явные версии compose-артефактов при подключённом
+`compose-bom` и про закрытый `net.zetetic:android-database-sqlcipher` — он не поддерживает 16 КБ
+страницы памяти, что блокирует публикацию с `targetSdk 35` (план миграции — `docs/RELEASE.md`).
+
+```bash
+python3 tools/gradle_check.py
+python3 tools/gradle_check.py --warnings-as-errors
+```
 
 ### `tools/static_audit.py`
 

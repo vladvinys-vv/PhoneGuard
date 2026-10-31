@@ -31,5 +31,6 @@ buildscript {
 }
 
 tasks.register("clean", Delete) {
-    delete rootProject.buildDir
+    // buildDir устарел в Gradle 8 (удаляется в 9) — используем ленивый layout.
+    delete rootProject.layout.buildDirectory
 }

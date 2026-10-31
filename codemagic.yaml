@@ -12,6 +12,12 @@ workflows:
         WEBHOOK_TIMEOUT: "10"
         WEBHOOK_RETRIES: "3"
 
+    # Кэш Gradle: повторные сборки не перекачивают зависимости заново.
+    cache:
+      cache_paths:
+        - ~/.gradle/caches
+        - ~/.gradle/wrapper
+
     # Автоматические сборки: webhook репозитория → https://api.codemagic.io/hooks/<appId>
     # (Codemagic UI: App settings → Webhooks → Create webhook).
     triggering:
@@ -37,6 +43,8 @@ workflows:
     scripts:
       - name: Make Gradle wrapper executable
         script: chmod +x ./gradlew
+      - name: Gradle scripts check
+        script: python3 tools/gradle_check.py
       - name: Static audit
         script: python3 tools/static_audit.py
       - name: Strings are in sync

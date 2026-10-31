@@ -127,6 +127,7 @@ cp keystore.properties.example keystore.properties   # вписать свои �
 ```bash
 ./tools/check_all.sh                     # аудит + строки (+ компилятор/парсер, если установлены)
 
+python3 tools/gradle_check.py            # обязательно: конфигурация Gradle (Groovy DSL)
 python3 tools/static_audit.py            # обязательно: 0 error(s), 0 warning(s)
 python3 tools/sync_strings.py            # идемпотентная синхронизация строк в 4 локалях
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор (с android.jar — строже)
@@ -135,7 +136,9 @@ python3 tools/kotlin_analysis.py         # опционально: парсер 
 python3 tools/webhook_notify.py --dry-run # опционально: payload уведомления о сборке (docs/CI_WEBHOOKS.md)
 ```
 
-`static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
+`gradle_check.py` проверяет сами Gradle-скрипты (Kotlin-DSL-функции в Groovy, объявленные `ext`,
+версии плагинов, `minSdk/targetSdk/compileSdk`, proguard-файлы) — ошибка там валит любую задачу
+ещё до компиляции. `static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
 миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_frontend_check.py` прогоняет все
 209 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
@@ -150,7 +153,7 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 
 | Job | Что делает |
 |---|---|
-| `static-checks` | `static_audit.py` + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` |
+| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `static_audit.py` + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` |
 | `kotlin-frontend` | ставит Kotlin 2.1.0 + `platforms;android-35`/`build-tools`, прогоняет `kotlin_frontend_check.py` (с настоящим `android.jar`) и `aapt2_check.py` (ресурсы + манифест) |
 | `lint`, `unit-test` | `lintDebug`, `testDebugUnitTest` (отчёты тестов выгружаются при падении) |
 | `build-debug`, `build-release` | `assembleProductionDebug`, `assembleProductionRelease` (APK как артефакт) |
