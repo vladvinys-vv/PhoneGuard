@@ -144,7 +144,12 @@ fun PhoneGuardNavHost(
                     route = Screen.Firewall.route,
                     deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://firewall" })
                 ) {
-                    FirewallScreen()
+                    FirewallScreen(onOpenLogs = { navController.navigate("firewall_logs") })
+                }
+                composable("firewall_logs") {
+                    com.phoneguard.ui.screens.firewall.FirewallLogsScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
                 composable(
                     route = Screen.SecureVault.route,

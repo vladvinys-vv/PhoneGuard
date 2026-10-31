@@ -57,13 +57,12 @@ Old records are removed automatically by a scheduled cleanup task according to t
 Everything declared in the manifest, and nothing else:
 
 `SMS` (filter and remote commands) · `PHONE` / call log / phone numbers (screening and spam rules) ·
-`CAMERA` + `RECORD_AUDIO` + `MICROPHONE` foreground service (shoulder-surfing detector, anti-theft
-photo) · `LOCATION` (anti-theft last known position) · `NOTIFICATIONS` (block and scan notices) ·
-`VPN` (the firewall) · `DEVICE ADMIN` (optional: lock/wipe) · `PACKAGE_USAGE_STATS` + `SYSTEM_ALERT_WINDOW`
-(overlay and hidden-app checks) ·
-`BATTERY OPTIMIZATION EXEMPTION` (optional, keeps background protection alive) · media/storage read
-access (full scan of shared storage, vault import) · `BIOMETRIC` (vault unlock) · `BOOT_COMPLETED`
-(restore protection after reboot).
+`CAMERA` + camera foreground service (shoulder-surfing detector, anti-theft photo) ·
+`LOCATION` (anti-theft last known position) · `NOTIFICATIONS` (block and scan notices) ·
+`VPN` (the firewall) · `DEVICE ADMIN` (optional: lock/wipe) · `SYSTEM_ALERT_WINDOW` + overlay checks ·
+`BATTERY OPTIMIZATION EXEMPTION` (optional, keeps background protection alive) · storage read access
+on Android 12 and older (shared-storage scan; vault import uses the system file picker and needs no
+permission) · `BIOMETRIC` (vault unlock) · `BOOT_COMPLETED` (restore protection after reboot).
 
 `QUERY_ALL_PACKAGES` is used only to enumerate installed packages for the scan and the firewall list;
 the result never leaves the device.

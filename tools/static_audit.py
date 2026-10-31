@@ -1704,6 +1704,34 @@ def check_notification_ids() -> None:
             )
 
 
+def check_unreachable_screens() -> None:
+    """`@Composable fun XxxScreen(...)`, который нигде не вызывается, — экран вне навигации.
+
+    Так нашлись два случая: `SimSwapConfirmationActivity` не открывалась ниоткуда, а
+    `FirewallLogsScreen` был полностью реализован, но в граф навигации не попал —
+    пользователь видел только последние 20 записей журнала.
+    Композабл, вызванный в своём же файле (частный экран-обёртка), считается используемым.
+    """
+    sources = {
+        p: strip_comments(p.read_text(encoding='utf-8'))
+        for p in (ROOT / 'app/src/main/java').rglob('*.kt')
+    }
+    decl = re.compile(r'^\s*(?:internal\s+|private\s+)?fun\s+(\w+Screen)\s*\(', re.M)
+    for path, code in sources.items():
+        for m in decl.finditer(code):
+            name = m.group(1)
+            references = len(re.findall(r'\b' + re.escape(name) + r'\b', code)) - 1
+            for other_path, other in sources.items():
+                if other_path != path:
+                    references += len(re.findall(r'\b' + re.escape(name) + r'\b', other))
+            if references <= 0:
+                line = code.count('\n', 0, m.start()) + 1
+                ERRORS.append(
+                    f"{path.relative_to(ROOT)}:{line}: экран {name} нигде не вызывается "
+                    f"(недостижим из навигации)"
+                )
+
+
 def check_deep_links() -> None:
     """Ссылки `phoneguard://…` должны быть объявлены и обработаны.
 
@@ -1783,6 +1811,7 @@ def main() -> int:
     check_member_calls()
     check_notification_ids()
     check_deep_links()
+    check_unreachable_screens()
 
     for w in sorted(set(WARNINGS)):
         print(f"warning: {w}")

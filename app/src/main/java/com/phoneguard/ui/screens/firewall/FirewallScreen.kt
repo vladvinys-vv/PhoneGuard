@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Warning
@@ -28,6 +29,7 @@ import com.phoneguard.model.FirewallRule
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FirewallScreen(
+    onOpenLogs: () -> Unit = {},
     viewModel: FirewallViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -49,6 +51,14 @@ fun FirewallScreen(
                 actions = {
                     IconButton(onClick = { viewModel.loadApps() }, contentDescription = stringResource(R.string.scan_now)) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
+                    }
+                    // Раньше полный журнал брандмауэра (FirewallLogsScreen) был реализован,
+                    // но недостижим: на экране показывались только последние 20 записей.
+                    IconButton(
+                        onClick = onOpenLogs,
+                        contentDescription = stringResource(R.string.firewall_logs_title)
+                    ) {
+                        Icon(Icons.Default.List, contentDescription = null)
                     }
                 }
             )

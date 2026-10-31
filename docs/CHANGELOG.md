@@ -34,6 +34,11 @@
 - **`static_audit.py`: мёртвые активности.** Проверка `check_dead_components()` смотрела только
   сервисы/приёмники/провайдеры; теперь проверяются и `<activity>`, кроме настоящих точек входа
   (`LAUNCHER`-ярлык, `BROWSABLE`-ссылки). Именно так нашлась недоступная `SimSwapConfirmationActivity`.
+- **`static_audit.py`: недостижимые экраны.** Новый `check_unreachable_screens()` ловит
+  `@Composable fun XxxScreen(...)`, который нигде не вызывается. Так нашёлся `FirewallLogsScreen`:
+  экран полного журнала брандмауэра был полностью реализован, но в граф навигации не попал.
+  Теперь он доступен кнопкой в шапке экрана брандмауэра (маршрут `firewall_logs`), а не только
+  последними 20 записями.
 - **Документация по проверкам:** в `docs/DEVELOPMENT.md` добавлен раздел про новый скрипт (включая
   установку компилятора из npm в песочнице без Maven Central), в `README.md` и `docs/RELEASE.md`
   обновлены списки проверок.
@@ -124,6 +129,17 @@
   по канонизированному номеру, так что тест «шаблоны работают» проверял то, чего нет в приложении.
   Также удалены неиспользуемые `model/MalwareApp.kt` (`MalwareApp`/`MalwareType`),
   `TransportProtocol` и `IntrusionSeverityPolicy`.
+
+- **Неиспользуемые разрешения удалены из манифеста:** `PACKAGE_USAGE_STATS` (нет ни одного
+  `UsageStatsManager`), `ANSWER_PHONE_CALLS`, `ACCESS_WIFI_STATE`, `WAKE_LOCK` (WorkManager объявляет
+  его сам), `MANAGE_NETWORK_POLICY`, `RECORD_AUDIO` (записи звука нет — разрешение фигурировало только
+  как метка в списках чужих приложений), `READ_MEDIA_IMAGES/VIDEO/AUDIO` и три
+  `FOREGROUND_SERVICE_*` (`dataSync`/`location`/`microphone`), для которых нет ни одного сервиса.
+  `READ_EXTERNAL_STORAGE` ограничено `maxSdkVersion="32"`. `docs/PRIVACY_POLICY.md` приведён
+  в соответствие: убраны `PACKAGE_USAGE_STATS`, `RECORD_AUDIO`/`MICROPHONE` и обещание читать
+  общее хранилище на Android 13+.
+- **`ui/screens/PlaceholderScreens.kt`** — экран-заглушка с русским литералом «Coming Soon!»
+  не вызывался ниоткуда.
 
 ### Changed
 - **Конфигурация Gradle приведена в порядок.** Удалён устаревший `android.enableAapt2` (в AGP 8
