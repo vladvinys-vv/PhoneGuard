@@ -174,6 +174,7 @@ Codemagic (`codemagic.yaml`) делает то же самое плюс `publish
 | [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) | политика конфиденциальности (что и где хранится) |
 | [`docs/PLAY_STORE_LISTING.md`](docs/PLAY_STORE_LISTING.md) | тексты для магазина |
 | [`docs/CI_WEBHOOKS.md`](docs/CI_WEBHOOKS.md) | входящие (trigger) и исходящие (notify) webhook'и CI, подпись HMAC, локальная проверка |
+| [`LICENSE`](LICENSE) | лицензия MIT (зависимости — под своими лицензиями, см. «Интеграции») |
 
 ## Модель безопасности
 
@@ -184,4 +185,5 @@ Codemagic (`codemagic.yaml`) делает то же самое плюс `publish
 
 ## Лицензия
 
-Private — all rights reserved. Код открыт для аудита.
+MIT — см. [LICENSE](LICENSE). Зависимости сохраняют собственные лицензии (см. таблицу
+«Интеграции»): AndroidX, Room, OkHttp, libphonenumber и apk-parser — Apache-2.0, SQLCipher — BSD.
