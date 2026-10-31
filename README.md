@@ -1,190 +1,159 @@
 # PhoneGuard
 
-Android native security application with device malware scanning, local VPN firewall, anti-theft SMS remote commands, call screening, and encrypted biometric vault.
+Android-приложение для защиты устройства: проверка телефона и полное сканирование, VPN-брандмауэр без root,
+анти-воровские команды по SMS, блокировка звонков и SMS, шифрованное хранилище.
+Всё, что можно, работает офлайн: база, логи и диагностика остаются на устройстве.
 
-## Features
+- **Платформа:** Android 8.0+ (`minSdk 26`), `compileSdk`/`targetSdk 35`
+- **Стек:** Kotlin 2.1.0, Jetpack Compose + Material 3, Hilt, Room 2.6.1 + SQLCipher, WorkManager, Coroutines
+- **Сборка:** Gradle 8 (Groovy DSL), AGP 8.5.2, JDK 17
 
-- **Malware Scanner** — Local ML-based APK analysis with signature & heuristic detection
-- **VPN Firewall** — Per-app network control via Android VpnService (no root)
-- **Anti-Theft** — SMS remote commands (lock, wipe, locate, siren, photo capture)
-- **Call Screening** — Spam/phishing detection with caller ID enrichment
-- **Biometric Vault** — Encrypted storage (AES-256-GCM) with BiometricPrompt auth
-- **Phone Check** — Чек всего телефона: блокировка экрана, шифрование, патч-уровень, ADB/root-признаки,
-  свободное место, устаревшие и отлаживаемые приложения, разрешения, энергосбережение — с оценкой 0..100
-- **Privacy-First** — Fully offline capable, no telemetry, no cloud dependencies
+## Возможности
 
-## Integrations
+| Раздел | Что делает |
+|---|---|
+| **Полное сканирование** | 16 шагов: root, целостность системы, файловая система, режим разработчика, патч-безопасности, службы доступности, overlay-атаки, разрешения, скрытые приложения, администраторы устройства, приватность, шпионское ПО, брандмауэр, подписи APK, фишинговые SMS и чек состояния телефона. Прогресс переводится (`ScanStage` с `@StringRes`), отчёт сохраняется в историю, экспортируется в PDF |
+| **Чек всего телефона** | 20 проверок устройства и оценка 0..100: блокировка экрана, шифрование, SELinux, ADB, режим разработчика, администраторы, неизвестные источники, Play Protect, устаревшие и debuggable-приложения, службы доступности, разрешения, уведомления, энергосбережение, VPN, свободное место, версия ОС и модель |
+| **VPN-брандмауэр** | Правила по приложениям (Wi-Fi/мобильные/полная блокировка) через `VpnService`, без root. В туннель попадают только заблокированные сейчас приложения, IPv4 и IPv6, пакеты отбрасываются; журнал блокировок с ограничением частоты |
+| **Блокировка звонков** | `CallScreeningService`: белый список → чёрный список → локальная спам-база → скрытые номера → международные; нормализация в E.164 (libphonenumber) |
+| **Фильтр SMS** | `SmsSpamReceiver`: чёрный/белый список, спам-база и локальная эвристика фишинга. Доставку отменяет только если PhoneGuard — приложение SMS по умолчанию |
+| **Анти-вор** | SMS-команды (тревога, блокировка, вайп, координаты, фото), Device Admin, детектор подмены SIM, сигнализация с вибрацией, отправка координат доверенному номеру |
+| **Сейф** | Файлы до 50 МБ, AES-256-GCM, ключи в Android Keystore, разблокировка по биометрии, `FLAG_SECURE`, предпросмотр через `FileProvider` |
+| **Сканер приватности** | Анализ разрешений установленных приложений и избыточных доступов |
+| **Проверка на шпионское ПО** | Скрытые приложения, службы доступности, администраторы, подозрительные подписи |
+| **Защита от подглядывания** | CameraX + ML Kit face detection: предупреждение, когда в экран смотрит кто-то ещё |
+| **Реагирование на вторжение** | Honeypot-события и автоматические реакции (блокировка пакета, тревога, уведомление доверенного номера) |
 
-| Component | Library / API | Why | License |
+## Интеграции
+
+| Компонент | Библиотека / API | Зачем | Лицензия |
 |---|---|---|---|
-| Номерной анализ | [libphonenumber](https://github.com/google/libphonenumber) (`com.googlecode.libphonenumber:libphonenumber`) | E.164-нормализация номеров для чёрных/белых списков, скрининга звонков и CSV-импорта. Работает офлайн на локальной metadata | Apache-2.0 |
-| Анализ подписей APK | [apk-parser](https://github.com/hsiafan/apk-parser) (`net.dongliu:apk-parser`) | Цепочка сертификатов, алгоритм подписи и срок действия — `PackageManager` этого не отдаёт. Нужно для поиска пересобранных APK | Apache-2.0 |
-| Threat intelligence | [URLhaus](https://urlhaus.abuse.ch/) + [OpenPhish](https://openphish.com/) через OkHttp | Проверка доменов из подозрительных SMS. **Только хост**, без текста сообщений; опционально, по умолчанию выключено | бесплатно для некоммерческого использования |
-| Сеть | [OkHttp](https://square.github.io/okhttp/) | HTTP-клиент для threat intel, HTTPS + pinning утилиты | Apache-2.0 |
-| Геолокация | Google Play Services Location | Последняя известная точка для anti-theft | proprietary SDK |
-| Face detection | ML Kit face detection | Детектор «подглядывания через плечо» | proprietary SDK |
-| Шифрование | SQLCipher + AndroidX Security (`EncryptedFile`) | БД и файлы сейфа | BSD / Apache-2.0 |
+| Номера | [libphonenumber](https://github.com/google/libphonenumber) `9.0.42` | E.164-нормализация для списков, скрининга звонков, SMS-фильтра и CSV-импорта. Офлайн, только локальная metadata | Apache-2.0 |
+| Подписи APK | [apk-parser](https://github.com/hsiafan/apk-parser) `2.6.10` | Цепочка сертификатов, алгоритм подписи, срок действия — `PackageManager` этого не отдаёт | Apache-2.0 |
+| Threat intelligence | [URLhaus](https://urlhaus.abuse.ch/) + [OpenPhish](https://openphish.com/) через OkHttp | Проверка доменов из подозрительных SMS. Наружу уходит **только имя хоста**; выключено по умолчанию | free for non-commercial use |
+| Сеть | [OkHttp](https://square.github.io/okhttp/) `4.12.0` | HTTP-клиент для threat intel (+ `logging-interceptor` в debug) | Apache-2.0 |
+| БД | Room + [SQLCipher](https://github.com/sqlcipher/android-database-sqlcipher) `4.5.4` | Локальная зашифрованная база (версия схемы 8, миграции 1→8) | Apache-2.0 / BSD |
+| Файлы сейфа | AndroidX Security Crypto | AES-256-GCM для файлов | Apache-2.0 |
+| Геолокация | Google Play Services Location | Последняя известная точка для анти-вора | proprietary SDK |
+| Детектор подглядывания | ML Kit face detection | Определение второго лица в кадре | proprietary SDK |
+| Камера | CameraX `1.4.1` | Фото при неудачных попытках разблокировки | Apache-2.0 |
 
-> Всё, что связано с приватностью, остаётся на устройстве: аналитика, метрики производительности и отчёты о падениях
-> пишутся в локальные файлы (`AnalyticsHelper`, `PerformanceMonitor`, `CrashHandler`). Firebase удалён —
-> см. `docs/PRIVACY_POLICY.md`.
+> Аналитики, метрик и crash-репортов наружу нет: `AnalyticsHelper` считает события в памяти сессии,
+> `PerformanceMonitor` пишет замеры в лог, `CrashHandler` складывает отчёты в `files/crash-reports/`.
+> Firebase в проекте нет — см. [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md).
 
-## 🤖 AI Agent Skills Integration
-
-### Recommended Skill Collections
-```bash
-# Skill management
-npm install -g @skillkit/cli && skillkit init
-skillkit recommend
-
-# Android / Kotlin / Security skills
-npx skills add seb1n/awesome-ai-agent-skills --skill android,kotlin,security
-npx skills add alirezarezvani/claude-skills --skill android,security
-
-# Security scan before install
-npm install -g @nvidia/skillspector
-skillspector scan <repo-url>
-```
-
-### MCP Server Configuration
-Add to agent config (`.claude/settings.json`, `kilo.jsonc`):
-```json
-{
-  "mcpServers": {
-    "openregister": "openregister/openregister-sdk",
-    "browser": "browser-use/browser-use",
-    "bundestag": "local-bundestag-api",
-    "bsi": "local-bsi-threat-intel"
-  }
-}
-```
-
-### Subagent Delegation (Kilo Multi-Agent)
-Use native `task(agent="...", ...)` for specialized work:
-- `task(agent="architect", ...)` — Before new modules, VPN service changes, crypto implementations
-- `task(agent="debugger", ...)` — Test failures, VpnService crashes, BiometricPrompt issues
-- `task(agent="revisor", ...)` — Pre-commit: security scan, coverage, diff analysis
-- `task(agent="security-reviewer", ...)` — Crypto audit, permission review, privacy impact
-
-### Verification Gates (Required per Commit)
-```bash
-./gradlew lintDebug test assembleDebug
-# Secret scanning
-npx -y gitleaks detect --no-git -v
-```
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Language** | Kotlin |
-| **UI** | Jetpack Compose, Material 3 |
-| **Database** | Room (SQLite) |
-| **Security** | AES-256-GCM, Android Keystore, BiometricPrompt |
-| **Network** | VpnService, OkHttp |
-| **Background** | Coroutines, WorkManager, Foreground Services |
-| **Build** | Gradle (Groovy DSL), AGP, R8 |
-
-## Architecture
+## Архитектура
 
 ```
 PhoneGuard/
 ├── app/
-│   ├── src/main/java/com/phoneguard/
-│   │   ├── antitheft/      # SMS-команды, Device Admin, сигнализация
-│   │   ├── callblocker/    # CallScreeningService, блокировка звонков/SMS
-│   │   ├── data/           # Room (SQLCipher), DataStore, репозитории
-│   │   ├── di/             # Hilt-модули
-│   │   ├── domain/         # use-case'ы (shoulder surfer и т.п.)
-│   │   ├── deviceaudit/    # чек всего телефона (20 проверок)
-│   │   ├── firewall/       # VpnService + правила блокировки
-│   │   ├── fullscan/       # оркестратор проверки и 16 шагов сканирования
-│   │   ├── intrusion/      # honey-pot, реагирование на вторжение
-│   │   ├── malware/        # анализ подписи APK (apk-parser)
-│   │   ├── model/          # доменные модели / Room-сущности
-│   │   ├── shouldersurfer/ # камера + ML Kit (защита от подглядывания)
-│   │   ├── simswap/        # детектор подмены SIM
-│   │   ├── spywarecheck/   # проверка шпионских приложений
-│   │   ├── threatintel/    # opt-in проверка доменов по URLhaus/OpenPhish
-│   │   ├── ui/             # Compose-экраны, темы, навигация
-│   │   ├── util/           # нормализация номеров, PDF/CSV, аналитика
-│   │   ├── vault/          # шифрованное хранилище файлов
-│   │   └── worker/         # WorkManager-задачи
-│   └── src/main/res/       # strings (ru/en/de), темы, иконки
-├── app/build.gradle
-├── build.gradle
-└── settings.gradle
+│   ├── build.gradle                 # flavors: staging / production, Room schema export
+│   ├── schemas/                     # экспорт схем Room (появляется после первой сборки)
+│   └── src/
+│       ├── main/java/com/phoneguard/
+│       │   ├── antitheft/       # SMS-команды, Device Admin, сигнализация, камера, геолокация
+│       │   ├── callblocker/     # CallScreeningService, фильтр SMS, уведомления блокировщика
+│       │   ├── data/            # Room (SQLCipher), DataStore, репозитории, миграции
+│       │   ├── deviceaudit/     # чек всего телефона (20 проверок, оценка 0..100)
+│       │   ├── di/              # Hilt-модули
+│       │   ├── domain/          # use-case'ы (детектор подглядывания)
+│       │   ├── firewall/        # VpnService, правила, парсеры пакетов
+│       │   ├── fullscan/        # оркестратор, ScanStage, проверки в checks/ (+ анализ фишинга)
+│       │   ├── intrusion/       # honeypot и автоматические реакции
+│       │   ├── malware/         # анализ подписи APK (apk-parser)
+│       │   ├── model/           # доменные модели и Room-сущности
+│       │   ├── shouldersurfer/  # камера + ML Kit
+│       │   ├── simswap/         # детектор подмены SIM
+│       │   ├── spywarecheck/    # проверка шпионских приложений
+│       │   ├── threatintel/     # opt-in проверка доменов (URLhaus/OpenPhish) с локальным кешем
+│       │   ├── ui/              # Compose-экраны (12), тема, навигация
+│       │   ├── util/            # номера, PDF/CSV, экспорт логов, аналитика, PIN
+│       │   ├── vault/           # шифрованное хранилище
+│       │   └── worker/          # DataCleanupWorker, ScheduledFullScanWorker
+│       ├── main/res/            # strings: values / values-en / values-ru / values-de, values-night
+│       ├── test/                # JVM-тесты (JUnit4, MockK, Turbine, Robolectric)
+│       └── androidTest/         # инструментальные тесты (Compose UI, Room DAO, device audit)
+├── docs/                        # документация (см. ниже)
+├── tools/                       # проверки без Gradle
+├── build.gradle                 # версии зависимостей (ext) и AGP
+└── build_release.sh             # сборка подписанного APK/AAB
 ```
 
 ### Чек всего телефона
 
-`deviceaudit/DeviceAuditChecker` выполняет 20 проверок состояния устройства и возвращает
-`DeviceAuditReport` (оценка 0..100 + список `AuditItem`). Элементы содержат `@StringRes`, поэтому
-экран (`ui/screens/phonecheck`) рисует их на выбранном языке, а полное сканирование использует те же
-проверки как 16-й шаг и добавляет найденные проблемы в отчёт (`ScanIssue`).
+`deviceaudit/DeviceAuditChecker.performAudit()` выполняет 20 проверок и возвращает
+`DeviceAuditReport` (оценка 0..100 + список `AuditItem`). Пункты несут `@StringRes`, поэтому экран
+`ui/screens/phonecheck` рисует их на выбранном языке, а полное сканирование использует тот же аудит
+16-м шагом и добавляет найденные проблемы в отчёт (`ScanIssue`). Результат сохраняется в DataStore —
+дашборд показывает его без повторной проверки.
 
-| Группа | Что проверяется |
-|---|---|
-| Безопасность | блокировка экрана, шифрование памяти, SELinux, ADB (USB/Wi-Fi), режим разработчика, администраторы устройства |
-| Приложения | неизвестные источники, Play Protect/верификатор, устаревшая `targetSdk`, debuggable-сборки, службы доступности, число приложений |
-| Система | уровень патча безопасности, ключевые разрешения, уведомления, энергосбережение, версия Android, модель |
-| Сеть и память | активное VPN, свободное место |
-
-Оценка: `100 − 15 × критичных − 7 × предупреждений` (не ниже 0). Результат сохраняется в DataStore,
-поэтому дашборд показывает его без повторной проверки.
+Оценка: `100 − 15 × критичных − 7 × предупреждений`, не ниже 0.
 
 ### Локализация
 
-Интерфейс полностью переведён на русский, английский и немецкий (`values`, `values-en`,
-`values-ru`, `values-de`; язык переключается в настройках и применяется в `attachBaseContext`).
-Тексты технических отчётов полного сканирования (`ScanIssue`) формируются проверками и
-сохраняются в истории на языке по умолчанию (русский) — они не переводятся.
+Интерфейс переведён на русский, английский и немецкий: `values` (по умолчанию русский),
+`values-en`, `values-ru`, `values-de` — 634 ключа в каждой локали, паритет проверяется
+`tools/static_audit.py`. Язык переключается в настройках и применяется через `attachBaseContext`.
 
-## Quick Start
+Проверки полного сканирования не знают о `Context`: они возвращают `CheckDetail(textRes, args)`
+(`fullscan/checks/CheckDetail.kt`), а текст собирается в UI через `resolve(context)` — поэтому
+детали отчёта не «застывают» на языке, который был при сканировании.
+
+## Сборка и запуск
+
+Нужны JDK 17 и Android SDK (плюс `ANDROID_HOME`/`local.properties`).
 
 ```bash
-# Clone and setup
-git clone https://github.com/vladvinys-vv/PhoneGuard.git
-cd PhoneGuard
+# Debug-сборка
+./gradlew :app:assembleDebug
 
-# Configure keystore (never commit!)
-cp keystore.properties.example keystore.properties
-# Edit keystore.properties with your release keys
+# Юнит-тесты (JVM, без устройства)
+./gradlew :app:testDebugUnitTest
 
-# (опционально) ключи threat intel — по умолчанию проверка доменов выключена
-# см. app/src/main/java/com/phoneguard/threatintel/ThreatIntelClient.kt
+# Инструментальные тесты (нужен эмулятор или устройство)
+./gradlew :app:connectedDebugAndroidTest
 
-# Build debug APK
-./gradlew assembleDebug
-
-# Run tests
-./gradlew test
-
-# Build release AAB (requires signed keystore)
-./build_release.sh
+# Release: production/staging → подписанный APK и AAB
+cp keystore.properties.example keystore.properties   # вписать свои ключи, не коммитить
+./build_release.sh production release
+# или напрямую:
+./gradlew :app:assembleProductionRelease :app:bundleProductionRelease
 ```
 
-## Security Model
+## Проверки без Gradle
 
-- **Zero Trust**: All components validate inputs, no implicit trust
-- **Least Privilege**: Minimal permissions, scoped to feature needs
-- **Encryption**: AES-256-GCM for vault, Android Keystore for keys
-- **Integrity**: ProGuard/R8 obfuscation, SafetyNet/Play Integrity API
-- **Transparency**: Open source, reproducible builds, no hidden code
+В песочнице без Android SDK доступны статические проверки:
 
-## Privacy
+```bash
+python3 tools/static_audit.py      # обязательно: 0 error(s), 0 warning(s)
+python3 tools/sync_strings.py      # идемпотентная синхронизация строк в 4 локалях
+python3 tools/kotlin_analysis.py   # опционально: парсер Kotlin (нужен tree-sitter)
+```
 
-- **No Telemetry**: Zero analytics, crash reporting, or usage tracking
-- **Local-First**: All processing on-device, optional cloud sync (user-controlled)
-- **GDPR/DSGVO Ready**: Data minimization, right to deletion, no PII collection
-- **German Compliance**: BSI guidelines, IT-Sicherheitsgesetz aligned
+`static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
+`android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
+миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_analysis.py` разбирает
+файлы настоящим парсером (синтаксис + вызовы `suspend`-функций вне suspend-контекста) — им найден
+и исправлен реальный баг сборки в `PhoneGuardVpnService`. Подробнее — [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
-## Distribution
+## Документация
 
-- **Google Play Store**: Primary distribution channel
-- **GitHub Releases**: Direct APK/AAB downloads with checksums
-- **F-Droid**: Planned (requires reproducible builds)
+| Файл | О чём |
+|---|---|
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | окружение, команды, конвенции кода и строк, инструменты |
+| [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | журнал изменений и исправлений |
+| [`docs/RELEASE.md`](docs/RELEASE.md) | чек-лист релиза, подпись, flavors, публикация |
+| [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md) | ручные сценарии проверки на устройствах |
+| [`docs/PRIVACY_POLICY.md`](docs/PRIVACY_POLICY.md) | политика конфиденциальности (что и где хранится) |
+| [`docs/PLAY_STORE_LISTING.md`](docs/PLAY_STORE_LISTING.md) | тексты для магазина |
 
-## License
+## Модель безопасности
 
-Private - All rights reserved. Security-focused code visible for audit only.
+- **Минимум привилегий:** разрешения запрашиваются по мере необходимости, VPN и службы — только для своих функций.
+- **Шифрование:** AES-256-GCM для сейфа, ключи в Android Keystore, база под SQLCipher.
+- **Целостность сборки:** R8/ProGuard с keep-правилами для reflection-зависимостей (Room, SQLCipher, libphonenumber, apk-parser).
+- **Приватность:** нет телеметрии и облака; сеть используется только для опционального threat intel (имя хоста).
+
+## Лицензия
+
+Private — all rights reserved. Код открыт для аудита.

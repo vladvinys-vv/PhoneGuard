@@ -3,6 +3,22 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **Deep links и ярлыки заработали.** В графе навигации ссылки `phoneguard://…` были объявлены
+  (`navDeepLink`), но манифест не принимал схему, а `handleDeepLink(intent)` никто не вызывал:
+  ярлык «Антивор» на рабочем столе открывал дашборд. Теперь у `MainActivity` есть VIEW/BROWSABLE
+  фильтр и `launchMode="singleTop"`, intent передаётся в `PhoneGuardNavHost` (`deepLinkIntent`),
+  а повторное открытие обрабатывается в `onNewIntent`. Работает и снаружи:
+  `adb shell am start -a android.intent.action.VIEW -d phoneguard://settings`.
+- **`tools/kotlin_analysis.py`** — разбор Kotlin настоящим парсером (tree-sitter, зависимость
+  опциональная): синтаксис всех 212 `.kt` и поиск вызовов `suspend`-функций вне suspend-контекста.
+  Проверкой найден реальный баг сборки (см. Fixed). Ложные срабатывания из-за одноимённых функций
+  перечислены в `tools/kotlin_analysis_allow.txt` с пояснениями.
+- **`tools/static_audit.py`: две новые проверки.** «Уникальность id уведомлений» (был конфликт
+  1001 у блокировщика и VPN) и «deep links»: каждая ссылка из `shortcuts.xml` должна быть в графе,
+  схема — в манифесте, а в NavHost — вызов `handleDeepLink`.
+- **`docs/DEVELOPMENT.md`** — правила работы с репозиторием: окружение, команды, конвенции строк и
+  `CheckDetail`, безопасная отмена корутин, id уведомлений, инструменты и ограничения песочницы.
+
 - **Тесты сейфа**: `VaultViewModelTest` покрывает ошибку предпросмотра (битый шифротекст →
   `VaultError.PreviewFailure`, интент не создаётся) и сброс этой ошибки.
 
@@ -68,6 +84,16 @@
   Play считал эти модули обязательными и скрывал приложение от Wi-Fi-only планшетов.
 
 ### Fixed
+- **`PhoneGuardVpnService`: не компилировалось.** `handlePacket` объявлен `suspend`, а вызывался из
+  обычной функции `runVpnLoop` («suspension functions can be called only within a coroutine body»).
+  `runVpnLoop` стал `suspend` — он и так запускается внутри `vpnScope.launch`.
+- **Документация приведена к коду:** убраны несуществующие возможности и устаревшие имена
+  («ML-based анализ APK», «SSL pinning», «SafetyNet/Play Integrity», Firebase-раздел,
+  `SimChangeReceiver`, раздел про AI-агентов и MCP-серверы в README), исправлены числа
+  (16 шагов сканирования, 20 проверок телефона, 634 строки в каждой локали), переписаны
+  `MANUAL_TESTING.md` (сценарии SMS-фильтра, чека телефона, threat intel) и `PLAY_STORE_LISTING.md`,
+  политика конфиденциальности дополнена разбором SMS и полным списком разрешений.
+
 - **Фильтр входящих SMS (новое).** Приложение обещало «Блокировщик звонков & SMS», журнал
   поддерживал `isSms = true`, но входящие SMS никто не проверял: был только
   `SmsCommandReceiver` для анти-воровских команд. Добавлен `SmsSpamReceiver`

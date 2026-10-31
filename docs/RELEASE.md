@@ -1,18 +1,23 @@
 # Release Checklist
 
 ## Before Building
-
 **Static checks first:** `python3 tools/static_audit.py` must report `0 error(s), 0 warning(s)`.
-   It validates: unresolved/missing imports in Compose code, `R.*` references, XML validity,
-   Room `@Query` tables/columns, Room-DAO call sites, Hilt bindings, manifest components and
-   `android:exported`, requested vs declared permissions, locale parity of `strings.xml`,
-   `getString` argument counts vs format placeholders, `PendingIntent` mutability flags,
-   guarded `startActivity`/`startService`, dead manifest components, Room migrations vs `@Entity`
-   schemas, navigation routes referenced by `navigate()`, `Icons.Default.*` imports, and
-   block comments terminated too early by an embedded `/*` or `*/`, optional hardware features
-   for declared permissions, backup/D2D exclusion rules, mockk stub return types, and
-   constructor arity across `src/test` and `src/androidTest`, and Gradle wiring
-   (`rootProject.ext`, Room schema export, androidTest schema assets).
+It validates unresolved/missing imports in Compose code, `R.*` references, XML validity, Room `@Query`
+tables/columns, Room-DAO call sites, Hilt bindings, manifest components and `android:exported`,
+requested vs declared permissions, locale parity of `strings.xml`, `getString` argument counts vs
+format placeholders, `PendingIntent` mutability flags, guarded `startActivity`/`startService`, dead
+manifest components, Room migrations vs `@Entity` schemas, navigation routes referenced by `navigate()`,
+`Icons.Default.*` imports, block comments terminated too early by an embedded `/*` or `*/`, optional
+hardware features for declared permissions, backup/D2D exclusion rules, mockk stub return types,
+constructor arity across `src/test` and `src/androidTest`, **unique notification ids** between
+components, and Gradle wiring (`rootProject.ext`, Room schema export, androidTest schema assets).
+
+Optionally also `python3 tools/kotlin_analysis.py` (needs `tree-sitter` + `tree-sitter-kotlin`): it
+parses every `.kt` file and reports syntax errors and suspend calls outside a suspend context. Without
+the parser installed the script prints a hint and exits 0.
+
+`python3 tools/sync_strings.py` must be idempotent: run it and check that `git status` stays clean
+(634 keys in each of `values`, `values-en`, `values-ru`, `values-de`).
 
 1. **No Firebase / no telemetry**
    - The app intentionally has **no** Firebase (Analytics, Crashlytics, Performance) and no `google-services.json`.
