@@ -12,6 +12,12 @@ workflows:
         WEBHOOK_TIMEOUT: "10"
         WEBHOOK_RETRIES: "3"
 
+    # Кэш Gradle: повторные сборки не перекачивают зависимости заново.
+    cache:
+      cache_paths:
+        - ~/.gradle/caches
+        - ~/.gradle/wrapper
+
     # Автоматические сборки: webhook репозитория → https://api.codemagic.io/hooks/<appId>
     # (Codemagic UI: App settings → Webhooks → Create webhook).
     triggering:

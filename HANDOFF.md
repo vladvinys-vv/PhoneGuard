@@ -7,13 +7,22 @@ and an encrypted biometric vault. Everything that can run offline does; nothing 
 except an opt-in host-name lookup (threat intelligence, off by default).
 
 ## Current state (2026-10-31)
-- Branch `arena/28ec46dc-phoneguard`; all checks green:
-  `tools/static_audit.py` 0/0, `tools/sync_strings.py --check` 0 missing,
-  `tools/kotlin_frontend_check.py` 0 problems (209 files, with real `android.jar`),
+- Branch `arena/681b6949-phoneguard` (PR #4); PR #3 уже влит в `main`. Все проверки зелёные:
+  `tools/gradle_check.py` 0/0 (4 предупреждения), `tools/static_audit.py` 0/0,
+  `tools/sync_strings.py --check` 0 missing, `tools/kotlin_frontend_check.py` 0 problems
+  (209 files, with real `android.jar`), `tools/aapt2_check.py` compile+link (672 ресурса),
   `tools/kotlin_analysis.py` 0/0.
-- Build automation: `.github/workflows/android-ci.yml` (static checks → Kotlin frontend with
-  `platforms;android-35` → lint → unit tests → production debug/release APKs), `codemagic.yaml`,
-  `build_release.sh`. `jules.yml` only validates `.jules` config.
+- Конфигурация Gradle починена: в `app/build.gradle` был `mapOf(...)` из Kotlin stdlib, из-за
+  которого падала **любая** задача (`MissingMethodException` на этапе конфигурации). Первый
+  зелёный прогон `./gradlew lintDebug testProductionDebugUnitTest assembleProductionDebug`
+  ещё предстоит подтвердить в Codemagic — до этого Gradle в CI ни разу не доходил до компиляции.
+- Build automation: `.github/workflows/android-ci.yml` (Gradle scripts check → static checks →
+  Kotlin frontend with `platforms;android-35` → lint → unit tests → production debug/release APKs),
+  `codemagic.yaml` (то же + webhook о статусе сборки), `build_release.sh`.
+  `jules.yml` only validates `.jules` config.
+- Известный блокер релиза: `net.zetetic:android-database-sqlcipher:4.5.4` не поддерживает
+  16 КБ страницы памяти → Play отклонит обновление при `targetSdk 35`. План миграции —
+  `docs/RELEASE.md`.
 - Known, documented limitation: domain/IP lists in the firewall are stored but not enforced
   without an upstream VPN forward (see `firewall_lists_not_enforced_note` and the firewall
   screen). Full per-app blocking is unaffected.

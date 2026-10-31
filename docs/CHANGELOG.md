@@ -3,6 +3,8 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **Codemagic: кэш Gradle** (`~/.gradle/caches`, `~/.gradle/wrapper`) — повторные сборки не
+  перекачивают зависимости, что важно при лимите `max_build_duration: 120`.
 - **`tools/gradle_check.py`: проверки зависимостей.** Пары «рантайм ↔ обработчик» с обязательным
   совпадением версий (`hilt-android`/`hilt-android-compiler`, `room-runtime`/`room-compiler`,
   `hilt-work`/`hilt-compiler`), предупреждения о предрелизных версиях, о явных версиях
