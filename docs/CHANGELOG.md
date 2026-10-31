@@ -36,6 +36,11 @@
   диагностика считается настоящей ошибкой. Новое правило сразу нашло три дефекта (см. Fixed).
   В CI (`kotlin-frontend`) теперь устанавливается `platforms;android-35`, поэтому проверка идёт
   в строгом режиме.
+- **`static_audit.py`: проверка YAML.** `check_workflow_yaml()` парсит `.github/workflows/*.yml`,
+  `codemagic.yaml` и `.jules/*.json` (PyYAML опционален) и проверяет, что у каждого job есть
+  `runs-on` и `steps`. Сразу нашла собственную ошибку: `run: python3 -c "…print('config.json: OK')"`
+  в `jules.yml` — двоеточие с пробелом в plain-скаляре превращало строку в mapping, и **workflow
+  вообще не запускался бы**.
 - **`sync_strings.py --check`** — режим проверки без записи: печатает, каких ключей не хватает
   в каждой локали, и возвращает 1. CI и `tools/check_all.sh` используют его вместо
   `git diff -- app/src/main/res`, который ломался при незакоммиченных правках строк.

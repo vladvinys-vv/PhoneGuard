@@ -23,4 +23,9 @@ jobs:
           echo "Jules configuration validated."
 
       - name: config.json is valid JSON
-        run: python3 -c "import json; json.load(open('.jules/config.json', encoding='utf-8')); print('config.json: OK')"
+        run: |
+          python3 - <<'EOF'
+          import json
+          json.load(open('.jules/config.json', encoding='utf-8'))
+          print('config.json is valid JSON')
+          EOF

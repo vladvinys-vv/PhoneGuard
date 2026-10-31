@@ -17,6 +17,7 @@ Exit code is 1 when at least one ERROR-level finding is present.
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -1732,6 +1733,54 @@ def check_unreachable_screens() -> None:
                 )
 
 
+def check_workflow_yaml() -> None:
+    """YAML workflows и конфиги должны парситься и содержать обязательные поля.
+
+    GitHub Actions падает молча-ish: кривой YAML просто не запускает workflow, и
+    «зелёный» PR остаётся без проверок. Так был найден `run: python3 -c "…print('x: OK')"`
+    в `jules.yml` — двоеточие с пробелом в plain-скаляре превращало строку в mapping.
+    PyYAML не обязателен: без него проверка пропускается.
+    """
+    try:
+        import yaml
+    except ImportError:  # pragma: no cover - окружение без PyYAML
+        return
+
+    files = sorted((ROOT / '.github/workflows').glob('*.yml')) + [ROOT / 'codemagic.yaml']
+    for path in files:
+        if not path.exists():
+            continue
+        rel = str(path.relative_to(ROOT))
+        try:
+            data = yaml.safe_load(path.read_text(encoding='utf-8'))
+        except yaml.YAMLError as exc:
+            ERRORS.append(f"{rel}: YAML не парсится — {exc}")
+            continue
+        if not isinstance(data, dict):
+            ERRORS.append(f"{rel}: ожидался словарь верхнего уровня")
+            continue
+        jobs = data.get('jobs') or data.get('workflows')
+        if not isinstance(jobs, dict) or not jobs:
+            ERRORS.append(f"{rel}: нет ни одного job/workflow")
+            continue
+        if rel.endswith('.github/workflows') or '/workflows/' in rel:
+            for name, job in jobs.items():
+                if not isinstance(job, dict):
+                    continue
+                if 'runs-on' not in job:
+                    ERRORS.append(f"{rel}: job «{name}» без runs-on")
+                steps = job.get('steps')
+                if not isinstance(steps, list) or not steps:
+                    ERRORS.append(f"{rel}: job «{name}» без steps")
+
+    for path in sorted((ROOT / '.jules').glob('*.json')) if (ROOT / '.jules').is_dir() else []:
+        rel = str(path.relative_to(ROOT))
+        try:
+            json.loads(path.read_text(encoding='utf-8'))
+        except json.JSONDecodeError as exc:
+            ERRORS.append(f"{rel}: JSON не парсится — {exc}")
+
+
 def check_deep_links() -> None:
     """Ссылки `phoneguard://…` должны быть объявлены и обработаны.
 
@@ -1812,6 +1861,7 @@ def main() -> int:
     check_notification_ids()
     check_deep_links()
     check_unreachable_screens()
+    check_workflow_yaml()
 
     for w in sorted(set(WARNINGS)):
         print(f"warning: {w}")

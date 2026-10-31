@@ -98,6 +98,7 @@
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
 незащищённые `startActivity`/`startService`, мёртвые компоненты (включая `<activity>`, кроме
 ярлыков `LAUNCHER` и `BROWSABLE`-ссылок — так нашлась недоступная `SimSwapConfirmationActivity`),
+недостижимые экраны, YAML workflows и конфиги (`.github/workflows`, `codemagic.yaml`, `.jules`),
 миграции против `@Entity`,
 маршруты навигации, `Icons.Default.*`, `uses-feature`, backup-правила, mockk-стабы, арность
 конструкторов в тестах, типы литералов на позициях параметров, пропущенные обязательные
