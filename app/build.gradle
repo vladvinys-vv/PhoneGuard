@@ -98,9 +98,10 @@ android {
     }
 
     sourceSets {
-        // MigrationTestHelper читает экспортированные схемы Room из assets androidTest.
-        // Без этой строки AppDatabaseMigrationTest падает с
-        // "Cannot find the schema file in the assets folder".
+        // Экспортированные схемы Room (app/schemas) нужны MigrationTestHelper, если тесты
+        // миграций снова появятся. В репозитории схем пока нет — они создаются первой
+        // сборкой, поэтому актуальную цепочку миграций проверяет JVM-тест
+        // AppDatabaseMigrationConfigTest.
         androidTest.assets.srcDirs += files("$projectDir/schemas")
     }
 

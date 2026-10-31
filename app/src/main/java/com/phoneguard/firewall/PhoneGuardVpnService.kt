@@ -306,7 +306,16 @@ class PhoneGuardVpnService : VpnService() {
         stopSelf()
     }
 
-    private fun runVpnLoop(iface: ParcelFileDescriptor) {
+    /**
+     * Цикл чтения туннеля.
+     *
+     * `suspend`, потому что внутри вызывается `suspend fun handlePacket(...)`:
+     * раньше `handlePacket` был suspend, а цикл — обычной функцией, и это
+     * не компилировалось («suspension functions can be called only within a
+     * coroutine body»). Вызывается из `vpnScope.launch`, блокирующий `read`
+     * висит на IO-диспетчере и разблокируется закрытием дескриптора.
+     */
+    private suspend fun runVpnLoop(iface: ParcelFileDescriptor) {
         val input = FileInputStream(iface.fileDescriptor)
         val buffer = ByteArray(TUN_MTU)
 

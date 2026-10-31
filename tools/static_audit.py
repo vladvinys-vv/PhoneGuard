@@ -1514,6 +1514,73 @@ def check_gradle_wiring() -> None:
             )
 
 
+def check_notification_ids() -> None:
+    """Числовые id уведомлений не должны совпадать у разных компонентов.
+
+    Раньше блокировщик звонков использовал id 1001 — тот же, что постоянное
+    уведомление VPN: сообщение о заблокированном звонке затирало статус
+    брандмауэра и наоборот. Проверка ловит такие совпадения до запуска.
+    """
+    main = ROOT / 'app/src/main/java'
+    used: dict[int, list[str]] = {}
+    const_re = re.compile(r'const\s+val\s+([A-Z0-9_]*ID)\s*(?::\s*Int\s*)?=\s*(\d+)\b')
+    for path in main.rglob('*.kt'):
+        text = path.read_text(encoding='utf-8')
+        rel = str(path.relative_to(ROOT))
+        for m in const_re.finditer(text):
+            value = int(m.group(2))
+            used.setdefault(value, []).append(f"{rel}:{m.group(1)}")
+
+    for value, places in sorted(used.items()):
+        if len({p.split(':')[0] for p in places}) > 1:
+            ERRORS.append(
+                "одинаковый id уведомления "
+                f"{value} у разных компонентов: {', '.join(sorted(places))}"
+            )
+
+
+def check_deep_links() -> None:
+    """Ссылки `phoneguard://…` должны быть объявлены и обработаны.
+
+    Ярлыки на рабочем столе (`res/xml/shortcuts.xml`) и внешние intent'ы открывают
+    приложение по схеме `phoneguard`. Раньше ссылки были только в графе навигации:
+    манифест их не принимал, а `handleDeepLink` никто не вызывал — ярлык открывал
+    дашборд вместо нужного экрана. Проверка следит за тремя частями сразу.
+    """
+    shortcuts = ROOT / 'app/src/main/res/xml/shortcuts.xml'
+    manifest = ROOT / 'app/src/main/AndroidManifest.xml'
+    nav_host = ROOT / 'app/src/main/java/com/phoneguard/ui/navigation/PhoneGuardNavHost.kt'
+    if not (shortcuts.exists() and manifest.exists() and nav_host.exists()):
+        return
+
+    shortcut_uris = set(re.findall(r'android:data="([^"]+)"', shortcuts.read_text(encoding='utf-8')))
+    patterns = set(re.findall(r'uriPattern\s*=\s*"([^"]+)"', nav_host.read_text(encoding='utf-8')))
+    manifest_text = manifest.read_text(encoding='utf-8')
+
+    for uri in shortcut_uris:
+        if uri not in patterns:
+            ERRORS.append(f"res/xml/shortcuts.xml: ссылка {uri} не объявлена ни в одном navDeepLink")
+
+    if shortcut_uris or patterns:
+        if 'android:scheme="phoneguard"' not in manifest_text:
+            ERRORS.append(
+                "AndroidManifest.xml: нет intent-filter со схемой phoneguard — "
+                "ярлыки и внешние ссылки не открывают приложение"
+            )
+        main_activity = re.search(
+            r'<activity[^>]*android:name="\.ui\.MainActivity".*?</activity>', manifest_text, re.S
+        )
+        if main_activity is None or 'android.intent.category.BROWSABLE' not in main_activity.group(0):
+            ERRORS.append(
+                "AndroidManifest.xml: у MainActivity нет BROWSABLE-фильтра для phoneguard://"
+            )
+        if not re.search(r'handleDeepLink\s*\(', nav_host.read_text(encoding='utf-8')):
+            ERRORS.append(
+                "PhoneGuardNavHost.kt: граф объявляет navDeepLink, но не вызывает "
+                "navController.handleDeepLink(intent) — ссылки игнорируются"
+            )
+
+
 def main() -> int:
     index, owners = collect_index()
     check_duplicates(owners)
@@ -1547,6 +1614,8 @@ def main() -> int:
     check_constructor_arity()
     check_gradle_wiring()
     check_member_calls()
+    check_notification_ids()
+    check_deep_links()
 
     for w in sorted(set(WARNINGS)):
         print(f"warning: {w}")

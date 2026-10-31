@@ -1,5 +1,6 @@
 package com.phoneguard.ui.navigation
 
+import android.content.Intent
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
@@ -48,14 +49,28 @@ sealed class Screen(val route: String, val title: Int, val icon: ImageVector) {
     object PhoneCheck : Screen("phonecheck", R.string.phone_check, Icons.Default.PhonelinkSetup)
 }
 
+/**
+ * @param deepLinkIntent intent, которым открыли Activity (`phoneguard://…` из ярлыка
+ *        или извне). Раньше ссылки были объявлены в графе (`navDeepLink`), но никто
+ *        не вызывал `handleDeepLink`, поэтому ярлыки на рабочем столе открывали
+ *        дашборд вместо нужного экрана.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhoneGuardNavHost(
     modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    deepLinkIntent: Intent? = null
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
+
+    LaunchedEffect(deepLinkIntent, navController) {
+        val intent = deepLinkIntent ?: return@LaunchedEffect
+        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+            navController.handleDeepLink(intent)
+        }
+    }
 
     val showBottomBar = bottomNavItems.any { it.route == currentRoute }
 

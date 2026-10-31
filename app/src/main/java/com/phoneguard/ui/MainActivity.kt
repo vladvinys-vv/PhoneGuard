@@ -1,6 +1,7 @@
 package com.phoneguard.ui
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -9,7 +10,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import com.phoneguard.data.preferences.PreferencesManager
@@ -38,6 +41,13 @@ class MainActivity : FragmentActivity() {
     lateinit var preferencesManager: PreferencesManager
 
     /**
+     * Intent с deep link (`phoneguard://…`), который нужно применить к навигации.
+     * Обновляется в [onCreate] и [onNewIntent]: ярлыки на рабочем столе и внешние
+     * ссылки открывают приложение, но без этого параметра граф навигации их игнорировал.
+     */
+    private var deepLinkIntent by mutableStateOf<Intent?>(null)
+
+    /**
      * Применяет выбранный в настройках язык до создания ресурсов Activity.
      *
      * Раньше переключатель языка вызывал `resources.updateConfiguration()` на
@@ -59,6 +69,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deepLinkIntent = intent?.takeIf { it.action == Intent.ACTION_VIEW }
         setContent {
             val isDarkTheme by preferencesManager.isDarkTheme.collectAsState(initial = false)
             val isFirstLaunch by preferencesManager.isFirstLaunch.collectAsState(initial = true)
@@ -79,10 +90,17 @@ class MainActivity : FragmentActivity() {
                                 scope.launch { preferencesManager.setConsentDone() }
                             }
                         )
-                        else -> PhoneGuardNavHost()
+                        else -> PhoneGuardNavHost(deepLinkIntent = deepLinkIntent)
                     }
                 }
             }
         }
+    }
+
+    /** Повторное открытие по ссылке, когда Activity уже запущена (`launchMode=singleTop`). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deepLinkIntent = intent.takeIf { it.action == Intent.ACTION_VIEW }
     }
 }

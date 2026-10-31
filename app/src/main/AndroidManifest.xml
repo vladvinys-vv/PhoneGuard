@@ -156,10 +156,22 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.PhoneGuard">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Ссылки `phoneguard://…`: ими пользуются ярлыки на рабочем столе
+                 (res/xml/shortcuts.xml) и внешние вызовы вида
+                 `adb shell am start -a android.intent.action.VIEW -d phoneguard://settings`.
+                 Граф навигации объявляет те же шаблоны через navDeepLink. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="phoneguard" />
             </intent-filter>
         </activity>
 
