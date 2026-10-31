@@ -2268,6 +2268,17 @@ LOCALES = {
 }
 
 
+def android_escape(value: str) -> str:
+    """XML-экранирование + апостроф, как требует aapt2.
+
+    `aapt2 compile` падает с «unescaped apostrophe in string», если в `<string>`
+    оставить голый `'` (типичная ошибка в английских/немецких строках вида
+    «'which su' succeeded»). Поэтому апостроф всегда пишется как `\'`.
+    """
+    escaped = escape(value)
+    return escaped.replace("\\'", "'").replace("'", "\\'")
+
+
 def pending_keys(path: Path, values: dict[str, str]) -> list[str]:
     """Ключи из словаря, которых ещё нет в файле (без записи на диск)."""
     if not path.exists():
@@ -2281,7 +2292,7 @@ def add_strings(path: Path, values: dict[str, str]) -> list[str]:
     if not added:
         return added
     text = path.read_text(encoding="utf-8")
-    block = [f'    <string name="{key}">{escape(values[key])}</string>' for key in added]
+    block = [f'    <string name="{key}">{android_escape(values[key])}</string>' for key in added]
     text = text.replace("</resources>", "\n".join(block) + "\n</resources>")
     path.write_text(text, encoding="utf-8")
     return added

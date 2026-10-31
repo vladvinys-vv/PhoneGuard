@@ -1781,6 +1781,32 @@ def check_workflow_yaml() -> None:
             ERRORS.append(f"{rel}: JSON не парсится — {exc}")
 
 
+def check_string_apostrophes() -> None:
+    """Апостроф в `<string>` должен быть экранирован (`\\'`), иначе aapt2 падает.
+
+    `aapt2 compile` сообщает «unescaped apostrophe in string» и **валит всю сборку**
+    на `processDebugResources`. Так были найдены три строки в `values-en`/`values-de`
+    («'which su' succeeded»). Проверка повторяет правило aapt2 без самого aapt2.
+    Строка, целиком взятая в двойные кавычки (`"текст 'с апострофом'"`), допустима.
+    """
+    pattern = re.compile(r'<string\b[^>]*>(.*?)</string>', re.S)
+    for path in sorted((ROOT / 'app/src/main/res').glob('values*/strings.xml')):
+        text = path.read_text(encoding='utf-8')
+        rel = str(path.relative_to(ROOT))
+        for m in pattern.finditer(text):
+            body = m.group(1)
+            stripped = body.strip()
+            if stripped.startswith('"') and stripped.endswith('"') and len(stripped) > 1:
+                continue
+            without_escaped = body.replace("\\'", "")
+            if "'" in without_escaped:
+                line = text.count('\n', 0, m.start()) + 1
+                ERRORS.append(
+                    f"{rel}:{line}: неэкранированный апостроф в <string> — "
+                    f"aapt2 упадёт на compile (нужно \\')"
+                )
+
+
 def check_deep_links() -> None:
     """Ссылки `phoneguard://…` должны быть объявлены и обработаны.
 
@@ -1862,6 +1888,7 @@ def main() -> int:
     check_deep_links()
     check_unreachable_screens()
     check_workflow_yaml()
+    check_string_apostrophes()
 
     for w in sorted(set(WARNINGS)):
         print(f"warning: {w}")

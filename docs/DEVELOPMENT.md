@@ -32,8 +32,8 @@
 ./tools/check_all.sh
 ```
 
-Она запускает `static_audit.py`, проверяет идемпотентность `sync_strings.py` и, если установлены,
-`kotlin_frontend_check.py` (kotlinc) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
+Она запускает `static_audit.py`, проверяет `sync_strings.py --check` и, если установлены,
+`kotlin_frontend_check.py` (kotlinc), `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
 (`static_audit.py` и строки) прогоняются в CI-job `static-checks`, компиляторная проверка — в
 `kotlin-frontend`; сборка и тесты — в `lint`, `unit-test`, `build-debug`, `build-release`.
 
@@ -156,6 +156,30 @@ export PATH="$PWD/package/bin:$PATH"
 приватный `loadApps()` вызывался из UI, `return` внутри lambda `withContext`, имя enum-класса
 присвоено в `val`, точка в backtick-имени теста, позиционные аргументы `BlockedNumber(...)` и
 пропущенные обязательные `latitude/longitude/addressString` в `SimSwapEvent(...)`.
+
+### `tools/aapt2_check.py` (опционально, ловит падения `processDebugResources`)
+
+Запускает настоящий `aapt2` так, как это делает Gradle: `compile` всех ресурсов и `link`
+манифеста против `android.jar` с генерацией `R.java`. Затем сверяет все ссылки `R.type.name`
+в Kotlin с тем, что реально попало в `R.java`.
+
+```bash
+# aapt2 ≥ 2.20: в CI приходит из build-tools Android SDK, локально проще всего из npm
+npm pack aaptjs3 && tar xzf aaptjs3-*.tgz
+export AAPT2="$PWD/package/bin/x64/linux/aapt2"
+
+python3 tools/aapt2_check.py          # compile + link + сверка R.*
+python3 tools/aapt2_check.py --compile-only
+```
+
+Именно этой проверкой найдены строки, на которых **падала бы любая сборка**:
+`values-en`: `'which su' succeeded`, `Build tags contain '%1$s'` и `values-de`:
+`'which su' erfolgreich` — aapt2 отвечает `unescaped apostrophe in string`. Апостроф в
+`<string>` обязан быть экранирован (`\'`); `tools/sync_strings.py` теперь делает это сам,
+а `static_audit.py` ловит регресс без установленного aapt2.
+
+PyPI-пакет `aapt2` даёт версию 2.19 — `compile` с ним работает, но `link` не читает
+`resources.arsc` современного `android.jar`, поэтому нужен 2.20+ (npm `aaptjs3` или build-tools).
 
 ### `tools/kotlin_analysis.py` (опционально)
 

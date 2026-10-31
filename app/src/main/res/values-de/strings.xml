@@ -632,7 +632,7 @@
     <string name="root_detail_tags_ok">Build-Tags sind unauffällig: %1$s</string>
     <string name="root_detail_apps_found">Root-Apps gefunden: %1$s</string>
     <string name="root_detail_apps_none">Keine Root-Apps gefunden</string>
-    <string name="root_detail_which_su">'which su' erfolgreich — su ist im PATH verfügbar</string>
+    <string name="root_detail_which_su">\'which su\' erfolgreich — su ist im PATH verfügbar</string>
     <string name="root_detail_no_path_su">su nicht im PATH via Runtime.exec gefunden</string>
     <string name="root_detail_system_writable">Die Systempartition wirkt überschrieben (Markerdateien gefunden)</string>
     <string name="root_detail_system_intact">Keine Überschreibungsmarker für /system gefunden</string>

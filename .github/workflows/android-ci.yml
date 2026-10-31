@@ -43,7 +43,7 @@ jobs:
 
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-35'
+          packages: 'platforms;android-35 build-tools;35.0.0'
 
       - name: Install Kotlin 2.1.0
         run: |
@@ -54,6 +54,10 @@ jobs:
       # С android.jar в classpath проверяются ещё и реальные сигнатуры android.* API.
       - name: Compile all sources with the frontend
         run: python3 tools/kotlin_frontend_check.py
+
+      # aapt2 (из build-tools) проверяет ресурсы и манифест — то же, что processDebugResources.
+      - name: Resources and manifest (aapt2)
+        run: python3 tools/aapt2_check.py
 
   lint:
     name: Lint

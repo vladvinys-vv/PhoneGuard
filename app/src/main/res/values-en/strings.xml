@@ -635,11 +635,11 @@
     <string name="integrity_limit_heuristics">— The result is based on heuristics and is not a guarantee.</string>
     <string name="root_detail_su_found">su binary found in a standard location</string>
     <string name="root_detail_su_not_found">No su binary in standard locations</string>
-    <string name="root_detail_tags_suspicious">Build tags contain '%1$s' (test-keys/dev-keys)</string>
+    <string name="root_detail_tags_suspicious">Build tags contain \'%1$s\' (test-keys/dev-keys)</string>
     <string name="root_detail_tags_ok">Build tags look normal: %1$s</string>
     <string name="root_detail_apps_found">Root apps found: %1$s</string>
     <string name="root_detail_apps_none">No root apps found</string>
-    <string name="root_detail_which_su">'which su' succeeded — su is available in PATH</string>
+    <string name="root_detail_which_su">\'which su\' succeeded — su is available in PATH</string>
     <string name="root_detail_no_path_su">su not found in PATH via Runtime.exec</string>
     <string name="root_detail_system_writable">The system partition looks overwritten (marker files found)</string>
     <string name="root_detail_system_intact">No /system overwrite markers found</string>

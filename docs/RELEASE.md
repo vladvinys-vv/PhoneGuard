@@ -2,7 +2,9 @@
 
 ## Before Building
 **Static checks first:** `./tools/check_all.sh` (or at least `python3 tools/static_audit.py`, which
-must report `0 error(s), 0 warning(s)`).
+must report `0 error(s), 0 warning(s)`). If `aapt2` is installed, `tools/aapt2_check.py` must also
+pass — otherwise the Gradle build will fail later at `processDebugResources` (unescaped apostrophes,
+broken resource XML, manifest attributes, missing `R.*`).
 It validates unresolved/missing imports in Compose code, `R.*` references, XML validity, Room `@Query`
 tables/columns, Room-DAO call sites, Hilt bindings, manifest components and `android:exported`,
 requested vs declared permissions, locale parity of `strings.xml`, `getString` argument counts vs

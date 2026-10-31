@@ -36,6 +36,16 @@
   диагностика считается настоящей ошибкой. Новое правило сразу нашло три дефекта (см. Fixed).
   В CI (`kotlin-frontend`) теперь устанавливается `platforms;android-35`, поэтому проверка идёт
   в строгом режиме.
+- **`tools/aapt2_check.py` — настоящая проверка ресурсов и манифеста.** Запускает `aapt2 compile`
+  всех ресурсов и `aapt2 link` манифеста против `android.jar` (как `processDebugResources`),
+  генерирует `R.java` и сверяет с ним все ссылки `R.type.name` из Kotlin. Так найдены **три строки,
+  на которых падала бы любая сборка** (aapt2: `unescaped apostrophe in string`): `values-en`
+  «Build tags contain '%1$s'», «'which su' succeeded» и `values-de` «'which su' erfolgreich».
+  Проверка добавлена в `tools/check_all.sh` и в CI-job `kotlin-frontend` (там же теперь ставится
+  `build-tools`).
+- **`static_audit.py`: проверка апострофов.** `check_string_apostrophes()` повторяет правило aapt2
+  без самого aapt2 — ловит неэкранированный `'` в `<string>`, из-за которого сборка падает на
+  ресурсах. `sync_strings.py` теперь сам экранирует апострофы (`\\'`) при добавлении строк.
 - **`static_audit.py`: проверка YAML.** `check_workflow_yaml()` парсит `.github/workflows/*.yml`,
   `codemagic.yaml` и `.jules/*.json` (PyYAML опционален) и проверяет, что у каждого job есть
   `runs-on` и `steps`. Сразу нашла собственную ошибку: `run: python3 -c "…print('config.json: OK')"`

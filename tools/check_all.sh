@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Все проверки, доступные без Android SDK. Запускать из корня репозитория.
 #
-#   ./tools/check_all.sh          # аудит + строки (+ компилятор и парсер, если установлены)
+#   ./tools/check_all.sh          # аудит + строки (+ компилятор, aapt2 и парсер, если установлены)
 #
 # Код возврата ненулевой, если хоть одна обязательная проверка упала.
 set -uo pipefail
@@ -29,6 +29,15 @@ if command -v kotlinc >/dev/null 2>&1; then
     python3 tools/kotlin_frontend_check.py ${jar_args[@]+"${jar_args[@]}"} || failed=1
 else
     echo "skip: kotlinc не найден (нужен Kotlin 2.1+ и JDK 17)"
+fi
+
+step "aapt2_check.py (опционально)"
+# Ресурсы и манифест так, как их проверяет Gradle. Нужен aapt2 ≥ 2.20 и android.jar:
+# см. docstring tools/aapt2_check.py (npm pack aaptjs3 / Android SDK build-tools).
+if command -v aapt2 >/dev/null 2>&1 || [ -n "${AAPT2:-}" ] || [ -n "${ANDROID_HOME:-}" ] || [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+    python3 tools/aapt2_check.py || failed=1
+else
+    echo "skip: aapt2 не найден (Android SDK build-tools или npm-пакет aaptjs3)"
 fi
 
 step "kotlin_analysis.py (опционально)"
