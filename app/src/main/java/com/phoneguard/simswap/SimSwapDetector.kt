@@ -105,6 +105,10 @@ class SimSwapDetector(
             preferencesManager.setSimSwapUnconfirmed(true)
         }
         _uiEvents.emit(SimSwapUiEvent.ShowConfirmation(event))
+        // `uiEvents` — горячий поток без replay: если приложение закрыто (обычный случай
+        // для подмены SIM), показать подтверждение некому. Уведомление открывает
+        // SimSwapConfirmationActivity и работает в фоне.
+        SimSwapNotifications.notifyUnconfirmedSwap(context)
         sendBackupSms(event)
     }
 
@@ -114,6 +118,7 @@ class SimSwapDetector(
         preferencesManager.setSimSwapConfirmed(true)
         preferencesManager.setSimSwapUnconfirmed(false)
         disableSensitiveAppsGuard()
+        SimSwapNotifications.cancel(context)
     }
 
     suspend fun rejectCurrentSimSwap() {
@@ -124,6 +129,7 @@ class SimSwapDetector(
         }
         preferencesManager.setSimSwapConfirmed(true)
         preferencesManager.setSimSwapUnconfirmed(false)
+        SimSwapNotifications.cancel(context)
         activateLostMode()
     }
 

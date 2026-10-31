@@ -14,15 +14,9 @@ step() { printf '\n=== %s ===\n' "$1"; }
 step "static_audit.py"
 python3 tools/static_audit.py || failed=1
 
-step "sync_strings.py (идемпотентность)"
-python3 tools/sync_strings.py >/tmp/check_all_strings.log 2>&1 || failed=1
-if ! git diff --quiet -- app/src/main/res; then
-    echo "error: app/src/main/res изменился после sync_strings.py — строки не синхронизированы"
-    git --no-pager diff --stat -- app/src/main/res
-    failed=1
-else
-    echo "ok: строки в синхронизации"
-fi
+step "sync_strings.py --check"
+# Сравнение с git ломается при незакоммиченных правках строк, поэтому спрашиваем сам скрипт.
+python3 tools/sync_strings.py --check || failed=1
 
 step "kotlin_frontend_check.py (опционально)"
 if command -v kotlinc >/dev/null 2>&1; then

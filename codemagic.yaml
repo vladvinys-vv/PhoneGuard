@@ -10,9 +10,7 @@ workflows:
       - name: Static audit
         script: python3 tools/static_audit.py
       - name: Strings are in sync
-        script: |
-          python3 tools/sync_strings.py
-          git diff --quiet -- app/src/main/res || { echo "strings.xml out of sync with tools/sync_strings.py"; exit 1; }
+        script: python3 tools/sync_strings.py --check
       - name: Lint
         script: ./gradlew lintDebug --no-daemon --stacktrace
       - name: Unit tests

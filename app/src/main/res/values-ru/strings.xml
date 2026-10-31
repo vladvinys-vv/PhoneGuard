@@ -666,4 +666,6 @@
     <string name="sms_blocking_hint">SMS из чёрного списка и спам-базы попадают в журнал. Чтобы они не доходили до шторки, назначьте PhoneGuard приложением SMS по умолчанию.</string>
     <string name="sms_suspicious_title">Подозрительное SMS</string>
     <string name="sms_suspicious_text">Сообщение от %1$s похоже на фишинг: ссылка и давящие слова</string>
+    <string name="sim_swap_channel_name">Смена SIM-карты</string>
+    <string name="sim_swap_channel_description">Вопросы о замене SIM и предупреждения о подмене</string>
 </resources>

@@ -1002,6 +1002,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "состояние SIM неизвестно",
         "de": "SIM-Status unbekannt",
     },
+    "sim_swap_channel_name": {
+        "default": "Смена SIM-карты",
+        "en": "SIM card change",
+        "ru": "Смена SIM-карты",
+        "de": "SIM-Kartenwechsel",
+    },
+    "sim_swap_channel_description": {
+        "default": "Вопросы о замене SIM и предупреждения о подмене",
+        "en": "Questions about a new SIM and SIM-swap warnings",
+        "ru": "Вопросы о замене SIM и предупреждения о подмене",
+        "de": "Rückfragen zum SIM-Wechsel und Warnungen vor SIM-Tausch",
+    },
     "sim_swap_imsi_change": {
         "default": "Старый IMSI: %1$s → новый: %2$s",
         "en": "Old IMSI: %1$s → new: %2$s",
@@ -2256,31 +2268,60 @@ LOCALES = {
 }
 
 
-def add_strings(path: Path, values: dict[str, str]) -> list[str]:
+def pending_keys(path: Path, values: dict[str, str]) -> list[str]:
+    """Ключи из словаря, которых ещё нет в файле (без записи на диск)."""
     if not path.exists():
         return []
     text = path.read_text(encoding="utf-8")
-    added = []
-    block = []
-    for key, value in values.items():
-        if f'name="{key}"' in text:
-            continue
-        block.append(f'    <string name="{key}">{escape(value)}</string>')
-        added.append(key)
-    if not block:
+    return [key for key in values if f'name="{key}"' not in text]
+
+
+def add_strings(path: Path, values: dict[str, str]) -> list[str]:
+    added = pending_keys(path, values)
+    if not added:
         return added
+    text = path.read_text(encoding="utf-8")
+    block = [f'    <string name="{key}">{escape(values[key])}</string>' for key in added]
     text = text.replace("</resources>", "\n".join(block) + "\n</resources>")
     path.write_text(text, encoding="utf-8")
     return added
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    """Без аргументов — дописывает строки; `--check` — только сообщает, чего не хватает.
+
+    `--check` нужен CI и `tools/check_all.sh`: сравнение `git diff` ломается, если у
+    разработчика есть незакоммиченные правки строк, а проверка «ничего не добавилось»
+    работает всегда.
+    """
+    args = sys.argv[1:] if argv is None else argv
+    check_only = "--check" in args
+    if args and not check_only:
+        print(f"usage: {Path(sys.argv[0]).name} [-h|--check]", file=sys.stderr)
+        return 2
+
+    missing_total = 0
     for locale, path in LOCALES.items():
         values = {key: translations[locale] for key, translations in STRINGS.items()}
+        if check_only:
+            missing = pending_keys(path, values)
+            missing_total += len(missing)
+            status = "ok" if not missing else f"не хватает {len(missing)}"
+            print(f"{path.relative_to(ROOT)}: {status}")
+            for key in missing:
+                print(f"    {key}")
+            continue
         added = add_strings(path, values)
         print(f"{path.relative_to(ROOT)}: +{len(added)}")
         for key in added:
             print(f"    {key}")
+
+    if check_only and missing_total:
+        print(
+            f"error: {missing_total} строк отсутствует — запустите python3 tools/sync_strings.py",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

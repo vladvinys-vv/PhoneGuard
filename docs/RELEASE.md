@@ -24,8 +24,8 @@ Optionally also `python3 tools/kotlin_analysis.py` (needs `tree-sitter` + `tree-
 parses every `.kt` file and reports syntax errors and suspend calls outside a suspend context. Without
 the parser installed the script prints a hint and exits 0.
 
-`python3 tools/sync_strings.py` must be idempotent: run it and check that `git status` stays clean
-(634 keys in each of `values`, `values-en`, `values-ru`, `values-de`).
+`python3 tools/sync_strings.py --check` must exit 0 (636 keys in each of `values`, `values-en`,
+`values-ru`, `values-de`); it reports exactly which keys are missing instead of writing files.
 
 1. **No Firebase / no telemetry**
    - The app intentionally has **no** Firebase (Analytics, Crashlytics, Performance) and no `google-services.json`.

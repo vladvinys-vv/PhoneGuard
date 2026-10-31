@@ -670,4 +670,6 @@
     <string name="sms_blocking_hint">SMS from the blacklist and the spam database are logged. To keep them out of the notification shade, set PhoneGuard as your default SMS app.</string>
     <string name="sms_suspicious_title">Suspicious SMS</string>
     <string name="sms_suspicious_text">Message from %1$s looks like phishing: a link plus pressure wording</string>
+    <string name="sim_swap_channel_name">SIM card change</string>
+    <string name="sim_swap_channel_description">Questions about a new SIM and SIM-swap warnings</string>
 </resources>

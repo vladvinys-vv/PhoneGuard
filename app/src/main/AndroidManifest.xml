@@ -94,8 +94,6 @@
 
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND"
-        android:maxSdkVersion="33" />
 
     <!-- ============================== -->
     <!-- FIREWALL / VPN PERMISSIONS -->
@@ -249,26 +247,23 @@
         </service>
 
         <!-- SIM Swap Confirmation -->
+        <!-- Экран подтверждения подмены SIM. Запускается только своим PendingIntent'ом из
+             уведомления (simswap/SimSwapNotifications.kt), поэтому exported="false" —
+             чужие приложения не могут показать пользователю поддельное «подтвердите SIM».
+             Поверх блокировки экрана активность показывает себя сама
+             (setShowWhenLocked/setTurnScreenOn). -->
         <activity
             android:name=".simswap.SimSwapConfirmationActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.PhoneGuard"
             android:taskAffinity=""
             android:excludeFromRecents="true"
-            android:launchMode="singleTask"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-            </intent-filter>
-        </activity>
+            android:launchMode="singleTask" />
 
         <!-- Intrusion Warning Activity -->
         <activity
             android:name=".ui.IntrusionWarningActivity"
             android:exported="false"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true"
             android:theme="@style/Theme.PhoneGuard" />
 
         <!-- SIM Swap Receiver -->

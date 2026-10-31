@@ -663,4 +663,6 @@
     <string name="sms_blocking_hint">SMS von Nummern der Sperrliste und aus der Spam-Datenbank werden protokolliert. Damit sie nicht im Benachrichtigungsbereich erscheinen, legen Sie PhoneGuard als Standard-SMS-App fest.</string>
     <string name="sms_suspicious_title">Verdächtige SMS</string>
     <string name="sms_suspicious_text">Nachricht von %1$s sieht nach Phishing aus: Link und Druckformulierungen</string>
+    <string name="sim_swap_channel_name">SIM-Kartenwechsel</string>
+    <string name="sim_swap_channel_description">Rückfragen zum SIM-Wechsel und Warnungen vor SIM-Tausch</string>
 </resources>

@@ -27,13 +27,7 @@ jobs:
         run: python3 tools/static_audit.py
 
       - name: Strings are in sync with tools/sync_strings.py
-        run: |
-          python3 tools/sync_strings.py
-          if ! git diff --quiet -- app/src/main/res; then
-            echo "::error::strings.xml не совпадает со словарём tools/sync_strings.py"
-            git --no-pager diff --stat -- app/src/main/res
-            exit 1
-          fi
+        run: python3 tools/sync_strings.py --check
 
   # Настоящий компилятор Kotlin без Android SDK: видит то, чего не видит regex-аудит.
   kotlin-frontend:

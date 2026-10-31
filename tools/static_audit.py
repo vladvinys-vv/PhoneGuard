@@ -1017,7 +1017,14 @@ def check_service_start_guards() -> None:
 
 
 def check_dead_components() -> None:
-    """Сервис/приёмник в манифесте, на который никто не ссылается, — мёртвый компонент."""
+    """Компонент в манифесте, на который никто не ссылается, — мёртвый компонент.
+
+    Сервисы/приёмники/провайдеры с `intent-filter` вызывает система, такие пропускаем.
+    Активности проверяем строже: пропускаем только настоящие точки входа — ярлык на
+    рабочем столе (`LAUNCHER`) и внешние ссылки (`BROWSABLE`). Проверка добавлена после
+    того, как `SimSwapConfirmationActivity` оказалась объявлена в манифесте, но ниоткуда
+    не запускалась: экран подтверждения подмены SIM был недоступен.
+    """
     manifest = ROOT / 'app/src/main/AndroidManifest.xml'
     if not manifest.exists():
         return
@@ -1027,13 +1034,21 @@ def check_dead_components() -> None:
         for p in (ROOT / 'app/src/main/java').rglob('*.kt')
     )
     for m in re.finditer(
-        r'<(service|receiver|provider)\b(.*?)(?:/>|</\1>)', text, re.S
+        r'<(service|receiver|provider|activity)\b(.*?)(?:/>|</\1>)', text, re.S
     ):
+        tag = m.group(1)
         block = m.group(2)
-        if '<intent-filter' in block:
-            continue
-        if 'android:exported="true"' in block:
-            continue
+        if tag == 'activity':
+            if (
+                'android.intent.category.LAUNCHER' in block
+                or 'android.intent.category.BROWSABLE' in block
+            ):
+                continue
+        else:
+            if '<intent-filter' in block:
+                continue
+            if 'android:exported="true"' in block:
+                continue
         name = re.search(r'android:name="([^"]+)"', block)
         if not name:
             continue
