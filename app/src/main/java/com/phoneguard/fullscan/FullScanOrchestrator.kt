@@ -70,13 +70,16 @@ class FullScanOrchestrator @Inject constructor(
         data class Result(val report: FullScanReport, val scanHistoryId: Long) : FullScanState()
     }
 
-    @Volatile
     /**
      * Флаг «скан уже идёт».
      *
      * Раньше это был обычный `Boolean`, и проверка `if (isScanning) … isScanning = true`
      * не была атомарной: полный скан из UI и периодический воркер могли стартовать
      * одновременно (двойная нагрузка, дубли записей в истории).
+     *
+     * `AtomicBoolean`, а не `@Volatile var`: `@Volatile` к `val` применять нельзя
+     * (ошибка компиляции), а атомарность нужна именно для пары «проверить и
+     * выставить» — её даёт `compareAndSet`.
      */
     private val isScanning = java.util.concurrent.atomic.AtomicBoolean(false)
 

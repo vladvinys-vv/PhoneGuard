@@ -63,6 +63,9 @@ class SimSwapViewModelTest {
             timestamp = System.currentTimeMillis(),
             oldImsi = "123",
             newImsi = "456",
+            latitude = null,
+            longitude = null,
+            addressString = null,
             isConfirmed = false,
             isAttackSuspected = false
         )

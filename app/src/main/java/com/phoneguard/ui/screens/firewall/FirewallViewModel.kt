@@ -80,7 +80,13 @@ class FirewallViewModel @Inject constructor(
         }
     }
 
-    private fun loadApps() {
+    /**
+     * Перечитывает установленные приложения и их правила.
+     *
+     * Была `private`, хотя экран вызывает её из кнопки «обновить» — это не
+     * компилировалось (`Cannot access 'loadApps': it is private`).
+     */
+    fun loadApps() {
         viewModelScope.launch {
             val apps = withContext(Dispatchers.IO) {
                 val installedApps = installedAppsCache.getInstalledApps()

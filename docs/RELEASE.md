@@ -9,8 +9,15 @@ format placeholders, `PendingIntent` mutability flags, guarded `startActivity`/`
 manifest components, Room migrations vs `@Entity` schemas, navigation routes referenced by `navigate()`,
 `Icons.Default.*` imports, block comments terminated too early by an embedded `/*` or `*/`, optional
 hardware features for declared permissions, backup/D2D exclusion rules, mockk stub return types,
-constructor arity across `src/test` and `src/androidTest`, **unique notification ids** between
-components, and Gradle wiring (`rootProject.ext`, Room schema export, androidTest schema assets).
+constructor arity, literal types passed to constructor parameters, missing required named
+arguments across `src/test` and `src/androidTest`, **unique notification ids** between
+components, **deep links** (shortcut → graph → manifest), and Gradle wiring (`rootProject.ext`, Room schema export, androidTest schema assets).
+
+Optionally also `python3 tools/kotlin_frontend_check.py` (needs `kotlinc` 2.1+ and JDK 17): it runs
+the real Kotlin compiler over every source file, including tests, and reports only diagnostics that
+are not caused by the missing Android SDK. This catches errors a regex audit cannot see (`@Volatile`
+on `val`, private member called from UI, `return` inside a `withContext` lambda, constructor
+mismatches in tests).
 
 Optionally also `python3 tools/kotlin_analysis.py` (needs `tree-sitter` + `tree-sitter-kotlin`): it
 parses every `.kt` file and reports syntax errors and suspend calls outside a suspend context. Without

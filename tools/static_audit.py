@@ -1464,6 +1464,156 @@ def check_constructor_arity() -> None:
 
 
 
+def _primary_constructor_params(text: str) -> dict[str, list[tuple[str, str, bool]]]:
+    """Класс -> [(имя параметра, простой тип или '', есть ли значение по умолчанию)]."""
+    result: dict[str, list[tuple[str, str, bool]]] = {}
+    for m in re.finditer(r'\bclass\s+(\w+)\s*(?:<[^>]*>)?\s*(?:@\w+(?:\([^)]*\))?\s*)*\(', text):
+        name = m.group(1)
+        open_idx = text.index('(', m.end() - 1)
+        body = _balanced(text, open_idx)
+        params: list[tuple[str, str, bool]] = []
+        for raw in _split_top_level(body, angle=True):
+            cleaned = re.sub(r'@\w+(?:\([^)]*\))?', '', raw).strip()
+            if not cleaned or ':' not in cleaned:
+                continue
+            head, _, tail = cleaned.partition(':')
+            param_name = head.split()[-1]
+            has_default = '=' in tail
+            type_text = tail.split('=')[0].strip()
+            simple = re.fullmatch(r'(String|Int|Long|Short|Byte|Float|Double|Boolean)(\?)?', type_text)
+            params.append((param_name, simple.group(1) if simple else '', has_default))
+        if params:
+            result[name] = params
+    return result
+
+
+_KIND_OF_LITERAL = (
+    (re.compile(r'^"[^"]*"$'), 'String'),
+    (re.compile(r'^(true|false)$'), 'Boolean'),
+    (re.compile(r'^-?\d+[lL]$'), 'Long'),
+    (re.compile(r'^-?\d+\.\d*[fF]$'), 'Float'),
+    (re.compile(r'^-?\d+\.\d*$'), 'Double'),
+    (re.compile(r'^-?\d+$'), 'Int'),
+)
+_NUMERIC = {'Int', 'Long', 'Short', 'Byte', 'Float', 'Double'}
+
+
+def check_constructor_argument_kinds() -> None:
+    """Литерал явно не того типа на позиции параметра конструктора.
+
+    Реальный случай: `BlockedNumber("+7999…", "Spam", false, ts)` — у сущности первым
+    идёт `id: Long`, поэтому строка попадала в `id`, а `false` — в `name: String?`.
+    Число аргументов при этом совпадало, поэтому проверка арности молчала.
+    Сравниваются только однозначные случаи: литерал против простого типа.
+    """
+    sources = {
+        p: strip_comments(p.read_text(encoding='utf-8'))
+        for src in SRC_SETS if src.exists()
+        for p in src.rglob('*.kt')
+    }
+    params: dict[str, list[tuple[str, str, bool]]] = {}
+    for code in sources.values():
+        for name, value in _primary_constructor_params(code).items():
+            params.setdefault(name, value)
+    if not params:
+        return
+
+    for path, code in sources.items():
+        for m in re.finditer(r'(?<![\w.])([A-Z]\w*)\s*(?:<[^>]+>)?\s*\(', code):
+            name = m.group(1)
+            decl = params.get(name)
+            if not decl:
+                continue
+            before = code[max(0, m.start() - 12):m.start()]
+            if 'class ' in before or '::' in before:
+                continue
+            open_idx = code.index('(', m.end() - 1)
+            raw_args = [a.strip() for a in _split_top_level(_balanced(code, open_idx)) if a.strip()]
+            if not raw_args or any('=' in a for a in raw_args):
+                continue
+            for arg, (param_name, param_type, _default) in zip(raw_args, decl):
+                if not param_type:
+                    continue
+                kind = None
+                for pattern, literal_kind in _KIND_OF_LITERAL:
+                    if pattern.match(arg):
+                        kind = literal_kind
+                        break
+                if kind is None:
+                    continue
+                mismatch = (
+                    (param_type in _NUMERIC and kind in ('String', 'Boolean'))
+                    or (param_type == 'String' and kind in _NUMERIC | {'Boolean'})
+                    or (param_type == 'Boolean' and kind != 'Boolean')
+                )
+                if not mismatch:
+                    continue
+                line = code.count('\n', 0, m.start()) + 1
+                ERRORS.append(
+                    f"{path.relative_to(ROOT)}:{line}: {name}(...) — аргумент {arg} ({kind}) "
+                    f"на позиции {param_name}: {param_type}"
+                )
+
+
+def check_missing_named_arguments() -> None:
+    """Именованные аргументы конструктора не покрывают обязательные параметры.
+
+    Реальный случай: `SimSwapEvent(id = …, oldImsi = …)` без `latitude/longitude/
+    addressString` — у этих параметров нет значения по умолчанию, поэтому код не
+    компилировался («No value passed for parameter 'latitude'»). Проверка арности
+    такое не видит: количество аргументов «в диапазоне».
+    """
+    sources = {
+        p: strip_comments(p.read_text(encoding='utf-8'))
+        for src in SRC_SETS if src.exists()
+        for p in src.rglob('*.kt')
+    }
+    params: dict[str, list[tuple[str, str, bool]]] = {}
+    overloaded: set[str] = set()
+    for code in sources.values():
+        for name, value in _primary_constructor_params(code).items():
+            params.setdefault(name, value)
+        for m in re.finditer(r'\bconstructor\s*\(', code):
+            # У класса есть дополнительные конструкторы — сопоставление по именам ненадёжно.
+            head = code[:m.start()]
+            cls = list(re.finditer(r'\bclass\s+(\w+)', head))
+            if cls:
+                overloaded.add(cls[-1].group(1))
+
+    for path, code in sources.items():
+        for m in re.finditer(r'(?<![\w.])([A-Z]\w*)\s*(?:<[^>]+>)?\s*\(', code):
+            name = m.group(1)
+            decl = params.get(name)
+            if not decl or name in overloaded:
+                continue
+            before = code[max(0, m.start() - 12):m.start()]
+            if 'class ' in before or '::' in before:
+                continue
+            open_idx = code.index('(', m.end() - 1)
+            raw_args = [a.strip() for a in _split_top_level(_balanced(code, open_idx)) if a.strip()]
+            if not raw_args:
+                continue
+            named = {a.split('=', 1)[0].strip() for a in raw_args if re.match(r'^\w+\s*=', a)}
+            if len(named) != len(raw_args):
+                continue
+            declared = {param[0] for param in decl}
+            unknown = sorted(named - declared)
+            if unknown:
+                line = code.count('\n', 0, m.start()) + 1
+                ERRORS.append(
+                    f"{path.relative_to(ROOT)}:{line}: {name}(...) — таких параметров нет: "
+                    + ", ".join(unknown)
+                )
+                continue
+            missing = [param[0] for param in decl if not param[2] and param[0] not in named]
+            if missing:
+                line = code.count('\n', 0, m.start()) + 1
+                ERRORS.append(
+                    f"{path.relative_to(ROOT)}:{line}: {name}(...) — не переданы обязательные "
+                    "параметры: " + ", ".join(missing)
+                )
+
+
 def check_gradle_wiring() -> None:
     """Согласованность Gradle-конфигурации: неопределённые ext-свойства и schema-экспорт Room."""
     root_gradle = ROOT / 'build.gradle'
@@ -1612,6 +1762,8 @@ def main() -> int:
     check_backup_rules()
     check_mockk_stub_types()
     check_constructor_arity()
+    check_constructor_argument_kinds()
+    check_missing_named_arguments()
     check_gradle_wiring()
     check_member_calls()
     check_notification_ids()

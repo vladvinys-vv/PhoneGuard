@@ -3,6 +3,19 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Added
+- **`tools/kotlin_frontend_check.py` — проверка настоящим компилятором.** Запускает `kotlinc 2.1`
+  на всех 212 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
+  вызванные отсутствующими библиотеками (`-Xrender-internal-diagnostic-names` + список ожидаемых
+  имён с пояснениями). Найдено и исправлено 7 ошибок компиляции, которые не видел регексп-аудит
+  (см. Fixed). Без `kotlinc` скрипт завершается с кодом 0 и подсказкой, как его получить.
+- **`tools/static_audit.py`: две новые проверки конструкторов.** «Тип литерала на позиции
+  параметра» (ловит `BlockedNumber("+7999…", "Spam", false, ts)` — строка попадала в `id: Long`)
+  и «не переданы обязательные именованные аргументы» (ловит `SimSwapEvent(...)` без
+  `latitude/longitude/addressString`). Обе подтверждены поломкой кода.
+- **Документация по проверкам:** в `docs/DEVELOPMENT.md` добавлен раздел про новый скрипт (включая
+  установку компилятора из npm в песочнице без Maven Central), в `README.md` и `docs/RELEASE.md`
+  обновлены списки проверок.
+
 - **Deep links и ярлыки заработали.** В графе навигации ссылки `phoneguard://…` были объявлены
   (`navDeepLink`), но манифест не принимал схему, а `handleDeepLink(intent)` никто не вызывал:
   ярлык «Антивор» на рабочем столе открывал дашборд. Теперь у `MainActivity` есть VIEW/BROWSABLE
@@ -84,6 +97,21 @@
   Play считал эти модули обязательными и скрывал приложение от Wi-Fi-only планшетов.
 
 ### Fixed
+- **Компиляция: 7 реальных ошибок, найденных фронтендом Kotlin**
+  - `FullScanOrchestrator`: `@Volatile` стоял на `val` (запрещено) — убран, атомарность и так даёт
+    `AtomicBoolean.compareAndSet`;
+  - `FirewallScreen` вызывал `viewModel.loadApps()`, который был `private` — метод открыт (экран
+    вызывает его кнопкой «обновить»);
+  - `SimSwapDetector`: `return` внутри lambda `withContext` — заменён на `return@withContext`;
+  - `PermissionAbuseCheckTest`: имя enum-класса (`PermissionAbuseCheck.PermissionGroup`) присвоено
+    в `val` и использовалось как `groups.CAMERA` — теперь импорт вложенного enum;
+  - `PhishingUrlCheckerTest`: в backtick-имени теста была точка (`t.me`) — Kotlin такие имена
+    запрещает, тест переименован;
+  - `BlockedNumberDaoInstrumentedTest`: позиционные аргументы `BlockedNumber(...)` не совпадали с
+    конструктором (`id: Long` первым) — переведены на именованные;
+  - `SimSwapViewModelTest`: в `SimSwapEvent(...)` не передавались обязательные `latitude`,
+    `longitude`, `addressString` — добавлены.
+
 - **`PhoneGuardVpnService`: не компилировалось.** `handlePacket` объявлен `suspend`, а вызывался из
   обычной функции `runVpnLoop` («suspension functions can be called only within a coroutine body»).
   `runVpnLoop` стал `suspend` — он и так запускается внутри `vpnScope.launch`.

@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import com.phoneguard.fullscan.checks.PermissionAbuseCheck.PermissionGroup
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -27,8 +28,6 @@ import org.robolectric.annotation.Config
 @Config(sdk = [33])
 class PermissionAbuseCheckTest {
 
-    private val groups = PermissionAbuseCheck.PermissionGroup
-
     /** Заглушка локализации: тест проверяет риск, а не перевод. */
     private val labels: (Collection<PermissionAbuseCheck.PermissionGroup>) -> String = { list ->
         list.joinToString(",") { it.name }
@@ -40,7 +39,7 @@ class PermissionAbuseCheckTest {
     fun `assessRisk returns CRITICAL for camera microphone location combo`() {
         val check = PermissionAbuseCheck(context())
         val result = check.assessRisk(
-            setOf(groups.CAMERA, groups.MICROPHONE, groups.LOCATION),
+            setOf(PermissionGroup.CAMERA, PermissionGroup.MICROPHONE, PermissionGroup.LOCATION),
             labels
         )
         assertEquals(PermissionAbuseCheck.RiskLevel.CRITICAL, result.first)
@@ -50,14 +49,14 @@ class PermissionAbuseCheckTest {
     @Test
     fun `assessRisk returns HIGH for SMS plus other permissions`() {
         val check = PermissionAbuseCheck(context())
-        val result = check.assessRisk(setOf(groups.SMS, groups.PHONE), labels)
+        val result = check.assessRisk(setOf(PermissionGroup.SMS, PermissionGroup.PHONE), labels)
         assertEquals(PermissionAbuseCheck.RiskLevel.HIGH, result.first)
     }
 
     @Test
     fun `assessRisk returns MEDIUM for location alone`() {
         val check = PermissionAbuseCheck(context())
-        val result = check.assessRisk(setOf(groups.LOCATION), labels)
+        val result = check.assessRisk(setOf(PermissionGroup.LOCATION), labels)
         assertEquals(PermissionAbuseCheck.RiskLevel.MEDIUM, result.first)
     }
 
@@ -66,7 +65,7 @@ class PermissionAbuseCheckTest {
         val check = PermissionAbuseCheck(context())
         // Уведомления намеренно не входят в «опасные» группы: раньше они давали
         // ложные срабатывания, поэтому такой группы в enum просто нет.
-        val result = check.assessRisk(setOf(groups.CONTACTS), labels)
+        val result = check.assessRisk(setOf(PermissionGroup.CONTACTS), labels)
         assertNull(result.first)
     }
 

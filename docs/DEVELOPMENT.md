@@ -92,12 +92,40 @@ python3 tools/sync_strings.py     # идемпотентно, ничего не 
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
 незащищённые `startActivity`/`startService`, мёртвые компоненты, миграции против `@Entity`,
 маршруты навигации, `Icons.Default.*`, `uses-feature`, backup-правила, mockk-стабы, арность
-конструкторов в тестах, Gradle-обвязку и **уникальность id уведомлений**.
+конструкторов в тестах, типы литералов на позициях параметров, пропущенные обязательные
+именованные аргументы, Gradle-обвязку, **уникальность id уведомлений** и **целостность deep links**.
 
 ### `tools/sync_strings.py`
 
 Идемпотентно раскладывает словарь строк в `values`, `values-en`, `values-ru`, `values-de`.
 Запускать после любого изменения текстов; повторный запуск ничего не меняет.
+
+### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
+
+Запускает **настоящий компилятор Kotlin** на всех 212 файлах без Android SDK. Компилятор не может
+разрешить `android.*`, `androidx.*`, `kotlinx.coroutines`, Hilt и mockk, но полностью проверяет
+синтаксис, объявления, вывод типов там, где типы известны, и правила языка. Ошибки, заведомо вызванные
+отсутствующими библиотеками, отфильтрованы по внутренним именам диагностик
+(`-Xrender-internal-diagnostic-names`); всё остальное — реальные проблемы.
+
+```bash
+export JAVA_HOME=/path/to/jdk-17
+python3 tools/kotlin_frontend_check.py          # main + test + androidTest
+python3 tools/kotlin_frontend_check.py --scope main
+```
+
+Требуется `kotlinc` 2.1+ на `PATH` (или в `KOTLINC`). Если компилятора нет, скрипт завершается с
+кодом 0 и подсказкой. В песочнице без доступа к Maven Central компилятор берётся из npm:
+
+```bash
+npm pack kotlin-compiler@2.1.0 && tar xzf kotlin-compiler-2.1.0.tgz
+export PATH="$PWD/package/bin:$PATH"
+```
+
+Именно этой проверкой найдены и исправлены реальные ошибки сборки: `@Volatile` на `val`,
+приватный `loadApps()` вызывался из UI, `return` внутри lambda `withContext`, имя enum-класса
+присвоено в `val`, точка в backtick-имени теста, позиционные аргументы `BlockedNumber(...)` и
+пропущенные обязательные `latitude/longitude/addressString` в `SimSwapEvent(...)`.
 
 ### `tools/kotlin_analysis.py` (опционально)
 
@@ -127,7 +155,8 @@ python3 tools/kotlin_analysis.py
 
 ## Ограничения среды
 
-Если Android SDK недоступен (например, в песочнице), собрать проект нельзя: остаются
-`static_audit.py`, `sync_strings.py` и — при наличии tree-sitter — `kotlin_analysis.py`.
+Если Android SDK недоступен (например, в песочнице), `./gradlew` запустить нельзя, но проверки
+остаются: `static_audit.py`, `sync_strings.py`, `kotlin_frontend_check.py` (нужен `kotlinc` + JDK 17;
+проверяет всё, кроме разрешения внешних библиотек) и `kotlin_analysis.py` (нужен tree-sitter).
 Первой настоящей проверкой после правок остаётся `./gradlew :app:assembleDebug testDebugUnitTest`,
 затем `connectedDebugAndroidTest` на устройстве.

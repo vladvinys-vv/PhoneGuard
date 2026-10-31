@@ -37,7 +37,7 @@ class PhishingUrlCheckerTest {
     }
 
     @Test
-    fun `isSuspicious returns true for t.me link with urgent keyword`() {
+    fun `isSuspicious returns true for telegram link with urgent keyword`() {
         val body = "Срочно подтвердите код по ссылке t.me/channel"
         assertTrue(checker.isSuspicious(body))
     }

@@ -146,7 +146,8 @@ class SimSwapDetector(
         // Раньше здесь был свой выбор SmsManager и вызов без разбиения на части.
         // Отправка на резервный номер — единственный канал оповещения при подмене
         // SIM, поэтому она идёт через общий SmsSender без исключений в фоне.
-        return SmsSender.send(context, backupNumber, message)
+        // `return` внутри lambda `withContext` запрещён — метка обязательна.
+        return@withContext SmsSender.send(context, backupNumber, message)
     }
 
     /**

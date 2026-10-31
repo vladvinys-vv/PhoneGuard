@@ -33,8 +33,8 @@ class BlockedNumberDaoInstrumentedTest {
 
     @Test
     fun insertAndRetrieveBlacklist() = runBlocking {
-        dao.insertBlockedNumber(BlockedNumber("+79991234567", "Spam", false, System.currentTimeMillis()))
-        dao.insertBlockedNumber(BlockedNumber("+79997654321", "Scam", false, System.currentTimeMillis()))
+        dao.insertBlockedNumber(BlockedNumber(phoneNumber = "+79991234567", name = "Spam", isWhitelist = false, timestamp = System.currentTimeMillis()))
+        dao.insertBlockedNumber(BlockedNumber(phoneNumber = "+79997654321", name = "Scam", isWhitelist = false, timestamp = System.currentTimeMillis()))
 
         val blacklist = dao.getBlacklist().first()
         assertEquals(2, blacklist.size)
@@ -42,7 +42,7 @@ class BlockedNumberDaoInstrumentedTest {
 
     @Test
     fun insertAndRetrieveWhitelist() = runBlocking {
-        dao.insertBlockedNumber(BlockedNumber("+79991234567", "Friend", true, System.currentTimeMillis()))
+        dao.insertBlockedNumber(BlockedNumber(phoneNumber = "+79991234567", name = "Friend", isWhitelist = true, timestamp = System.currentTimeMillis()))
 
         val whitelist = dao.getWhitelist().first()
         assertEquals(1, whitelist.size)
@@ -51,7 +51,7 @@ class BlockedNumberDaoInstrumentedTest {
 
     @Test
     fun deleteNumberRemovesIt() = runBlocking {
-        val number = BlockedNumber("+79991234567", "Spam", false, System.currentTimeMillis())
+        val number = BlockedNumber(phoneNumber = "+79991234567", name = "Spam", isWhitelist = false, timestamp = System.currentTimeMillis())
         dao.insertBlockedNumber(number)
         dao.deleteBlockedNumber(number)
 

@@ -125,16 +125,19 @@ cp keystore.properties.example keystore.properties   # вписать свои �
 В песочнице без Android SDK доступны статические проверки:
 
 ```bash
-python3 tools/static_audit.py      # обязательно: 0 error(s), 0 warning(s)
-python3 tools/sync_strings.py      # идемпотентная синхронизация строк в 4 локалях
-python3 tools/kotlin_analysis.py   # опционально: парсер Kotlin (нужен tree-sitter)
+python3 tools/static_audit.py            # обязательно: 0 error(s), 0 warning(s)
+python3 tools/sync_strings.py            # идемпотентная синхронизация строк в 4 локалях
+python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор без Android SDK
+python3 tools/kotlin_analysis.py         # опционально: парсер Kotlin (нужен tree-sitter)
 ```
 
 `static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
-миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_analysis.py` разбирает
-файлы настоящим парсером (синтаксис + вызовы `suspend`-функций вне suspend-контекста) — им найден
-и исправлен реальный баг сборки в `PhoneGuardVpnService`. Подробнее — [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_frontend_check.py` прогоняет все
+212 файлов через настоящий компилятор Kotlin (без Android SDK) и отсекает ошибки, вызванные
+отсутствующими библиотеками — им найдены семь реальных ошибок сборки, в том числе в тестах.
+`kotlin_analysis.py` дополнительно разбирает файлы парсером и ищет вызовы `suspend`-функций вне
+suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 ## Документация
 
