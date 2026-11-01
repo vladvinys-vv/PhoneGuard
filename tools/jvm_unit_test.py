@@ -595,13 +595,33 @@ def resource_stub(sources: list[Path]) -> str | None:
     body.append("}")
     return "\n".join(body) + "\n"
 
-def kotlin_class_of(path: Path) -> str:
+TEST_CLASS_DECL = re.compile(r"^[ \t]*(?:internal |private |public |open |abstract )*class (\w+)", re.M)
+
+
+def kotlin_classes_of(path: Path) -> list[str]:
+    """Все тест-классы файла.
+
+    Раньше брался только первый класс, поэтому второй класс в том же файле компилировался,
+    но **не исполнялся** — тесты «проходили», не запускаясь. Теперь собираем все классы,
+    в теле которых есть `@Test`.
+    """
     source = path.read_text(encoding="utf-8")
     package = re.search(r"^package\s+([\w.]+)", source, re.M)
-    name = re.search(r"^(?:internal |private |public )?(?:class|object) (\w+)", source, re.M)
-    if not package or not name:
-        return ""
-    return f"{package.group(1)}.{name.group(1)}"
+    if not package:
+        return []
+    declarations = list(TEST_CLASS_DECL.finditer(source))
+    names: list[str] = []
+    for index, declaration in enumerate(declarations):
+        end = declarations[index + 1].start() if index + 1 < len(declarations) else len(source)
+        if "@Test" in source[declaration.start():end]:
+            names.append(f"{package.group(1)}.{declaration.group(1)}")
+    return names
+
+
+def kotlin_class_of(path: Path) -> str:
+    """Первый тест-класс файла (для совместимости с одиночными классами)."""
+    classes = kotlin_classes_of(path)
+    return classes[0] if classes else ""
 
 
 def class_index() -> dict[str, tuple[Path, str]]:
@@ -731,7 +751,7 @@ def compile_and_run(kotlinc: str, java: str, shim: Path, tests: list[Path], sour
     )
     if result.returncode != 0:
         return False, (result.stderr or result.stdout).strip()
-    classes = sorted({kotlin_class_of(p) for p in tests} - {""})
+    classes = sorted({name for path in tests for name in kotlin_classes_of(path)})
     if not classes:
         return False, "в тестах не найдено классов"
     run = subprocess.run(
@@ -766,6 +786,32 @@ class ShimPassingTest {
 }
 """
 
+SELF_TEST_TWO_CLASSES = """package selftest
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+/** Второй класс в том же файле раньше молча не исполнялся — проверяем, что оба идут в прогон. */
+class FirstHalfTest {
+    @Test
+    fun `first class runs`() {
+        assertEquals(2, 1 + 1)
+    }
+}
+
+class SecondHalfTest {
+    @Test
+    fun `second class runs`() {
+        assertEquals(4, 2 + 2)
+    }
+
+    @Test
+    fun `second class runs both tests`() {
+        assertEquals("ok", "ok")
+    }
+}
+"""
+
 SELF_TEST_FAILING = """package selftest
 
 import org.junit.Assert.assertEquals
@@ -785,10 +831,12 @@ def self_test(kotlinc: str, java: str, shim: Path) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         cases = [
-            ("ShimPassingTest", SELF_TEST_PASSING, True),
-            ("ShimFailingTest", SELF_TEST_FAILING, False),
+            ("ShimPassingTest", SELF_TEST_PASSING, 3, 0),
+            ("ShimFailingTest", SELF_TEST_FAILING, 0, 1),
+            # Два тест-класса в одном файле: раньше исполнялся только первый.
+            ("TwoClassesTest", SELF_TEST_TWO_CLASSES, 3, 0),
         ]
-        for name, source, should_pass in cases:
+        for name, source, expected_passed, expected_failed in cases:
             test_file = work / f"{name}.kt"
             test_file.write_text(source, encoding="utf-8")
             ok, output = compile_and_run(kotlinc, java, shim, [test_file], [], work / name)
@@ -800,13 +848,14 @@ def self_test(kotlinc: str, java: str, shim: Path) -> int:
                 print(f"jvm_unit_test --self-test: раннер не вернул сводку для {name}")
                 return 1
             passed, failed = int(summary.group(1)), int(summary.group(2))
-            if should_pass and (passed != 3 or failed != 0):
-                print(f"jvm_unit_test --self-test: ожидалось 3 успешных, получено {passed}/{failed}")
+            if (passed, failed) != (expected_passed, expected_failed):
+                print(
+                    f"jvm_unit_test --self-test: {name} — ожидалось "
+                    f"{expected_passed} успешных и {expected_failed} падений, "
+                    f"получено {passed}/{failed}"
+                )
                 return 1
-            if not should_pass and (failed != 1 or passed != 0):
-                print(f"jvm_unit_test --self-test: падение не поймано ({passed}/{failed})")
-                return 1
-    print("jvm_unit_test --self-test: ok (успех, падение и assertThrows распознаются)")
+    print("jvm_unit_test --self-test: ok (успех, падение, assertThrows и несколько классов в файле)")
     return 0
 
 
