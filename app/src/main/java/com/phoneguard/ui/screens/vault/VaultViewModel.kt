@@ -14,10 +14,12 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.repository.VaultRepository
 import com.phoneguard.model.VaultItem
 import com.phoneguard.util.AnalyticsHelper
+import com.phoneguard.vault.EncryptionManager
 import com.phoneguard.vault.VaultFileTooLargeException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,8 +83,14 @@ class VaultViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "VaultViewModel"
-        const val MAX_FILE_SIZE_MB = 50L
-        const val MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+        /**
+         * Лимит размера файла — один на приложение: экран и [EncryptionManager]
+         * раньше держали по своей константе `50L * 1024 * 1024`, и правка одной
+         * из них рассинхронизировала проверку в UI и в хранилище.
+         */
+        const val MAX_FILE_SIZE_BYTES = EncryptionManager.MAX_FILE_SIZE_BYTES
+        const val MAX_FILE_SIZE_MB = MAX_FILE_SIZE_BYTES / (1024 * 1024)
     }
 
     /**
@@ -244,12 +252,20 @@ class VaultViewModel @Inject constructor(
                 )
             }.getOrNull()
             if (uri == null) {
+                // Расшифровка уже состоялась — открытой копии в кэше быть не должно.
+                repository.cleanupPreview(file)
                 _previewError.value = VaultError.PreviewFailure
                 return@launch
             }
             _previewIntent.value = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, item.mimeType.ifBlank { "application/octet-stream" })
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            // Расшифрованная копия не должна лежать в кэше до следующего просмотра:
+            // удаляем её сами, когда внешний просмотрщик уже не может её читать.
+            viewModelScope.launch {
+                delay(EncryptionManager.PREVIEW_MAX_AGE_MS)
+                repository.cleanupPreview(file)
             }
         }
     }

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.phoneguard.R
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -115,7 +116,10 @@ class OverlayAttackCheck @Inject constructor(
          * приложение `com.x.chathead` с ярлыком `ChatHead` проходило проверку как безопасное.
          */
         private fun normalize(value: String): String =
-            value.lowercase().filter { it.isLetterOrDigit() }
+            // Locale.ROOT, а не Locale.getDefault(): в турецкой локали `I` превращается
+            // в `ı`, и сравнение с шаблоном из строчных ASCII-букв перестаёт совпадать —
+            // результат проверки зависел бы от языка системы.
+            value.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
 
         /** Первый совпавший признак имени пакета/приложения (видимость для тестов). */
         fun matchingPattern(packageName: String, appLabel: String): String? {

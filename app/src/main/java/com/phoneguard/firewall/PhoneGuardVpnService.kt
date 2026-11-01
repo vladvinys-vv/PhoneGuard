@@ -14,6 +14,7 @@ import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.phoneguard.R
@@ -82,20 +83,11 @@ class PhoneGuardVpnService : VpnService() {
         private const val TUN_PREFIX_V6 = 0
         private const val IP_VERSION_IPV6 = 6
 
-        /** Лимит записей в лог в секунду. */
-        private const val MAX_LOGS_PER_SECOND = 10
-
-        /** Как часто обновлять текст уведомления о блокировках (в штуках пакетов). */
+        /**
+         * Как часто обновлять текст уведомления о блокировках (в штуках пакетов).
+         * Пороги ограничителей частоты живут в [PacketRateLimiter].
+         */
         private const val NOTIFICATION_UPDATE_EVERY = 10
-
-        /** Сколько разных портов за окно считается «перебором». */
-        private const val PORTS_PER_WINDOW = 60
-
-        /** Окно наблюдения за портами. */
-        private const val PORT_SCAN_WINDOW_MS = 10_000L
-
-        /** Не чаще одного события о переборе портов на UID. */
-        private const val PORT_SCAN_REPORT_COOLDOWN_MS = 10 * 60_000L
 
         /** Системные приложения не «сканируют порты» — они делают свою работу. */
         private val SYSTEM_PACKAGE_PREFIXES = listOf("android", "com.android.", "com.google.android.")
@@ -131,14 +123,13 @@ class PhoneGuardVpnService : VpnService() {
     @Volatile
     private var notifiedBlockedCount = 0
 
-    private var logCount = 0
-    private var logWindowStart = 0L
-
-    private val portScanTracker = mutableMapOf<Int, MutableSet<Int>>()
-    private val portScanWindowStart = mutableMapOf<Int, Long>()
-    private val portScanReportAt = mutableMapOf<Int, Long>()
-    private var malformedPacketCount = 0
-    private var malformedWindowStart = 0L
+    /**
+     * Окна ограничения частоты записей и детекторов (см. [PacketRateLimiter]).
+     *
+     * Вынесены из сервиса: раньше счётчики считались по системному времени и
+     * менялись из разных потоков без синхронизации.
+     */
+    private val rateLimiter = PacketRateLimiter()
 
     override fun onCreate() {
         super.onCreate()
@@ -294,6 +285,7 @@ class PhoneGuardVpnService : VpnService() {
 
     private fun stopVpn() {
         Log.d(TAG, "Stopping VPN")
+        rateLimiter.reset()
         unregisterNetworkCallback()
         vpnJob?.cancel()
         vpnInterface?.close()
@@ -412,15 +404,11 @@ class PhoneGuardVpnService : VpnService() {
         // Уведомление обновляется ниже — после проверки лимита записей,
         // повторный вызов здесь только дублировал notify().
 
+        if (!rateLimiter.allowLog(SystemClock.elapsedRealtime())) return
+
+        // В журнале — «человеческое» время; окна ограничителя считаются отдельно,
+        // по монотонным часам.
         val now = System.currentTimeMillis()
-        if (now - logWindowStart > 1000) {
-            logCount = 0
-            logWindowStart = now
-        }
-        logCount++
-
-        if (logCount > MAX_LOGS_PER_SECOND) return
-
         val connectionType = if (isOnWifi()) FirewallLog.ConnectionType.WIFI
         else FirewallLog.ConnectionType.MOBILE
 
@@ -496,14 +484,7 @@ class PhoneGuardVpnService : VpnService() {
     }
 
     private fun trackMalformedPackets() {
-        val now = System.currentTimeMillis()
-        if (now - malformedWindowStart > 10000) {
-            malformedPacketCount = 0
-            malformedWindowStart = now
-        }
-        malformedPacketCount++
-        if (malformedPacketCount > 100) {
-            malformedPacketCount = 0
+        if (rateLimiter.registerMalformedPacket(SystemClock.elapsedRealtime())) {
             vpnScope.launch {
                 runCatching {
                     intrusionRepository.recordEvent(
@@ -533,21 +514,7 @@ class PhoneGuardVpnService : VpnService() {
         val packageName = rulesManager.getPackageNameForUid(uid)
         if (packageName == null || isIgnoredForPortScan(packageName)) return
 
-        val now = System.currentTimeMillis()
-        val lastReport = portScanReportAt[uid]
-        if (lastReport != null && now - lastReport < PORT_SCAN_REPORT_COOLDOWN_MS) return
-
-        val windowStart = portScanWindowStart[uid]
-        if (windowStart == null || now - windowStart > PORT_SCAN_WINDOW_MS) {
-            portScanTracker[uid] = mutableSetOf()
-            portScanWindowStart[uid] = now
-        }
-        val ports = portScanTracker.getOrPut(uid) { mutableSetOf() }
-        ports += destPort
-        if (ports.size > PORTS_PER_WINDOW) {
-            ports.clear()
-            portScanWindowStart[uid] = now
-            portScanReportAt[uid] = now
+        if (rateLimiter.shouldReportPortScan(uid, destPort, SystemClock.elapsedRealtime())) {
             vpnScope.launch {
                 runCatching {
                     intrusionRepository.recordEvent(

@@ -121,7 +121,10 @@ class EncryptionManager @Inject constructor(
             masterKey,
             EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
         ).build()
-        previewDir.listFiles()?.forEach { stale -> stale.delete() }
+        // Удаляем только устаревшие копии: файл, открытый во внешнем просмотрщике
+        // секунду назад, удалять нельзя — просмотрщик получит «файл исчез».
+        val staleBefore = System.currentTimeMillis() - PREVIEW_MAX_AGE_MS
+        previewDir.listFiles()?.forEach { stale -> if (stale.lastModified() < staleBefore) stale.delete() }
         val outputFile = File.createTempFile("decrypted_", ".tmp", previewDir)
         return try {
             encryptedFile.openFileInput().use { input ->
@@ -134,8 +137,17 @@ class EncryptionManager @Inject constructor(
         }
     }
 
+    /**
+     * Удаляет расшифрованную копию из кэша предпросмотра.
+     *
+     * Удаляется только файл внутри [previewDir]: путь приходит извне, и
+     * `delete()` по произвольному `File` был бы удалением чужих данных.
+     */
     fun cleanupDecryptedFile(file: File) {
-        file.delete()
+        val target = runCatching { file.canonicalFile }.getOrNull() ?: return
+        val root = runCatching { previewDir.canonicalPath }.getOrNull() ?: return
+        if (target.parentFile?.path != root) return
+        target.delete()
     }
 
     fun deleteVaultFile(item: VaultItem) {
@@ -221,10 +233,19 @@ class EncryptionManager @Inject constructor(
     }
 
     companion object {
-        /** Должно совпадать с лимитом в `VaultViewModel`. */
+        /**
+         * Лимит размера файла для шифрования в хранилище.
+         *
+         * Единственный источник значения: `VaultViewModel.MAX_FILE_SIZE_BYTES`
+         * ссылается сюда, поэтому проверка в UI и в `EncryptionManager` не могут
+         * разойтись.
+         */
         const val MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024
 
         private const val MAX_NAME_LENGTH = 100
+
+        /** Сколько расшифрованная копия живёт в кэше предпросмотра. */
+        const val PREVIEW_MAX_AGE_MS = 10 * 60 * 1000L
 
         /** Должно совпадать с `<cache-path>` в `res/xml/file_paths.xml`. */
         const val PREVIEW_DIR_NAME = "vault_preview"

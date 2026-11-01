@@ -131,7 +131,9 @@ fun FilterRow(
         PrivacyFilter.RecentlyUsedMic to R.string.filter_mic
     )
 
-    ScrollableTabRow(selectedTabIndex = filters.indexOfFirst { it.first == currentFilter }) {
+    // coerceAtLeast(0): если фильтр когда-нибудь появится в enum, но не в этом списке,
+    // indexOfFirst вернёт -1, а ScrollableTabRow с отрицательным индексом падает.
+    ScrollableTabRow(selectedTabIndex = filters.indexOfFirst { it.first == currentFilter }.coerceAtLeast(0)) {
         filters.forEachIndexed { index, (filter, labelRes) ->
             Tab(
                 selected = currentFilter == filter,

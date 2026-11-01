@@ -3,6 +3,7 @@ package com.phoneguard.fullscan.checks
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.util.Locale
 
 /**
  * Признаки «подозрительного имени» для оверлеев. Проверка разрешения
@@ -35,6 +36,20 @@ class OverlayAttackCheckTest {
     @Test
     fun appLabelMatchingIsCaseInsensitive() {
         assertEquals("floating", OverlayAttackCheck.matchingPattern("com.example.player", "Floating Player"))
+    }
+
+    @Test
+    fun matchingDoesNotDependOnSystemLocale() {
+        // В турецкой локали `I` превращается в `ı`: без Locale.ROOT шаблон «dimmer»
+        // не совпадал с ярлыком «DIMMER», и оверлей-атака проходила проверку.
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+            assertEquals("dimmer", OverlayAttackCheck.matchingPattern("com.example.dimmer", "DIMMER"))
+            assertEquals("dimmer", OverlayAttackCheck.matchingPattern("com.example.other", "Dimmer"))
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 
     @Test
