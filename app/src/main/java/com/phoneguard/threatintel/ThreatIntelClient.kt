@@ -4,7 +4,6 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -115,21 +114,13 @@ class ThreatIntelClient @Inject constructor(
         }
     }
 
-    /** Выделяет хост (`xn--` дружелюбно через OkHttp-парсер URL). */
-    fun extractHost(rawUrl: String): String? {
-        val value = rawUrl.trim().trim('"', '\'', ',', ';', ')', ']', '>')
-        if (value.isEmpty()) return null
-        val withScheme = if (value.startsWith("http://") || value.startsWith("https://")) {
-            value
-        } else {
-            "http://$value"
-        }
-        val url = withScheme.toHttpUrlOrNull() ?: return null
-        val host = url.host.lowercase(Locale.ROOT)
-        if (host.isEmpty() || '.' !in host) return null
-        if (host in IGNORED_HOSTS) return null
-        return host
-    }
+    /**
+     * Выделяет хост из ссылки или строки ленты.
+     *
+     * Разбор живёт в чистом [HostExtractor] (без OkHttp), чтобы его поведение проверялось тестами:
+     * ошибка здесь означает молча пропущенный домен, а не видимую поломку.
+     */
+    fun extractHost(rawUrl: String): String? = HostExtractor.extractHost(rawUrl)
 
     /** Понятная причина отказа вместо голого кода: API abuse.ch может требовать Auth-Key. */
     private fun statusDetail(code: Int): String = when (code) {
@@ -170,10 +161,6 @@ class ThreatIntelClient @Inject constructor(
         private const val USER_AGENT = "PhoneGuard/1.0 (Android security app; threat-intel lookup)"
 
         /** Хосты, которые бессмысленно проверять через фиды. */
-        private val IGNORED_HOSTS = setOf(
-            "localhost", "example.com", "example.org", "example.net"
-        )
-
         /** Предохранители для публичного фида (защита от гигантских/подменённых ответов). */
         private const val MAX_FEED_LINES = 50_000
         private const val MAX_FEED_BYTES = 8L * 1024 * 1024
