@@ -3,6 +3,7 @@ package com.phoneguard.firewall
 import android.content.pm.PackageManager
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.model.FirewallRule
+import com.phoneguard.model.blocksAllTraffic
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -84,15 +85,12 @@ class FirewallRulesManager @Inject constructor(
         .map { it.packageName }
         .toSet()
 
-    /** Возвращает true, если правило блокирует весь трафик приложения. */
-    fun shouldBlockAllTraffic(rule: FirewallRule, isOnWifi: Boolean): Boolean {
-        if (rule.blockAll) return true
-        // allowByDefault = false — режим «запрещено всё, что не разрешено явно».
-        if (!rule.allowByDefault) return true
-        if (isOnWifi && rule.blockWifi) return true
-        if (!isOnWifi && rule.blockMobile) return true
-        if (rule.allowWifiOnly && !isOnWifi) return true
-        if (rule.allowMobileOnly && isOnWifi) return true
-        return false
-    }
+    /**
+     * Возвращает true, если правило блокирует весь трафик приложения.
+     *
+     * Сама матрица живёт в чистой [blocksAllTraffic] (`model/FirewallRulePolicy.kt`), чтобы её
+     * можно было прогонять тестами без Android: здесь только точка входа для сервиса.
+     */
+    fun shouldBlockAllTraffic(rule: FirewallRule, isOnWifi: Boolean): Boolean =
+        rule.blocksAllTraffic(isOnWifi)
 }
