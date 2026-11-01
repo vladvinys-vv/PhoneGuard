@@ -78,8 +78,17 @@ class HoneypotManager {
      *  - держим не больше [MAX_DECOY_SETS] наборов (старые удаляются при создании);
      *  - содержимое похоже на настоящую находку для malware.
      */
-    fun createDecoys(context: android.content.Context, event: IntrusionEvent): List<File> {
-        val dir = File(context.filesDir, DIR_NAME)
+    fun createDecoys(context: android.content.Context, event: IntrusionEvent): List<File> =
+        createDecoys(File(context.filesDir, DIR_NAME), event)
+
+    /**
+     * То же, но с явно заданным каталогом.
+     *
+     * Отдельная перегрузка нужна тестам: `Context` на JVM не создать, а логика уборки
+     * (`MAX_DECOY_SETS`) работает с обычным `java.io.File` и проверяется на реальной
+     * временной папке — без Android и Robolectric.
+     */
+    fun createDecoys(dir: File, event: IntrusionEvent): List<File> {
         if (!dir.exists()) dir.mkdirs()
         val created = decoyNames(event).map { name ->
             File(dir, name).apply {

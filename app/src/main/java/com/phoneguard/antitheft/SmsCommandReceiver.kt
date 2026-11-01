@@ -56,10 +56,6 @@ class SmsCommandReceiver : BroadcastReceiver() {
     @Inject
     lateinit var locationProvider: LocationProvider
 
-    // Формат команды: #PG:PIN:COMMAND (PG = PhoneGuard)
-    // Пример: #PG:1234:LOCK
-    private val commandPattern = Regex("""#PG:(\d+):(\w+)""", RegexOption.IGNORE_CASE)
-
     override fun onReceive(context: Context, intent: Intent) {
         if (Telephony.Sms.Intents.SMS_RECEIVED_ACTION != intent.action) return
 
@@ -69,7 +65,7 @@ class SmsCommandReceiver : BroadcastReceiver() {
         val sender = messages.firstNotNullOfOrNull { it.originatingAddress } ?: return
         // Многочастное SMS приходит как несколько SmsMessage в одном интенте.
         val body = messages.mapNotNull { it.displayMessageBody }.joinToString("")
-        if (!commandPattern.containsMatchIn(body)) return
+        if (!SmsRemoteCommand.containsCommand(body)) return
 
         val pendingResult = goAsync()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -85,14 +81,10 @@ class SmsCommandReceiver : BroadcastReceiver() {
     }
 
     private suspend fun processCommand(context: Context, command: String, sender: String) {
-        val match = commandPattern.find(command) ?: return
-        val pin = match.groupValues[1]
-        // `Locale.US`: в турецкой локали `uppercase()` превращает «i» в «İ»,
-        // и команда вида «wipe» перестаёт совпадать с «WIPE».
-        val cmd = match.groupValues[2].uppercase(java.util.Locale.US)
+        val parsed = SmsRemoteCommand.parse(command) ?: return
 
         // PIN проверяется до любой реакции: без него команда игнорируется.
-        if (!preferencesManager.verifyPin(pin)) {
+        if (!preferencesManager.verifyPin(parsed.pin)) {
             Log.w(TAG, "SMS command rejected: wrong PIN")
             // Подбор PIN по SMS больше не бесконечен (см. PinAttemptLimiter), но
             // пользователь должен узнать о попытках: показываем локальное уведомление.
@@ -100,13 +92,16 @@ class SmsCommandReceiver : BroadcastReceiver() {
             return
         }
 
-        when (cmd) {
-            "LOCK" -> lockDevice(context, sender)
-            "ALARM" -> triggerAlarm(context)
-            "LOCATION" -> sendLocation(context, sender)
-            "WIPE" -> wipeDevice(context, sender)
-            "PHOTO" -> takeStealthPhoto(context, sender)
-            "STATUS" -> sendDeviceStatus(context, sender)
+        // Неизвестная команда (action == null) не выполняется, но PIN уже проверен —
+        // так попытка подбора остаётся видимой для пользователя.
+        when (parsed.action) {
+            SmsRemoteCommand.Action.LOCK -> lockDevice(context, sender)
+            SmsRemoteCommand.Action.ALARM -> triggerAlarm(context)
+            SmsRemoteCommand.Action.LOCATION -> sendLocation(context, sender)
+            SmsRemoteCommand.Action.WIPE -> wipeDevice(context, sender)
+            SmsRemoteCommand.Action.PHOTO -> takeStealthPhoto(context, sender)
+            SmsRemoteCommand.Action.STATUS -> sendDeviceStatus(context, sender)
+            null -> Unit
         }
     }
 
