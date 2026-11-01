@@ -8,7 +8,6 @@ import com.phoneguard.threatintel.ThreatVerdict
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -97,16 +96,10 @@ class PhishingUrlChecker @Inject constructor(
      * Локальная эвристика: ссылка + «давящие» ключевые слова.
      * Видимость `internal` нужна юнит-тестам.
      */
-    internal fun isSuspicious(body: String): Boolean {
-        val lower = body.lowercase(Locale.ROOT)
-        val hasLink = LINK_TOKENS.any { lower.contains(it) } || extractLinks(body).isNotEmpty()
-        val hasPhishingKeyword = PHISHING_KEYWORDS.any { lower.contains(it) }
-        return hasLink && hasPhishingKeyword
-    }
+    internal fun isSuspicious(body: String): Boolean = PhishingHeuristics.isSuspicious(body)
 
     /** Достаёт ссылки из текста сообщения (http/https, `www.`, сокращатели, t.me). */
-    internal fun extractLinks(body: String): List<String> =
-        LINK_REGEX.findAll(body).map { it.value.trimEnd('.', ',', ')', ';', '!', '?') }.toList()
+    internal fun extractLinks(body: String): List<String> = PhishingHeuristics.extractLinks(body)
 
     companion object {
         private const val TAG = "PhishingUrlChecker"
@@ -114,19 +107,6 @@ class PhishingUrlChecker @Inject constructor(
         /** Максимум сетевых проверок за один скан — чтобы не «залипать» на фиде. */
         private const val MAX_INTEL_LOOKUPS = 10
 
-        private val LINK_TOKENS = listOf(
-            "http://", "https://", "www.", ".ru/", ".com/", ".xyz", ".top", ".click", "bit.ly", "t.me/"
-        )
 
-        private val PHISHING_KEYWORDS = listOf(
-            "перейдите", "получите", "выигрыш", "банк", "карта", "пароль", "код",
-            "подтвердите", "срочно", "заблокирован", "spende", "gewinn", "konto",
-            "sperre", "bestätigen", "click here", "verify"
-        )
-
-        private val LINK_REGEX = Regex(
-            """(?:https?://|www\.)[^\s<>"']+|(?:bit\.ly|t\.me|tinyurl\.com|goo\.gl)/[^\s<>"']+""",
-            RegexOption.IGNORE_CASE
-        )
     }
 }
