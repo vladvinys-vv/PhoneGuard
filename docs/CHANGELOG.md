@@ -57,6 +57,13 @@
   (`model/FirewallRulePolicy.kt`), менеджер делегирует в неё — поведение то же. 9 тестов, включая
   противоречивые состояния из импорта настроек/старой базы («только Wi-Fi» и «только мобильный»
   одновременно, `blockWifi` вместе с `allowWifiOnly`).
+- **Скоринг риска spyware исполняется тестами.** Уровень (`CRITICAL` при Device Admin + службе
+  доступности, `HIGH` за «что-то одно», изменённый APK, debug-подпись у sideload, любые два
+  признака; `MEDIUM` за один; иначе `LOW`) и общий балл `0..100` жили в `SpywareCheckRepository`
+  рядом с DAO и `PackageManager`. Вынесены в `SpywareRiskScoring` (10 тестов), репозиторий
+  делегирует. Признаки сравниваются как множество — дубликат индикатора больше не «дотягивает»
+  приложение до `HIGH`. Enum'ы `RiskLevel`/`SpywareIndicator` переехали из `SpywareApp.kt`
+  (где рядом `Drawable`) в отдельный файл без Android-типов.
 - **Разбор удалённых SMS-команд `#PG:PIN:COMMAND` исполняется тестами.** Логика жила прямо в
   `SmsCommandReceiver` (`BroadcastReceiver` на JVM не проверить), хотя от неё зависит удалённая
   блокировка, тревога и **стирание данных**. Вынесена в чистый `SmsRemoteCommand`
@@ -88,11 +95,11 @@
   а расхождение утверждений между README/DEVELOPMENT/CHANGELOG — это ошибка). Негативно
   протестировано: подмена чисел даёт ошибку с номером строки. Стоит в `check_all.sh`,
   в job `static-checks` GitHub Actions и в `codemagic.yaml`.
-- **Тесты на непокрытое (+68):** `OverlayAttackCheckTest` (+1 на разделители в именах),
+- **Тесты на непокрытое (+78):** `OverlayAttackCheckTest` (+1 на разделители в именах),
   `IntrusionDetectorTest` (+2: порядок и улики сигналов, пустой вход) и новый
   `ThreatIntelModelsTest` (+4: какие вердикты блокируют трафик, что попадает в `unknown`) и
   `PhishingHeuristicsTest` (+9: ссылки, ключевые слова, голые домены, ложные срабатывания).
-  Всего в JVM-прогоне теперь **238 тестов в 26 файлах**.
+  Всего в JVM-прогоне теперь **248 тестов в 27 файлах**.
 - **Заглушки, которые втащили в прогон ещё три файла тестов:** `android.provider.Settings`
   (+ `ContentResolver`), `android.content.pm.PackageManager`/`PackageInfo`/`ApplicationInfo`,
   `android.app.AppOpsManager` с `Context.getSystemService`, `dagger.hilt.android.qualifiers
@@ -115,12 +122,12 @@
   реализация: `static_audit.py` больше не дублирует regex-версию, а вызывает этот модуль. Добавлен
   в `./tools/check_all.sh`, в job `static-checks` GitHub Actions и в `codemagic.yaml`.
 - **`tools/test_coverage_map.py` — карта тестового покрытия без Gradle.** Показывает, какие
-  классы вообще упомянуты в тестах (сейчас 108 из 169), и отдельно — «логика без тестов» против
+  классы вообще упомянуты в тестах (сейчас 110 из 170), и отдельно — «логика без тестов» против
   «UI/Hilt/сервисы, которые проверяются Robolectric и вручную». Честно названо картой, а не
   процентом покрытия: упоминание класса не доказывает покрытие ветвей.
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 238 тестов в 26 файлах. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 248 тестов в 27 файлах. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
   `android.util.Base64`/`android.content.Context`, авто-генерация заглушки `R` и разворачивание
   `import org.junit.Assert.*` втаскивают под прогон модели, конвертеры, хеширование PIN, разбор улик
@@ -174,7 +181,7 @@
 - **`docs/CI_WEBHOOKS.md`:** таблица «входящий trigger / исходящий notify», схема payload, проверка
   подписи на Python/Node, настройка Codemagic и GitHub, локальный сценарий проверки.
 - **`tools/kotlin_frontend_check.py` — проверка настоящим компилятором.** Запускает `kotlinc 2.1`
-  на всех 225 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
+  на всех 228 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
   вызванные отсутствующими библиотеками (`-Xrender-internal-diagnostic-names` + список ожидаемых
   имён с пояснениями). Найдено и исправлено 7 ошибок компиляции, которые не видел регексп-аудит
   (см. Fixed). Без `kotlinc` скрипт завершается с кодом 0 и подсказкой, как его получить.

@@ -60,20 +60,11 @@ class SpywareCheckRepository @Inject constructor(
                 app.copy(indicators = indicators, riskLevel = riskLevel)
             }
 
-            val totalScore = combinedApps.sumOf {
-                when (it.riskLevel) {
-                    RiskLevel.LOW -> 10
-                    RiskLevel.MEDIUM -> 25
-                    RiskLevel.HIGH -> 50
-                    RiskLevel.CRITICAL -> 100
-                }
-            }
-
             SpywareScanResult(
                 apps = combinedApps,
                 // Сумма по приложениям может превысить 100 (10 sideloaded приложений = 250),
-                // а на экране это шкала 0..100.
-                totalRiskScore = totalScore.coerceIn(0, 100),
+                // а на экране это шкала 0..100 — обрезка живёт в SpywareRiskScoring.
+                totalRiskScore = SpywareRiskScoring.totalScore(combinedApps.map { it.riskLevel }),
                 deviceAdminApps = deviceAdminApps,
                 accessibilityServices = accessibilityServices,
                 sideloadedApps = sideloadedApps,
@@ -250,15 +241,7 @@ class SpywareCheckRepository @Inject constructor(
         }
     }
 
-    private fun calculateRiskLevel(indicators: List<SpywareIndicator>): RiskLevel {
-        return when {
-            indicators.contains(SpywareIndicator.DEVICE_ADMIN) && indicators.contains(SpywareIndicator.ACCESSIBILITY_SERVICE) -> RiskLevel.CRITICAL
-            indicators.contains(SpywareIndicator.DEVICE_ADMIN) || indicators.contains(SpywareIndicator.ACCESSIBILITY_SERVICE) -> RiskLevel.HIGH
-            indicators.contains(SpywareIndicator.MODIFIED_AFTER_INSTALL) -> RiskLevel.HIGH
-            indicators.containsAll(listOf(SpywareIndicator.DEBUG_SIGNATURE, SpywareIndicator.SIDELOADED)) -> RiskLevel.HIGH
-            indicators.size >= 2 -> RiskLevel.HIGH
-            indicators.isNotEmpty() -> RiskLevel.MEDIUM
-            else -> RiskLevel.LOW
-        }
-    }
+    private fun calculateRiskLevel(indicators: List<SpywareIndicator>): RiskLevel =
+        SpywareRiskScoring.level(indicators)
+
 }
