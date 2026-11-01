@@ -29,17 +29,23 @@
   совпадают, а `Bank`, `Fridays`, `Wikipedia` — по-прежнему нет. Дефект нашёлся сразу, как только
   `OverlayAttackCheckTest` перестал пропускаться в JVM-прогоне.
 ### Added
+- **Матрица правил файрвола теперь исполняется тестами.** `shouldBlockAllTraffic` жила в
+  `FirewallRulesManager` рядом с DAO, `PackageManager` и Flow, поэтому её тесты требуют MockK и в
+  JVM-прогон не попадали. Логика вынесена в чистую `FirewallRule.blocksAllTraffic(isOnWifi)`
+  (`model/FirewallRulePolicy.kt`), менеджер делегирует в неё — поведение то же. 9 тестов, включая
+  противоречивые состояния из импорта настроек/старой базы («только Wi-Fi» и «только мобильный»
+  одновременно, `blockWifi` вместе с `allowWifiOnly`).
 - **`tools/docs_check.py` — числа в документации против кода.** «217 файлов», «106 из 167 классов»,
   «N тестов в M файлах» старели молча: я сам дважды правил их руками после добавления файлов.
   Теперь они проверяются автоматически (карта покрытия считается тем же `test_coverage_map.py`,
   а расхождение утверждений между README/DEVELOPMENT/CHANGELOG — это ошибка). Негативно
   протестировано: подмена чисел даёт ошибку с номером строки. Стоит в `check_all.sh`,
   в job `static-checks` GitHub Actions и в `codemagic.yaml`.
-- **Тесты на непокрытое (+17):** `OverlayAttackCheckTest` (+1 на разделители в именах),
+- **Тесты на непокрытое (+26):** `OverlayAttackCheckTest` (+1 на разделители в именах),
   `IntrusionDetectorTest` (+2: порядок и улики сигналов, пустой вход) и новый
   `ThreatIntelModelsTest` (+4: какие вердикты блокируют трафик, что попадает в `unknown`) и
   `PhishingHeuristicsTest` (+9: ссылки, ключевые слова, голые домены, ложные срабатывания).
-  Всего в JVM-прогоне теперь **187 тестов в 20 файлах**.
+  Всего в JVM-прогоне теперь **196 тестов в 21 файле**.
 - **Заглушки, которые втащили в прогон ещё три файла тестов:** `android.provider.Settings`
   (+ `ContentResolver`), `android.content.pm.PackageManager`/`PackageInfo`/`ApplicationInfo`,
   `android.app.AppOpsManager` с `Context.getSystemService`, `dagger.hilt.android.qualifiers
@@ -67,7 +73,7 @@
   процентом покрытия: упоминание класса не доказывает покрытие ветвей.
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 187 тестов в 20 файлах. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 196 тестов в 21 файле. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
   `android.util.Base64`/`android.content.Context`, авто-генерация заглушки `R` и разворачивание
   `import org.junit.Assert.*` втаскивают под прогон модели, конвертеры, хеширование PIN, разбор улик
@@ -121,7 +127,7 @@
 - **`docs/CI_WEBHOOKS.md`:** таблица «входящий trigger / исходящий notify», схема payload, проверка
   подписи на Python/Node, настройка Codemagic и GitHub, локальный сценарий проверки.
 - **`tools/kotlin_frontend_check.py` — проверка настоящим компилятором.** Запускает `kotlinc 2.1`
-  на всех 217 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
+  на всех 219 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
   вызванные отсутствующими библиотеками (`-Xrender-internal-diagnostic-names` + список ожидаемых
   имён с пояснениями). Найдено и исправлено 7 ошибок компиляции, которые не видел регексп-аудит
   (см. Fixed). Без `kotlinc` скрипт завершается с кодом 0 и подсказкой, как его получить.
