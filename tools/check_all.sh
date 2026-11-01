@@ -34,6 +34,8 @@ step "sync_strings.py --check"
 python3 tools/sync_strings.py --check || failed=1
 
 step "kotlin_frontend_check.py (опционально)"
+# Классификация сообщений компилятора не требует kotlinc — проверяем её всегда.
+python3 tools/kotlin_frontend_check.py --self-test || failed=1
 if command -v kotlinc >/dev/null 2>&1; then
     # android.jar делает проверку строже; скрипт берёт его из --android-jar / $ANDROID_JAR /
     # $ANDROID_HOME. Скачать его без dl.google.com: ./tools/fetch_android_jar.sh

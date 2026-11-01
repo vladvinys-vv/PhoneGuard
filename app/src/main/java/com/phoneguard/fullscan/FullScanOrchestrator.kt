@@ -16,6 +16,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -522,7 +523,14 @@ class FullScanOrchestrator @Inject constructor(
             val privacyApps = withContext(Dispatchers.IO) { privacyScannerRepository.getInstalledApps().first() }
 
             emit(FullScanState.Progress(12, totalSteps, ScanStage.SPYWARE))
-            val spywareApps = withContext(Dispatchers.IO) { spywareCheckRepository.scanForSpyware().first() }
+            // `scanForSpyware()` сначала отдаёт пустой «placeholder» для UI, а затем результат
+            // сканирования: `first()` возвращал именно пустышку, поэтому проверка шпионского ПО
+            // в полном сканировании никогда ничего не находила. Нужен последний элемент — `.last()`,
+            // и из результата берутся сами приложения (`apps`), а не объект целиком: `buildReport`
+            // ждёт `List<SpywareApp>`, и передача `SpywareScanResult` вообще не компилировалась.
+            val spywareApps = withContext(Dispatchers.IO) {
+                spywareCheckRepository.scanForSpyware().last().apps
+            }
 
             emit(FullScanState.Progress(13, totalSteps, ScanStage.FIREWALL))
             // Два запроса к БД параллельно: раньше `async` создавался внутри

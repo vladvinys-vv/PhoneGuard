@@ -27,6 +27,16 @@ Android SDK. Этот скрипт запускает настоящий ком�
     npm pack kotlin-compiler@2.1.0 && tar xzf kotlin-compiler-2.1.0.tgz
     export PATH="$PWD/package/bin:$PATH"
 
+## Заглушки kotlinx.coroutines
+
+Без корутин на classpath типы `Flow`, `StateFlow`, `first()`, `stateIn()` не разрешаются,
+и настоящие ошибки типов **молча теряются**: именно так в проект попал
+`SecurityService.getTrustedContacts()` (`isBlank()` у `String?`) и передача
+`SpywareScanResult` туда, где ждали `List<SpywareApp>` — app-модуль не собирался, а
+проверка показывала «0 проблем». Поэтому скрипт собирает `tools/stubs/*.kt`
+(сигнатуры API корутин без реализации) в jar и подкладывает его в classpath.
+С `--no-stubs` можно посмотреть, что видно на «голом» classpath.
+
 С `--android-jar` (или `ANDROID_JAR`/`ANDROID_HOME`) проверка становится строже: ошибки
 в сигнатурах `android.*` перестают быть «шумом». Так были найдены `Geocoder.getFromLocation()`
 без проверки на null и два обращения к `PackageInfo.applicationInfo` без проверки.
@@ -36,12 +46,14 @@ Android SDK. Этот скрипт запускает настоящий ком�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -122,11 +134,82 @@ ANDROID_TYPED_REAL = [
 ]
 
 
+# Диагностики, которые зависят от разрешённости типов. Пока `Flow` не разрешался,
+# любые несовпадения списывались на «внешние» типы, и реальные ошибки типов терялись.
+TYPED_DIAGS = {
+    "TYPE_MISMATCH",
+    "ARGUMENT_TYPE_MISMATCH",
+    "RETURN_TYPE_MISMATCH",
+    "UNSAFE_CALL",
+    "NULL_FOR_NONNULL_TYPE",
+}
+# Упоминание типа из недоступной библиотеки — значит, вывод типа шёл через неё.
+EXTERNAL_TYPE = re.compile(
+    r"android\.|androidx\.|com\.google|dagger|kotlinx\.|okhttp3|org\.json|retrofit|realm|"
+    r"app\.celzero|net\.sqlcipher|org\.bouncycastle"
+)
+# Заглушки и неразрешённые generic-вызовы дают сообщения вида «'R', but 'K'», «'kotlin.Any'».
+TYPE_VARIABLE_NOISE = re.compile(
+    r"kotlin\.Any|kotlin\.Nothing|kotlin\.Unit|MatchGroup|Function\d|"
+    r"'[A-Z]\??'|<[A-Z](,|>)|ERROR CLASS"
+)
+# Тип проекта в сообщении — значит, вывод типов дошёл до наших классов и ошибка настоящая.
+PROJECT_TYPE = re.compile(r"com\.phoneguard\.[\w.]+")
+
+
+def stub_typed_real(name: str, message: str) -> bool:
+    """Настоящая ошибка типов: в сообщении есть наш тип, а не «шумовой» внешний.
+
+    «Шумовые» сообщения появляются, когда получатель выражения не разрешён
+    (DataStore, Room, Compose): тогда компилятор примеряет stdlib-перегрузки и
+    сообщает про `Char`/`Any`/`R` вместо реального типа.
+    """
+    if name not in TYPED_DIAGS:
+        return False
+    if EXTERNAL_TYPE.search(message) or TYPE_VARIABLE_NOISE.search(message):
+        return False
+    if PROJECT_TYPE.search(message):
+        return True
+    # `isBlank()` у `Flow<String?>.first()`: в сообщении только kotlin-тип.
+    return name == "UNSAFE_CALL" and "nullable receiver of type 'kotlin." in message
+
+
 def find_kotlinc() -> str | None:
     explicit = os.environ.get("KOTLINC")
     if explicit and Path(explicit).exists():
         return explicit
     return shutil.which("kotlinc")
+
+
+
+STUBS_DIR = ROOT / "tools/stubs"
+
+
+def build_stubs_jar(kotlinc: str) -> str | None:
+    """Компилирует `tools/stubs/*.kt` в jar (кеш по хешу исходников)."""
+    sources = sorted(STUBS_DIR.glob("*.kt"))
+    if not sources:
+        return None
+    digest = hashlib.sha256()
+    for path in sources:
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    cache = Path(tempfile.gettempdir()) / f"phoneguard-stubs-{digest.hexdigest()[:16]}.jar"
+    if cache.is_file():
+        return str(cache)
+
+    with tempfile.TemporaryDirectory() as out:
+        cmd = [kotlinc, "-nowarn", "-jvm-target", "17", "-d", out, *[str(p) for p in sources]]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            print("kotlin_frontend_check: не удалось собрать заглушки корутин")
+            print((proc.stdout or "") + (proc.stderr or ""))
+            return None
+        with zipfile.ZipFile(cache, "w", zipfile.ZIP_DEFLATED) as jar:
+            for file in Path(out).rglob("*"):
+                if file.is_file():
+                    jar.write(file, file.relative_to(out).as_posix())
+    return str(cache)
 
 
 def collect_sources(scope: str) -> list[str]:
@@ -220,6 +303,85 @@ def missing_import(path: str, line: str, message: str, jdk: set[str], project: d
     return None
 
 
+# Проверка самой классификации: сюда попадают настоящие сообщения компилятора,
+# которые уже встречались в проекте (реальные ошибки и «шум» от неразрешённых типов).
+SELF_TEST_CASES: list[tuple[str, str, bool]] = [
+    (
+        "UNSAFE_CALL",
+        "Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable "
+        "receiver of type 'kotlin.String?'.",
+        True,
+    ),
+    (
+        "ARGUMENT_TYPE_MISMATCH",
+        "Argument type mismatch: actual type is 'com.phoneguard.model.SpywareScanResult', "
+        "but 'kotlin.collections.List<com.phoneguard.model.SpywareApp>' was expected.",
+        True,
+    ),
+    (
+        "RETURN_TYPE_MISMATCH",
+        "Return type mismatch: expected 'com.phoneguard.data.FullScanRepository', "
+        "actual 'com.phoneguard.data.ScanHistoryEntity'.",
+        True,
+    ),
+    (
+        "ARGUMENT_TYPE_MISMATCH",
+        "Argument type mismatch: actual type is 'kotlin.Any', but 'kotlin.Int' was expected.",
+        False,
+    ),
+    (
+        "ARGUMENT_TYPE_MISMATCH",
+        "Argument type mismatch: actual type is 'kotlin.Int', but 'kotlin.Char' was expected.",
+        False,
+    ),
+    (
+        "ARGUMENT_TYPE_MISMATCH",
+        "Argument type mismatch: actual type is 'R', but 'K' was expected.",
+        False,
+    ),
+    (
+        "NULL_FOR_NONNULL_TYPE",
+        "Null cannot be a value of a non-null type 'kotlin.sequences.Sequence<T>'.",
+        False,
+    ),
+    (
+        "TYPE_MISMATCH",
+        "Type mismatch: inferred type is 'ERROR CLASS: Symbol not found for CancellationException', "
+        "but 'kotlin.Throwable' was expected.",
+        False,
+    ),
+    (
+        "TYPE_MISMATCH",
+        "Type mismatch: inferred type is 'android.os.Bundle?', but 'kotlin.String' was expected.",
+        False,
+    ),
+    (
+        "UNSAFE_CALL",
+        "Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable "
+        "receiver of type 'android.content.Context?'.",
+        False,
+    ),
+    ("UNRESOLVED_REFERENCE", "Unresolved reference 'X'.", False),
+]
+
+
+def self_test() -> int:
+    """Проверяет классификацию диагностик на сообщениях реального компилятора."""
+    failures = []
+    for name, message, expected in SELF_TEST_CASES:
+        actual = stub_typed_real(name, message)
+        if actual != expected:
+            failures.append((name, message, expected, actual))
+    if failures:
+        for name, message, expected, actual in failures:
+            print(f"kotlin_frontend_check --self-test: [{name}] ожидалось {expected}, получено {actual}")
+            print(f"  {message}")
+        return 1
+    print(f"kotlin_frontend_check --self-test: ok ({len(SELF_TEST_CASES)} сообщений, "
+          "реальные ошибки типов не путаются с шумом неразрешённых зависимостей)")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope", choices=["main", "all"], default="all")
@@ -230,7 +392,20 @@ def main() -> int:
              "и проверяет реальные сигнатуры android.* API (по умолчанию берётся "
              "из $ANDROID_JAR / $ANDROID_HOME/platforms)",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="проверить классификацию диагностик на сохранённых сообщениях компилятора",
+    )
+    parser.add_argument(
+        "--no-stubs",
+        action="store_true",
+        help="не подкладывать заглушки kotlinx.coroutines (видно только то, что разрешается без них)",
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
 
     kotlinc = find_kotlinc()
     if kotlinc is None:
@@ -244,6 +419,8 @@ def main() -> int:
         return 0
 
     android_jar = find_android_jar(args.android_jar)
+    stubs_jar = None if args.no_stubs else build_stubs_jar(kotlinc)
+    classpath = ":".join(p for p in (android_jar, stubs_jar) if p)
     with tempfile.TemporaryDirectory() as out:
         cmd = [
             kotlinc,
@@ -251,8 +428,8 @@ def main() -> int:
             "-jvm-target", "17",
             "-nowarn",
         ]
-        if android_jar:
-            cmd += ["-classpath", android_jar]
+        if classpath:
+            cmd += ["-classpath", classpath]
         cmd += ["-d", out, *sources]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         log = (proc.stdout or "") + (proc.stderr or "")
@@ -272,7 +449,9 @@ def main() -> int:
             if hint:
                 real.append(f"{entry} -> {hint}")
                 continue
-        if name in ALWAYS_REAL or name not in EXPECTED:
+        if stub_typed_real(name, m.group("msg")):
+            real.append(entry)
+        elif name in ALWAYS_REAL or name not in EXPECTED:
             real.append(entry)
         elif android_jar and any(
             name_re.match(name) and msg_re.search(m.group("msg"))
@@ -288,6 +467,8 @@ def main() -> int:
         f"android.jar: {android_jar}" if android_jar
         else "нет Android SDK на classpath"
     )
+    if stubs_jar:
+        classpath_note += ", заглушки корутин подключены"
     print(f"\n{len(real)} problem(s), {noise} ожидаемых диагностик "
           f"({classpath_note}), {len(sources)} файлов")
     if not real:

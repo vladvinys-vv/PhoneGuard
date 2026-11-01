@@ -45,26 +45,57 @@ class AntiTheftViewModel @Inject constructor(
         checkDeviceAdminStatus()
     }
 
+    /** Настройки PIN/SIM, которые приходят первым `combine`. */
+    private data class PinSettings(
+        val hasPin: Boolean,
+        val backupNumber: String?,
+        val simLock: Boolean,
+        val photoEnabled: Boolean
+    )
+
+    /** Настройки тревоги, которые приходят вторым `combine`. */
+    private data class AlarmSettings(
+        val remoteAlarm: Boolean,
+        val shoulderSurfer: Boolean,
+        val isPro: Boolean
+    )
+
+    /**
+     * Подписка на настройки экрана.
+     *
+     * Раньше здесь был один `combine` на **семь** потоков. В kotlinx.coroutines есть
+     * перегрузки только для 2–5 потоков (и `vararg`-вариант для одинаковых типов),
+     * поэтому такой вызов не компилируется: сборка падала на этом файле. Теперь
+     * потоки сгруппированы 4 + 3 и объединяются вторым `combine`.
+     */
     private fun loadState() {
         viewModelScope.launch {
-            combine(
+            val pinSettings = combine(
                 preferencesManager.hasPinSet,
                 preferencesManager.backupNumber,
                 preferencesManager.isSimLockEnabled,
-                preferencesManager.isPhotoOnFailedAttemptsEnabled,
+                preferencesManager.isPhotoOnFailedAttemptsEnabled
+            ) { hasPin, backupNumber, simLock, photoEnabled ->
+                PinSettings(hasPin, backupNumber, simLock, photoEnabled)
+            }
+            val alarmSettings = combine(
                 preferencesManager.isRemoteAlarmEnabled,
                 preferencesManager.isShoulderSurferEnabled,
                 preferencesManager.isPro
-            ) { hasPin, backupNumber, simLock, photoEnabled, remoteAlarm, shoulderSurfer, isPro ->
+            ) { remoteAlarm, shoulderSurfer, isPro ->
+                AlarmSettings(remoteAlarm, shoulderSurfer, isPro)
+            }
+
+            combine(pinSettings, alarmSettings) { pin, alarm ->
                 _uiState.update { state ->
                     state.copy(
-                        hasPin = hasPin,
-                        backupNumber = backupNumber ?: "",
-                        isSimLockEnabled = simLock,
-                        isPhotoEnabled = photoEnabled,
-                        isRemoteAlarmEnabled = remoteAlarm,
-                        isShoulderSurferEnabled = shoulderSurfer,
-                        isPro = isPro
+                        hasPin = pin.hasPin,
+                        backupNumber = pin.backupNumber ?: "",
+                        isSimLockEnabled = pin.simLock,
+                        isPhotoEnabled = pin.photoEnabled,
+                        isRemoteAlarmEnabled = alarm.remoteAlarm,
+                        isShoulderSurferEnabled = alarm.shoulderSurfer,
+                        isPro = alarm.isPro
                     )
                 }
             }.collect()
