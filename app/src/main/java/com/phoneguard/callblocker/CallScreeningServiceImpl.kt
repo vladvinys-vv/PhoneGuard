@@ -123,6 +123,12 @@ class CallScreeningServiceImpl : CallScreeningService() {
         }
     }
 
+    /**
+     * Собирает факты о звонке и отдаёт решение [CallBlockDecision].
+     *
+     * Чтения БД и настроек идут с короткими замыканиями: если номер в белом списке,
+     * остальные запросы не выполняются вовсе (система ждёт ответа ограниченное время).
+     */
     private suspend fun checkShouldBlockNumber(rawNumber: String?): Boolean {
         val blockedNumberDao = appDatabase.blockedNumberDao()
         val normalized = rawNumber?.let { phoneNumberNormalizer.canonical(it) }
@@ -131,41 +137,33 @@ class CallScreeningServiceImpl : CallScreeningService() {
             normalized?.let { add(it) }
         }
 
-        // 1. Белый список имеет приоритет над любыми правилами блокировки.
-        if (candidates.isNotEmpty() && blockedNumberDao.isWhitelistedAny(candidates)) {
-            return false
-        }
+        val whitelisted = candidates.isNotEmpty() && blockedNumberDao.isWhitelistedAny(candidates)
+        val blacklisted = !whitelisted && candidates.isNotEmpty() &&
+            blockedNumberDao.isBlacklistedAny(candidates)
+        val spamDatabase = !whitelisted && !blacklisted && normalized != null &&
+            spamNumberRepository.isSpam(normalized)
 
-        // 2. Чёрный список.
-        if (candidates.isNotEmpty() && blockedNumberDao.isBlacklistedAny(candidates)) {
-            return true
-        }
+        val hidden = rawNumber.isNullOrBlank()
+        // Настройки нужны только если номер не отсечён списками и спам-базой.
+        val needsPolicy = !whitelisted && !blacklisted && !spamDatabase
+        val blockUnknown = needsPolicy && preferencesManager.blockUnknownNumbers.first()
+        val blockHidden = needsPolicy && hidden && preferencesManager.blockHiddenNumbers.first()
+        val blockInternational = needsPolicy && !hidden && normalized != null &&
+            preferencesManager.blockInternationalNumbers.first()
 
-        // 3. Локальная спам-база (assets/spam_numbers.json + пользовательские записи).
-        if (normalized != null && spamNumberRepository.isSpam(normalized)) {
-            return true
-        }
-
-        val blockUnknown = preferencesManager.blockUnknownNumbers.first()
-        val blockHidden = preferencesManager.blockHiddenNumbers.first()
-
-        if (rawNumber.isNullOrBlank()) {
-            // Скрытый номер: `handle` отсутствует либо пустой.
-            return blockHidden || blockUnknown
-        }
-
-        // 4. Номер не определяется провайдером (например, "unknown"/"private").
-        if (normalized == null) {
-            return blockUnknown
-        }
-
-        // 5. Международные номера.
-        val blockInternational = preferencesManager.blockInternationalNumbers.first()
-        if (blockInternational && isForeignNumber(normalized)) {
-            return true
-        }
-
-        return false
+        return CallBlockDecision.shouldBlock(
+            CallBlockDecision.Facts(
+                whitelisted = whitelisted,
+                blacklisted = blacklisted,
+                spamDatabase = spamDatabase,
+                callerIdHidden = hidden,
+                numberParsed = normalized != null,
+                blockUnknown = blockUnknown,
+                blockHidden = blockHidden,
+                blockInternational = blockInternational,
+                foreignNumber = blockInternational && isForeignNumber(normalized.orEmpty())
+            )
+        )
     }
 
     /**

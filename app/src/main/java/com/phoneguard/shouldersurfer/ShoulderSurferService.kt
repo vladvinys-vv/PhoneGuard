@@ -14,6 +14,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.google.mlkit.vision.common.InputImage
@@ -206,12 +207,22 @@ class ShoulderSurferService : LifecycleService() {
 
     private fun stopDetection() {
         analysisJob?.cancel()
-        try {
-            val cameraProvider = ProcessCameraProvider.getInstance(this).get()
-            cameraProvider.unbindAll()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to stop camera", e)
+        // Раньше здесь стоял `ProcessCameraProvider.getInstance(this).get()` прямо в
+        // main-потоке: если провайдер камеры ещё инициализировался (а останавливать
+        // слежку могут сразу после старта), главный поток ждал — вплоть до ANR.
+        // Теперь развязка асинхронная, как в StealthCameraService.
+        val future = runCatching { ProcessCameraProvider.getInstance(this) }.getOrNull()
+        if (future == null) {
+            Log.e(TAG, "Camera provider unavailable while stopping")
+            return
         }
+        future.addListener(
+            {
+                runCatching { future.get().unbindAll() }
+                    .onFailure { Log.e(TAG, "Failed to stop camera", it) }
+            },
+            ContextCompat.getMainExecutor(this)
+        )
         Log.d(TAG, "Shoulder surfer detection stopped")
     }
 

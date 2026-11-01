@@ -6,7 +6,6 @@ import android.provider.MediaStore
 import com.phoneguard.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,8 +23,6 @@ class FileSystemScanCheck @Inject constructor(
         val reason: String,
         val severity: Int
     )
-
-    private val suspiciousExtensions = listOf("apk", "dex", "jar", "vbs", "ps1", "sh", "bat")
 
     fun performScan(): FileScanResult {
         val details = mutableListOf<String>()
@@ -55,7 +52,17 @@ class FileSystemScanCheck @Inject constructor(
                 val nomediaDirs = findNomediaDirectories(dcimDir)
                 nomediaDirs.forEach { dir ->
                     val filesInDir = dir.listFiles() ?: emptyArray()
-                    if (filesInDir.any { it.extension.lowercase(Locale.ROOT) in suspiciousExtensions || it.canExecute() }) {
+                    // Решение — в FileSystemHeuristics: каталоги внутри .nomedia-папки
+                    // больше не считаются «исполняемыми файлами» (у папок всегда есть
+                    // бит выполнения, из-за этого были ложные находки).
+                    val entries = filesInDir.map { child ->
+                        FileSystemHeuristics.Entry(
+                            name = child.name,
+                            isDirectory = child.isDirectory,
+                            canExecute = !child.isDirectory && child.canExecute()
+                        )
+                    }
+                    if (FileSystemHeuristics.containsSuspiciousEntries(entries)) {
                         suspiciousFiles.add(
                             SuspiciousFile(
                                 dir.absolutePath,
@@ -133,10 +140,8 @@ class FileSystemScanCheck @Inject constructor(
     }
 
     /** Лежит ли файл в публичном каталоге Download (или Downloads). */
-    private fun isInsideDownloads(path: String): Boolean {
-        val normalized = path.replace('\\', '/').lowercase(Locale.ROOT)
-        return DOWNLOAD_DIR_MARKERS.any { marker -> normalized.contains(marker) }
-    }
+    private fun isInsideDownloads(path: String): Boolean =
+        FileSystemHeuristics.isInsideDownloads(path)
 
     private fun findNomediaDirectories(dir: File, depth: Int = 0): List<File> {
         if (depth > MAX_DIRECTORY_DEPTH) return emptyList()
@@ -157,9 +162,6 @@ class FileSystemScanCheck @Inject constructor(
     }
 
     private companion object {
-        /** Каталоги-«песочницы» для скачанных APK. */
-        val DOWNLOAD_DIR_MARKERS = listOf("/download/", "/downloads/")
-
         /** Ограничение рекурсии: защита от циклов символических ссылок. */
         const val MAX_DIRECTORY_DEPTH = 8
     }

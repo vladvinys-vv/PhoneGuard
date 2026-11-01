@@ -56,7 +56,13 @@ class LocationProvider @Inject constructor(
      */
     suspend fun requestFreshLocation(timeoutMs: Long = FRESH_LOCATION_TIMEOUT_MS): Location? =
         suspendCancellableCoroutine { cont ->
-            if (!hasLocationPermission()) {
+            // PRIORITY_HIGH_ACCURACY при выданном только «примерном» разрешении
+            // бросает SecurityException, поэтому точность выбирается по разрешениям.
+            val accuracy = LocationAccuracyPolicy.accuracyFor(
+                fineGranted = hasFineLocationPermission(),
+                coarseGranted = hasCoarseLocationPermission()
+            )
+            if (accuracy == LocationAccuracyPolicy.Accuracy.NONE) {
                 cont.resume(null)
                 return@suspendCancellableCoroutine
             }
@@ -90,7 +96,11 @@ class LocationProvider @Inject constructor(
                 runCatching { fusedClient.removeLocationUpdates(callback) }
             }
 
-            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, UPDATE_INTERVAL_MS)
+            val priority = when (accuracy) {
+                LocationAccuracyPolicy.Accuracy.HIGH -> Priority.PRIORITY_HIGH_ACCURACY
+                else -> Priority.PRIORITY_BALANCED_POWER_ACCURACY
+            }
+            val locationRequest = LocationRequest.Builder(priority, UPDATE_INTERVAL_MS)
                 .setMinUpdateIntervalMillis(UPDATE_INTERVAL_MS)
                 .setMaxUpdates(1)
                 .build()
@@ -108,15 +118,18 @@ class LocationProvider @Inject constructor(
             }
         }
 
-    private fun hasLocationPermission(): Boolean {
-        val fine = ContextCompat.checkSelfPermission(
+    private fun hasLocationPermission(): Boolean =
+        hasFineLocationPermission() || hasCoarseLocationPermission()
+
+    private fun hasFineLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(
+
+    private fun hasCoarseLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        return fine || coarse
-    }
 
     companion object {
         private const val LAST_LOCATION_TIMEOUT_MS = 3_000L
