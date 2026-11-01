@@ -1616,6 +1616,62 @@ def check_notification_ids() -> None:
             )
 
 
+NULLABLE_FLOW_RE = re.compile(r'val\s+(\w+)\s*:\s*Flow<\s*[\w.]+\s*\?\s*>')
+FIRST_OF_FLOW_RE = re.compile(r'val\s+(\w+)\s*=\s*[\w.]+\.(\w+)\.first\(\)')
+NON_NULL_MEMBERS = (
+    'isBlank', 'isNotEmpty', 'length', 'trim', 'uppercase', 'lowercase', 'replace',
+    'startsWith', 'endsWith', 'toInt', 'toLong', 'toDouble', 'substring', 'indexOf', 'split',
+)
+
+
+def check_nullable_flow_use() -> None:
+    """Значение `Flow<...?>`, полученное через `first()`, нельзя использовать как non-null.
+
+    Офлайн-проверка фронтенда компилирует исходники без kotlinx.coroutines, поэтому
+    типы `Flow`, `first()`, `stateIn()` остаются неразрешёнными и настоящие ошибки
+    компиляции не всплывают. Так в `SecurityService.getTrustedContacts()` прожил код
+    `backupNumber.isBlank()` + `listOf(backupNumber)` при `backupNumber: Flow<String?>`
+    — это две ошибки типов («only safe (?.) calls are allowed on a nullable receiver»
+    и `List<String?>` вместо `List<String>`), то есть app-модуль не собирался.
+
+    Проверка ловит именно этот класс ошибок: вызов строкового/числового члена у
+    переменной из `nullable Flow`, если между присваиванием и вызовом нет
+    null-проверки (`!= null`, `?.`, `?:`, `isNullOrBlank()`).
+    """
+    files = [p for src in SRC_SETS if src.exists() for p in src.rglob('*.kt')]
+    nullable_props: set[str] = set()
+    for path in files:
+        nullable_props.update(NULLABLE_FLOW_RE.findall(strip_code(path.read_text(encoding='utf-8'))))
+    if not nullable_props:
+        return
+
+    members = '|'.join(NON_NULL_MEMBERS)
+    for path in files:
+        code = strip_code(path.read_text(encoding='utf-8'))
+        rel = path.relative_to(ROOT)
+        for assign in FIRST_OF_FLOW_RE.finditer(code):
+            var, flow = assign.group(1), assign.group(2)
+            if flow not in nullable_props:
+                continue
+            tail = code[assign.end():]
+            call_re = re.compile(r'(?<![\w?])' + re.escape(var) + r'\.(?:' + members + r')\b')
+            call = call_re.search(tail)
+            if call is None:
+                continue
+            between = tail[:call.start()]
+            guard_re = re.compile(
+                r'(?:' + re.escape(var) + r'\s*[!=]=\s*null'
+                r'|' + re.escape(var) + r'\??\.(?:isNullOrBlank|isNullOrEmpty|takeIf)'
+                r'|' + re.escape(var) + r'\s*\?:)'
+            )
+            if guard_re.search(between):
+                continue
+            ERRORS.append(
+                f"{rel}: `{var}` взято из `{flow}.first()`, а `{flow}` объявлен как Flow<nullable> — "
+                f"вызов `{var}.{call.group(0).split('.')[1]}()` без null-проверки не компилируется"
+            )
+
+
 def check_unreachable_screens() -> None:
     """`@Composable fun XxxScreen(...)`, который нигде не вызывается, — экран вне навигации.
 
@@ -1796,6 +1852,7 @@ def main() -> int:
     check_gradle_wiring()
     check_member_calls()
     check_notification_ids()
+    check_nullable_flow_use()
     check_deep_links()
     check_unreachable_screens()
     check_workflow_yaml()

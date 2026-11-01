@@ -138,8 +138,17 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
         }
     }
 
+    /**
+     * Доверенные номера для тревоги.
+     *
+     * `backupNumber` — `Flow<String?>`: настройка может быть не задана вовсе.
+     * Раньше здесь стояло `backupNumber.isBlank()` и `listOf(backupNumber)`, что
+     * не компилируется (`isBlank()` у `String?` и `List<String?>` вместо
+     * `List<String>`) — ошибку не ловил ни один чек, потому что kotlinx.coroutines
+     * отсутствует в офлайн-проверке фронтенда и тип `first()` не разрешался.
+     */
     override suspend fun getTrustedContacts(): List<String> {
         val backupNumber = preferencesManager.backupNumber.first()
-        return if (backupNumber.isBlank()) emptyList() else listOf(backupNumber)
+        return listOfNotNull(backupNumber?.takeIf { it.isNotBlank() })
     }
 }
