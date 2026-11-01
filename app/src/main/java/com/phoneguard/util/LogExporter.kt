@@ -6,8 +6,6 @@ import com.phoneguard.model.FirewallLog
 import com.phoneguard.model.ScanHistory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -36,6 +34,7 @@ object LogExporter {
         firewallLogs: List<FirewallLog>,
         scanHistory: List<ScanHistory>
     ): File? {
+        var file: File? = null
         return try {
             // getExternalFilesDir() возвращает null, если внешнее хранилище недоступно
             // (оно может быть отмонтировано) — File(null, …) давал относительный путь,
@@ -47,47 +46,18 @@ object LogExporter {
             // Locale.US: в некоторых локалях цифры в имени файла экзотические,
             // и файл потом неудобно искать/сортировать.
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val file = File(exportDir, "phoneguard_export_$timestamp.json")
+            val target = File(exportDir, "phoneguard_export_$timestamp.json")
+            file = target
 
-            val json = JSONObject()
-            val blockedArray = JSONArray()
-            blockedLogs.forEach { log ->
-                val obj = JSONObject()
-                obj.put("phoneNumber", log.phoneNumber)
-                obj.put("isSms", log.isSms)
-                obj.put("timestamp", log.timestamp)
-                blockedArray.put(obj)
+            // Пишем сразу в буфер файла: раньше JSON собирался в памяти
+            // (JSONArray + JSONObject + toString(2)) — три копии всех логов.
+            target.bufferedWriter().use { writer ->
+                ExportJson.write(writer, blockedLogs, firewallLogs, scanHistory)
             }
-            json.put("blockedLogs", blockedArray)
-
-            val firewallArray = JSONArray()
-            firewallLogs.forEach { log ->
-                val obj = JSONObject()
-                obj.put("packageName", log.packageName)
-                obj.put("appName", log.appName)
-                obj.put("ipAddress", log.ipAddress)
-                obj.put("domainName", log.domainName)
-                obj.put("timestamp", log.timestamp)
-                obj.put("connectionType", log.connectionType)
-                obj.put("trafficDirection", log.trafficDirection)
-                firewallArray.put(obj)
-            }
-            json.put("firewallLogs", firewallArray)
-
-            val scanArray = JSONArray()
-            scanHistory.forEach { scan ->
-                val obj = JSONObject()
-                obj.put("timestamp", scan.timestamp)
-                obj.put("riskScore", scan.riskScore)
-                obj.put("issuesFound", scan.issuesFound)
-                obj.put("reportJson", scan.reportJson)
-                scanArray.put(obj)
-            }
-            json.put("scanHistory", scanArray)
-
-            file.writeText(json.toString(2))
-            file
+            target
         } catch (e: Exception) {
+            // Недописанный файл не оставляем: он выглядит как успешная выгрузка.
+            runCatching { file?.delete() }
             null
         }
     }
