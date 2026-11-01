@@ -36,7 +36,10 @@ TEST = ROOT / "app/src/test/java"
 CACHE = Path(tempfile.gettempdir()) / "phoneguard-jvm-tests"
 
 # Префиксы импортов, которые шим закрывает заглушками.
-STUBBED_PREFIXES = ("androidx.room.", "androidx.annotation.", "javax.inject.", "kotlinx.coroutines.flow.")
+STUBBED_PREFIXES = (
+    "androidx.room.", "androidx.annotation.", "javax.inject.", "kotlinx.coroutines.flow.",
+    "android.util.Log", "android.os.Build", "android.os.SystemClock", "android.text.TextUtils",
+)
 
 # Импорты, которые без сети не разрешить даже заглушкой.
 BLOCKING_PREFIXES = (
@@ -203,6 +206,109 @@ object OnConflictStrategy { const val REPLACE: Int = 1; const val IGNORE: Int = 
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY) annotation class RequiresApi(val value: Int = 1)
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY) annotation class RequiresPermission(vararg val value: String = [])
 ''',
+    "android/util/Log.kt": '''package android.util
+
+/** Заглушка android.util.Log: пишет в stdout, чтобы падения были видны в выводе прогона. */
+object Log {
+    @JvmField val VERBOSE: Int = 2
+    @JvmField val DEBUG: Int = 3
+    @JvmField val INFO: Int = 4
+    @JvmField val WARN: Int = 5
+    @JvmField val ERROR: Int = 6
+
+    @JvmStatic fun v(tag: String, msg: String): Int = print(tag, msg) { "V" }
+    @JvmStatic fun d(tag: String, msg: String): Int = print(tag, msg) { "D" }
+    @JvmStatic fun i(tag: String, msg: String): Int = print(tag, msg) { "I" }
+    @JvmStatic fun w(tag: String, msg: String): Int = print(tag, msg) { "W" }
+    @JvmStatic fun e(tag: String, msg: String): Int = print(tag, msg) { "E" }
+    @JvmStatic fun v(tag: String, msg: String, tr: Throwable): Int = print(tag, "$msg ${tr.message}") { "V" }
+    @JvmStatic fun d(tag: String, msg: String, tr: Throwable): Int = print(tag, "$msg ${tr.message}") { "D" }
+    @JvmStatic fun i(tag: String, msg: String, tr: Throwable): Int = print(tag, "$msg ${tr.message}") { "I" }
+    @JvmStatic fun w(tag: String, msg: String, tr: Throwable): Int = print(tag, "$msg ${tr.message}") { "W" }
+    @JvmStatic fun e(tag: String, msg: String, tr: Throwable): Int = print(tag, "$msg ${tr.message}") { "E" }
+    @JvmStatic fun w(tag: String, tr: Throwable): Int = print(tag, "${tr.message}") { "W" }
+    @JvmStatic fun e(tag: String, tr: Throwable): Int = print(tag, "${tr.message}") { "E" }
+    @JvmStatic fun wtf(tag: String, msg: String): Int = print(tag, msg) { "WTF" }
+    @JvmStatic fun wtf(tag: String, msg: String, tr: Throwable): Int = print(tag, "$msg ${tr.message}") { "WTF" }
+    @JvmStatic fun isLoggable(tag: String, level: Int): Boolean = false
+
+    private fun print(tag: String, msg: String, level: () -> String): Int {
+        println("${level()}/$tag: $msg")
+        return 0
+    }
+}
+''',
+    "android/os/Build.kt": '''package android.os
+
+/** Заглушка android.os.Build: SDK_INT = 35 (targetSdk проекта), остальное — стабильные строки. */
+object Build {
+    object VERSION {
+        @JvmField val SDK_INT: Int = 35
+        @JvmField val RELEASE: String = "15"
+        @JvmField val CODENAME: String = "REL"
+        @JvmField val INCREMENTAL: String = "stub"
+        @JvmField val SECURITY_PATCH: String = "2026-11-01"
+        @JvmField val PREVIEW_SDK_INT: Int = 0
+    }
+
+    object VERSION_CODES {
+        const val BASE: Int = 1
+        const val LOLLIPOP: Int = 21
+        const val M: Int = 23
+        const val N: Int = 24
+        const val N_MR1: Int = 25
+        const val O: Int = 26
+        const val O_MR1: Int = 27
+        const val P: Int = 28
+        const val Q: Int = 29
+        const val R: Int = 30
+        const val S: Int = 31
+        const val S_V2: Int = 32
+        const val TIRAMISU: Int = 33
+        const val UPSIDE_DOWN_CAKE: Int = 34
+        const val VANILLA_ICE_CREAM: Int = 35
+        const val BAKLAVA: Int = 36
+        const val CUR_DEVELOPMENT: Int = 10000
+    }
+
+    @JvmField val MANUFACTURER: String = "Google"
+    @JvmField val BRAND: String = "google"
+    @JvmField val MODEL: String = "stub-model"
+    @JvmField val DEVICE: String = "stub-device"
+    @JvmField val PRODUCT: String = "stub-product"
+    @JvmField val HARDWARE: String = "stub-hw"
+    @JvmField val FINGERPRINT: String = "google/stub/stub:15/STUB/1:user/release-keys"
+    @JvmField val TAGS: String = "release-keys"
+    @JvmField val TYPE: String = "user"
+    @JvmField val ID: String = "STUB"
+    @JvmField val BOOTLOADER: String = "unknown"
+    @JvmField val HOST: String = "stub"
+    @JvmField val BOARD: String = "stub"
+    @JvmField val DISPLAY: String = "stub"
+    @JvmField val SUPPORTED_ABIS: Array<String> = arrayOf("arm64-v8a")
+    @JvmField val SUPPORTED_32_BIT_ABIS: Array<String> = arrayOf("armeabi-v7a")
+    @JvmField val SUPPORTED_64_BIT_ABIS: Array<String> = arrayOf("arm64-v8a")
+    @JvmField val TIME: Long = 0L
+    @JvmStatic fun getRadioVersion(): String = "stub-radio"
+}
+''',
+    "android/os/SystemClock.kt": '''package android.os
+
+object SystemClock {
+    @JvmStatic fun elapsedRealtime(): Long = System.nanoTime() / 1_000_000
+    @JvmStatic fun uptimeMillis(): Long = System.nanoTime() / 1_000_000
+    @JvmStatic fun currentThreadTimeMillis(): Long = System.nanoTime() / 1_000_000
+    @JvmStatic fun sleep(ms: Long) { Thread.sleep(ms) }
+}
+''',
+    "android/text/TextUtils.kt": '''package android.text
+
+object TextUtils {
+    @JvmStatic fun isEmpty(str: CharSequence?): Boolean = str == null || str.isEmpty()
+    @JvmStatic fun equals(a: CharSequence?, b: CharSequence?): Boolean = a?.toString() == b?.toString()
+    @JvmStatic fun join(delimiter: CharSequence, vararg tokens: Any?): String = tokens.joinToString(delimiter.toString())
+}
+''',
     "javax/inject/Inject.kt": '''package javax.inject
 
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CONSTRUCTOR, AnnotationTarget.FIELD, AnnotationTarget.FUNCTION)
@@ -256,8 +362,11 @@ def class_index() -> dict[str, tuple[Path, str]]:
         package = re.search(r"^package\s+([\w.]+)", source, re.M)
         if not package:
             continue
-        for name in re.findall(r"^(?:internal |private |public |abstract |open |sealed |data |enum )*"
-                               r"(?:class|object|interface) (\w+)", source, re.M):
+        names = re.findall(r"^(?:internal |private |public |abstract |open |sealed |data |enum )*"
+                           r"(?:class|object|interface) (\w+)", source, re.M)
+        # Расширения и top-level функции (`fun IntrusionEventEntity.toIntrusionEvent()`)
+        names += re.findall(r"^(?:internal |private |public )?fun (?:<[^>]+> )?(?:[\w.]+\.)?(\w+)\(", source, re.M)
+        for name in names:
             index.setdefault(name, (path, package.group(1)))
     return index
 
