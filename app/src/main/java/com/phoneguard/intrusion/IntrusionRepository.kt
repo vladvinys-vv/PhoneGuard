@@ -12,7 +12,6 @@ class IntrusionRepository @Inject constructor(
     private val intrusionEventDao: IntrusionEventDao,
     private val intrusionDetector: IntrusionDetector,
     private val intrusionResponseOrchestrator: IntrusionResponseOrchestrator,
-    private val honeypotManager: HoneypotManager,
     private val intrusionResponseExecutor: IntrusionResponseExecutor
 ) {
     /**
@@ -33,10 +32,11 @@ class IntrusionRepository @Inject constructor(
         events.forEach { event ->
             intrusionEventDao.insert(event.toEntity())
             val actions = intrusionResponseOrchestrator.plan(event)
+            // Приманки создаёт сам исполнитель (действие `CreateHoneypot`) и только когда
+            // honeypot включён в настройках. Здесь раньше стоял безусловный второй вызов
+            // `honeypotManager.createDecoys(...)`: файлы появлялись даже при выключенной
+            // защите, а для одного события создавались два набора приманок.
             intrusionResponseExecutor.execute(event, actions)
-            // Приманки действительно создаются (раньше здесь считались только имена,
-            // и файлы не появлялись вовсе).
-            honeypotManager.createDecoys(context, event)
         }
         events
     }

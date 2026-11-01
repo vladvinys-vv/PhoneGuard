@@ -29,7 +29,12 @@ class HoneypotObserver(
         if (observer != null) return
         if (!directory.exists()) directory.mkdirs()
 
-        val mask = FileObserver.ACCESS or FileObserver.OPEN or FileObserver.MODIFY or FileObserver.DELETE
+        // CLOSE_WRITE нужен потому, что MODIFY приходит не на всех ФС (часть inotify-событий
+        // коалесцируется), а ATTRIB ловит изменение метаданных — так некоторые читатели
+        // «трогают» файл, не открывая его. Свои записи приманок отсекает HoneypotReportGate
+        // (окно 5 секунд), удаления — проверка существования файла в колбэке.
+        val mask = FileObserver.ACCESS or FileObserver.OPEN or FileObserver.MODIFY or
+            FileObserver.CLOSE_WRITE or FileObserver.ATTRIB or FileObserver.DELETE
         val callback: (Int, String?) -> Unit = { event, path ->
             if (path != null) {
                 val absolute = File(directory, path).absolutePath

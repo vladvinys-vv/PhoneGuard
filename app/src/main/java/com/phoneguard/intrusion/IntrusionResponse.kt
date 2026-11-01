@@ -7,6 +7,11 @@ import java.io.File
 sealed interface IntrusionResponseAction {
     data class BlockPackage(val packageName: String) : IntrusionResponseAction
     data class BlockNetwork(val packageName: String?) : IntrusionResponseAction
+    /**
+     * Запереть сейф PhoneGuard: следующее открытие снова требует PIN/биометрию.
+     *
+     * Экран устройства это действие не блокирует (для этого есть удалённая команда `LOCK`).
+     */
     data object LockVault : IntrusionResponseAction
     data object StartAlarm : IntrusionResponseAction
     data object CapturePhoto : IntrusionResponseAction

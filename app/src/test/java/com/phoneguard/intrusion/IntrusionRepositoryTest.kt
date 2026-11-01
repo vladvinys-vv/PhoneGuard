@@ -11,7 +11,6 @@ class IntrusionRepositoryTest {
             mockk(relaxed = true),
             IntrusionDetector(),
             IntrusionResponseOrchestrator(),
-            HoneypotManager(),
             mockk(relaxed = true)
         )
         val entity = repository.toEntity(
