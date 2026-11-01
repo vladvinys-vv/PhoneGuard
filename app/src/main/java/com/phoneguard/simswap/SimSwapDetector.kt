@@ -230,31 +230,3 @@ class SimSwapDetector(
 sealed interface SimSwapUiEvent {
     data class ShowConfirmation(val event: SimSwapEvent) : SimSwapUiEvent
 }
-
-/**
- * Решение по сравнению отпечатков SIM. Вынесено из [SimSwapDetector], чтобы
- * покрывать его JVM-тестами: сам детектор требует `TelephonyManager` и разрешений.
- */
-internal object SimIdentityLogic {
-
-    enum class Decision {
-        /** Сравнивать не с чем: идентификатор SIM недоступен. */
-        IGNORE,
-
-        /** Нет базового отпечатка (первый запуск) или он в старом формате — сохранить текущий. */
-        SEED_BASELINE,
-
-        /** Отпечаток изменился — это подмена SIM. */
-        SWAPPED
-    }
-
-    fun decide(storedIdentity: String?, currentIdentity: String?): Decision {
-        if (currentIdentity == null) return Decision.IGNORE
-        if (storedIdentity == null) return Decision.SEED_BASELINE
-        if (!storedIdentity.startsWith(HASH_PREFIX)) return Decision.SEED_BASELINE
-        val stored = storedIdentity.removePrefix(HASH_PREFIX)
-        return if (stored == currentIdentity) Decision.IGNORE else Decision.SWAPPED
-    }
-}
-
-private const val HASH_PREFIX = "sha256:"
