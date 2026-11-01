@@ -1,17 +1,13 @@
 package com.phoneguard.intrusion
 
 import android.Manifest
-import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
 import android.content.Context
 import android.util.Log
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.SystemClock
-import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 import com.phoneguard.R
-import com.phoneguard.antitheft.DeviceAdminReceiverImpl
 import com.phoneguard.antitheft.SecurityService
 import com.phoneguard.antitheft.StealthCameraService
 import com.phoneguard.data.local.IntrusionEventDao
@@ -20,6 +16,7 @@ import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.model.FirewallRule
 import com.phoneguard.ui.IntrusionWarningActivity
 import com.phoneguard.util.SmsSender
+import com.phoneguard.vault.VaultSession
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -41,29 +38,60 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
     private val preferencesManager: PreferencesManager,
     private val securityService: SecurityService,
     private val firewallRepository: FirewallRepository,
-    private val intrusionEventDao: IntrusionEventDao
+    private val intrusionEventDao: IntrusionEventDao,
+    private val vaultSession: VaultSession
 ) : IntrusionResponseExecutor {
 
     private val honeypotScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val honeypotReportGate = HoneypotReportGate()
     private var honeypotObserver: HoneypotObserver? = null
 
+    /**
+     * Выполняет план реакции на событие.
+     *
+     * Информационные действия — предупреждение пользователю и выгрузка события в
+     * `cacheDir` — выполняются **всегда**. Раньше единственная проверка
+     * `if (!isAutoIntrusionResponseEnabled) return` стояла перед всем циклом, поэтому при
+     * выключенном «автоответе» пользователь не видел ни одного предупреждения, а журнал
+     * инцидентов не пополнялся ничем: пропадала не «агрессивная реакция», а сама фиксация
+     * вторжения. Теперь настройка управляет только активными действиями (блокировка,
+     * тревога, фото, SMS, приманки, сейф).
+     */
     override suspend fun execute(event: IntrusionEvent, actions: List<IntrusionResponseAction>) {
         val autoEnabled = preferencesManager.isAutoIntrusionResponseEnabled.first()
-        if (!autoEnabled) return
 
         actions.forEach { action ->
             when (action) {
-                is IntrusionResponseAction.BlockPackage -> blockPackage(action.packageName)
-                is IntrusionResponseAction.BlockNetwork -> if (preferencesManager.isIntrusionBlockNetworkEnabled.first()) blockNetwork(action.packageName)
-                IntrusionResponseAction.LockVault -> lockDevice()
-                IntrusionResponseAction.StartAlarm -> if (preferencesManager.isIntrusionAlarmEnabled.first()) securityService.activateLostMode()
-                IntrusionResponseAction.CapturePhoto -> if (preferencesManager.isIntrusionPhotoEnabled.first()) capturePhoto(event.id)
-                is IntrusionResponseAction.NotifyTrustedContacts -> if (preferencesManager.isIntrusionSmsEnabled.first()) notifyTrustedContacts(context.getString(action.messageRes))
-                is IntrusionResponseAction.ShowWarning -> showWarning(action.title, context.getString(action.messageRes))
-                is IntrusionResponseAction.CreateHoneypot -> if (preferencesManager.isIntrusionHoneypotEnabled.first()) createHoneypot(action.name, event)
+                is IntrusionResponseAction.ShowWarning ->
+                    showWarning(action.title, context.getString(action.messageRes))
                 IntrusionResponseAction.ExportLog -> exportLog(event)
+                else -> if (autoEnabled) executeActive(event, action)
             }
+        }
+    }
+
+    private suspend fun executeActive(event: IntrusionEvent, action: IntrusionResponseAction) {
+        when (action) {
+            is IntrusionResponseAction.BlockPackage -> blockPackage(action.packageName)
+            is IntrusionResponseAction.BlockNetwork ->
+                if (preferencesManager.isIntrusionBlockNetworkEnabled.first()) blockNetwork(action.packageName)
+            // Запираем сейф PhoneGuard, а не экран всего устройства: `lockNow()` требовал
+            // прав администратора (иначе молча ничего не делал) и гасил телефон, которым
+            // пользователь в этот момент пользуется. Блокировка экрана осталась за
+            // удалённой SMS-командой `LOCK`.
+            IntrusionResponseAction.LockVault -> vaultSession.lock()
+            IntrusionResponseAction.StartAlarm ->
+                if (preferencesManager.isIntrusionAlarmEnabled.first()) securityService.activateLostMode()
+            IntrusionResponseAction.CapturePhoto ->
+                if (preferencesManager.isIntrusionPhotoEnabled.first()) capturePhoto(event.id)
+            is IntrusionResponseAction.NotifyTrustedContacts ->
+                if (preferencesManager.isIntrusionSmsEnabled.first()) {
+                    notifyTrustedContacts(context.getString(action.messageRes))
+                }
+            is IntrusionResponseAction.CreateHoneypot ->
+                if (preferencesManager.isIntrusionHoneypotEnabled.first()) createHoneypot(action.name, event)
+            is IntrusionResponseAction.ShowWarning,
+            IntrusionResponseAction.ExportLog -> Unit
         }
     }
 
@@ -83,16 +111,6 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
     private suspend fun blockNetwork(packageName: String?) {
         val target = packageName ?: return
         blockPackage(target)
-    }
-
-    private fun lockDevice() {
-        try {
-            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            val component = ComponentName(context, DeviceAdminReceiverImpl::class.java)
-            if (dpm.isAdminActive(component)) {
-                dpm.lockNow()
-            }
-        } catch (_: Exception) {}
     }
 
     private fun capturePhoto(eventId: Long) {

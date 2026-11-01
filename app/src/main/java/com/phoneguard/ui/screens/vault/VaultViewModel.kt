@@ -15,6 +15,7 @@ import com.phoneguard.data.repository.VaultRepository
 import com.phoneguard.model.VaultItem
 import com.phoneguard.util.AnalyticsHelper
 import com.phoneguard.vault.EncryptionManager
+import com.phoneguard.vault.VaultSession
 import com.phoneguard.vault.VaultFileTooLargeException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -61,12 +62,13 @@ sealed class VaultError {
 class VaultViewModel @Inject constructor(
     private val repository: VaultRepository,
     @ApplicationContext private val context: Context,
-    private val analyticsHelper: AnalyticsHelper
+    private val analyticsHelper: AnalyticsHelper,
+    private val vaultSession: VaultSession
 ) : ViewModel() {
     val allItems = repository.allItems
 
-    private val _isUnlocked = MutableStateFlow(false)
-    val isUnlocked: StateFlow<Boolean> = _isUnlocked.asStateFlow()
+    /** Флаг живёт в [VaultSession]: его можно запереть и из реакции на вторжение. */
+    val isUnlocked: StateFlow<Boolean> = vaultSession.unlocked
 
     private val _authError = MutableStateFlow<VaultError?>(null)
     val authError: StateFlow<VaultError?> = _authError.asStateFlow()
@@ -118,7 +120,7 @@ class VaultViewModel @Inject constructor(
                     executor,
                     object : BiometricPrompt.AuthenticationCallback() {
                         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                            _isUnlocked.value = true
+                            vaultSession.unlock()
                             _authError.value = null
                         }
 
@@ -186,7 +188,7 @@ class VaultViewModel @Inject constructor(
             executor,
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    _isUnlocked.value = true
+                    vaultSession.unlock()
                     _authError.value = null
                 }
 
@@ -207,7 +209,7 @@ class VaultViewModel @Inject constructor(
 
     /** Мгновенная блокировка сейфа (уход приложения в фон, выход с экрана). */
     fun lock() {
-        _isUnlocked.value = false
+        vaultSession.lock()
     }
 
     fun clearAuthError() {
