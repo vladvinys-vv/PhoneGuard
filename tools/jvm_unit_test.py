@@ -38,7 +38,8 @@ CACHE = Path(tempfile.gettempdir()) / "phoneguard-jvm-tests"
 # Префиксы импортов, которые шим закрывает заглушками.
 STUBBED_PREFIXES = (
     "androidx.room.", "androidx.annotation.", "javax.inject.", "kotlinx.coroutines.flow.",
-    "android.util.Log", "android.os.Build", "android.os.SystemClock", "android.text.TextUtils",
+    "android.util.Log", "android.util.Base64", "android.os.Build", "android.os.SystemClock",
+    "android.text.TextUtils", "android.content.Context",
 )
 
 # Импорты, которые без сети не разрешить даже заглушкой.
@@ -238,6 +239,47 @@ object Log {
     }
 }
 ''',
+    "android/util/Base64.kt": '''package android.util
+
+import java.util.Base64 as JBase64
+
+/** Заглушка android.util.Base64 поверх java.util.Base64 (NO_WRAP = без переводов строк). */
+object Base64 {
+    @JvmField val DEFAULT: Int = 0
+    @JvmField val NO_PADDING: Int = 1
+    @JvmField val NO_WRAP: Int = 2
+    @JvmField val CRLF: Int = 4
+    @JvmField val URL_SAFE: Int = 8
+    @JvmField val NO_CLOSE: Int = 16
+
+    @JvmStatic fun encodeToString(input: ByteArray, flags: Int): String =
+        if (flags and URL_SAFE != 0) JBase64.getUrlEncoder().encodeToString(input)
+        else JBase64.getEncoder().encodeToString(input)
+
+    @JvmStatic fun encode(input: ByteArray, flags: Int): ByteArray =
+        if (flags and URL_SAFE != 0) JBase64.getUrlEncoder().encode(input)
+        else JBase64.getEncoder().encode(input)
+
+    @JvmStatic fun decode(str: String, flags: Int): ByteArray =
+        if (flags and URL_SAFE != 0) JBase64.getUrlDecoder().decode(str)
+        else JBase64.getDecoder().decode(str)
+
+    @JvmStatic fun decode(input: ByteArray, flags: Int): ByteArray = decode(String(input), flags)
+}
+''',
+    "android/content/Context.kt": '''package android.content
+
+/**
+ * Минимальная заглушка Context: только то, что нужно чистым проверкам для сборки текста.
+ * Тесты, которым нужен настоящий Context (ресурсы, сервисы, SharedPreferences), в JVM-прогон
+ * не попадают — они идут под Robolectric в Gradle.
+ */
+open class Context {
+    open fun getString(resId: Int): String = "res:$resId"
+    open fun getString(resId: Int, vararg formatArgs: Any?): String = "res:$resId(" + formatArgs.joinToString() + ")"
+    open val packageName: String get() = "com.phoneguard"
+}
+''',
     "android/os/Build.kt": '''package android.os
 
 /** Заглушка android.os.Build: SDK_INT = 35 (targetSdk проекта), остальное — стабильные строки. */
@@ -345,6 +387,26 @@ def blocking_import(path: Path) -> str | None:
     return None
 
 
+R_REFERENCE = re.compile(r"\bR\.(string|array|plist|drawable|color|xml|raw|id|integer|bool|style|dimen)\.(\w+)")
+
+
+def resource_stub(sources: list[Path]) -> str | None:
+    """Собирает заглушку com.phoneguard.R по фактическим ссылкам R.<тип>.<имя>."""
+    fields: dict[str, set[str]] = {}
+    for path in sources:
+        for kind, name in R_REFERENCE.findall(path.read_text(encoding="utf-8")):
+            fields.setdefault(kind, set()).add(name)
+    if not fields:
+        return None
+    body = ["package com.phoneguard", "", "/** Сгенерированная заглушка ресурсов для JVM-прогона. */", "object R {"]
+    for kind, names in sorted(fields.items()):
+        body.append(f"    object {kind} {{")
+        for index, name in enumerate(sorted(names), start=1):
+            body.append(f"        @JvmField val {name}: Int = {index}")
+        body.append("    }")
+    body.append("}")
+    return "\n".join(body) + "\n"
+
 def kotlin_class_of(path: Path) -> str:
     source = path.read_text(encoding="utf-8")
     package = re.search(r"^package\s+([\w.]+)", source, re.M)
@@ -429,11 +491,38 @@ def build_shim(kotlinc: str) -> Path | None:
     return shim_jar
 
 
+ASSERT_IMPORTS = (
+    "assertEquals", "assertNotEquals", "assertTrue", "assertFalse", "assertNull", "assertNotNull",
+    "assertSame", "assertArrayEquals", "assertThrows", "fail",
+)
+
+
+def prepare_test(test: Path, work: Path) -> Path:
+    """`import org.junit.Assert.*` в шиме невозможно (Assert — объект), поэтому разворачиваем его.
+
+    Реальные тесты не трогаем: копия кладётся в рабочий каталог прогона.
+    """
+    source = test.read_text(encoding="utf-8")
+    if "import org.junit.Assert.*" not in source:
+        return test
+    replacement = "\n".join(f"import org.junit.Assert.{name}" for name in ASSERT_IMPORTS)
+    target = work / "prepared" / test.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source.replace("import org.junit.Assert.*", replacement), encoding="utf-8")
+    return target
+
 def compile_and_run(kotlinc: str, java: str, shim: Path, tests: list[Path], sources: list[Path],
                     out_dir: Path) -> tuple[bool, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    extra: list[str] = []
+    stub = resource_stub(sources + tests)
+    if stub is not None:
+        generated = out_dir / "generated" / "R.kt"
+        generated.parent.mkdir(parents=True, exist_ok=True)
+        generated.write_text(stub, encoding="utf-8")
+        extra.append(str(generated))
     result = subprocess.run(
-        [kotlinc, *[str(p) for p in sources], *[str(p) for p in tests],
+        [kotlinc, *[str(p) for p in sources], *extra, *[str(p) for p in tests],
          "-classpath", str(shim), "-d", str(out_dir), "-nowarn"],
         capture_output=True, text=True,
     )
@@ -449,9 +538,79 @@ def compile_and_run(kotlinc: str, java: str, shim: Path, tests: list[Path], sour
     return True, run.stdout + run.stderr
 
 
+SELF_TEST_PASSING = """package selftest
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ShimPassingTest {
+    @Test
+    fun `passing assertion`() {
+        assertEquals(2, 1 + 1)
+        assertTrue("должно быть true", listOf(1, 2, 3).isNotEmpty())
+    }
+
+    @Test
+    fun `expected exception is recognised`() {
+        assertThrows(IllegalArgumentException::class.java) { throw IllegalArgumentException("boom") }
+    }
+
+    @Test
+    fun `expected exception annotation is supported`() {
+    }
+}
+"""
+
+SELF_TEST_FAILING = """package selftest
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class ShimFailingTest {
+    @Test
+    fun `failing assertion is reported`() {
+        assertEquals("сообщение", 1, 2)
+    }
+}
+"""
+
+
+def self_test(kotlinc: str, java: str, shim: Path) -> int:
+    """Проверяет сам раннер: ловит ли он падения и умеет ли считать успешные тесты."""
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        cases = [
+            ("ShimPassingTest", SELF_TEST_PASSING, True),
+            ("ShimFailingTest", SELF_TEST_FAILING, False),
+        ]
+        for name, source, should_pass in cases:
+            test_file = work / f"{name}.kt"
+            test_file.write_text(source, encoding="utf-8")
+            ok, output = compile_and_run(kotlinc, java, shim, [test_file], [], work / name)
+            if not ok:
+                print(f"jvm_unit_test --self-test: провален на компиляции {name}:\n{output[:1500]}")
+                return 1
+            summary = re.search(r"SUMMARY passed=(\d+) failed=(\d+)", output)
+            if summary is None:
+                print(f"jvm_unit_test --self-test: раннер не вернул сводку для {name}")
+                return 1
+            passed, failed = int(summary.group(1)), int(summary.group(2))
+            if should_pass and (passed != 3 or failed != 0):
+                print(f"jvm_unit_test --self-test: ожидалось 3 успешных, получено {passed}/{failed}")
+                return 1
+            if not should_pass and (failed != 1 or passed != 0):
+                print(f"jvm_unit_test --self-test: падение не поймано ({passed}/{failed})")
+                return 1
+    print("jvm_unit_test --self-test: ok (успех, падение и assertThrows распознаются)")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verbose", action="store_true", help="показать пропущенные тесты и почему")
+    parser.add_argument("--self-test", action="store_true", help="проверить сам раннер на синтетических тестах")
     args = parser.parse_args()
 
     kotlinc = resolve_tool("kotlinc", "KOTLINC", "/tmp/kt/package/bin/kotlinc")
@@ -464,6 +623,9 @@ def main() -> int:
     shim = build_shim(kotlinc)
     if shim is None:
         return 1
+
+    if args.self_test:
+        return self_test(kotlinc, java, shim)
 
     index = class_index()
 
@@ -481,7 +643,8 @@ def main() -> int:
             if skip_reason:
                 skipped.append((test, skip_reason))
                 continue
-            ok, out = compile_and_run(kotlinc, java, shim, [test], sources, work / test.stem)
+            prepared = prepare_test(test, work)
+            ok, out = compile_and_run(kotlinc, java, shim, [prepared], sources, work / test.stem)
             if not ok:
                 skipped.append((test, "не компилируется без Android/Robolectric/MockK"))
                 continue

@@ -5,11 +5,13 @@
 ### Added
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 145 тестов в 13 файлах. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 158 тестов в 15 файлах. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
-  `android.text.TextUtils` втаскивают под прогон модели, конвертеры и разбор улик.
-  Включён в `./tools/check_all.sh` (пропускается без `kotlinc`).
-- **Тесты на непокрытую логику (98 новых):** конвертеры Room (`ConvertersTest`, включая чтение
+  `android.util.Base64`/`android.content.Context`, авто-генерация заглушки `R` и разворачивание
+  `import org.junit.Assert.*` втаскивают под прогон модели, конвертеры, хеширование PIN, разбор улик
+  и проверку патчей безопасности. Включён в `./tools/check_all.sh` (пропускается без `kotlinc`);
+  `--self-test` проверяет сам раннер на синтетических тестах.
+- **Тесты на непокрытую логику (98 новых, выполняются 158):** конвертеры Room (`ConvertersTest`, включая чтение
   неизвестных значений enum), эвристика «спрятанных» приложений (`HiddenAppHeuristicsTest`),
   флаги фрагментации IPv4 (`PacketMetadataTest`), устойчивость парсеров пакетов
   (`PacketParserRobustnessTest`: fuzz случайных байт, обрезанные и лживые заголовки),

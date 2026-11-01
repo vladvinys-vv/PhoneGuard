@@ -161,13 +161,18 @@ python3 tools/gradle_check.py --warnings-as-errors
 ```bash
 python3 tools/jvm_unit_test.py            # прогнать всё, что получится
 python3 tools/jvm_unit_test.py --verbose  # показать, что пропущено и почему
+python3 tools/jvm_unit_test.py --self-test # проверить сам раннер на синтетических тестах
 ```
+
+`--self-test` компилирует два синтетических теста (успешный и заведомо падающий) и проверяет,
+что раннер считает успехи и **ловит** падения — иначе зелёный прогон ничего не доказывал бы.
 
 Как выбираются тесты: берётся тест-файл без Android/Robolectric/MockK/OkHttp/Gson/корутин,
 к нему рекурсивно подтягиваются исходники по импортам и одноимённым классам, а вместо аннотаций
-Room, `androidx.annotation`, `javax.inject`, `android.util.Log`, `android.os.Build` (SDK_INT = 35)
-и `android.text.TextUtils` подставляются заглушки — поэтому под прогон попадают
-модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 145 тестов в 13 файлах.
+Room, `androidx.annotation`, `javax.inject`, `android.util.Log`, `android.os.Build` (SDK_INT = 35),
+`android.text.TextUtils`, `android.util.Base64` и минимального `android.content.Context`
+подставляются заглушки, а `R.<тип>.<имя>` генерируется по фактическим ссылкам в коде — поэтому под прогон попадают
+модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 158 тестов в 15 файлах.
 
 Что остаётся Gradle: тесты на Android/Robolectric/MockK и всё, что требует настоящих AndroidX-
 артефактов; для них скрипт печатает `skip … — импорт …`.

@@ -41,6 +41,7 @@ step "jvm_unit_test.py (опционально)"
 # Реальный прогон тестов чистой логики без Gradle: kotlinc + шим org.junit.
 # Нужен там, где нет доступа к Google Maven (например, в песочнице) — Gradle-тесты там не идут.
 if command -v kotlinc >/dev/null 2>&1; then
+    python3 tools/jvm_unit_test.py --self-test || failed=1
     python3 tools/jvm_unit_test.py || failed=1
 else
     echo "skip: kotlinc не найден — JVM-тесты без Gradle пропущены"
