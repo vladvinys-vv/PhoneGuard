@@ -43,4 +43,41 @@ class IntrusionScanPolicyTest {
         assertEquals(2, selected.size)
         assertTrue(selected.all { it.type != IntrusionType.UNKNOWN })
     }
+
+    @Test
+    fun sameTypeWithDifferentEvidenceIsNew() {
+        val detected = listOf(
+            IntrusionEvent(type = IntrusionType.FIREWALL_BYPASS, severity = IntrusionSeverity.HIGH, evidence = mapOf("ip" to "1.1.1.1")),
+            IntrusionEvent(type = IntrusionType.FIREWALL_BYPASS, severity = IntrusionSeverity.HIGH, evidence = mapOf("ip" to "2.2.2.2"))
+        )
+        val recent = listOf(
+            IntrusionEvent(type = IntrusionType.FIREWALL_BYPASS, severity = IntrusionSeverity.HIGH, evidence = mapOf("ip" to "1.1.1.1"))
+        )
+        val fresh = IntrusionScanPolicy.selectNewEvents(detected, recent)
+        assertEquals(1, fresh.size)
+        assertEquals(mapOf("ip" to "2.2.2.2"), fresh.single().evidence)
+    }
+
+    @Test
+    fun duplicatesInsideDetectedAreCollapsed() {
+        val event = IntrusionEvent(type = IntrusionType.UNKNOWN, severity = IntrusionSeverity.MEDIUM)
+        val fresh = IntrusionScanPolicy.selectNewEvents(listOf(event, event.copy(id = 99)), emptyList())
+        assertEquals(1, fresh.size)
+    }
+
+    @Test
+    fun emptyDetectedGivesNothing() {
+        assertTrue(IntrusionScanPolicy.selectNewEvents(emptyList(), listOf(
+            IntrusionEvent(type = IntrusionType.RAT_DETECTED, severity = IntrusionSeverity.HIGH)
+        )).isEmpty())
+    }
+
+    @Test
+    fun emptyRecentKeepsAllDetected() {
+        val detected = listOf(
+            IntrusionEvent(type = IntrusionType.RAT_DETECTED, severity = IntrusionSeverity.HIGH),
+            IntrusionEvent(type = IntrusionType.HOOKING_DETECTED, severity = IntrusionSeverity.MEDIUM)
+        )
+        assertEquals(2, IntrusionScanPolicy.selectNewEvents(detected, emptyList()).size)
+    }
 }

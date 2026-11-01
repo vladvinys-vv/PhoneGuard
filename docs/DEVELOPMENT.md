@@ -150,6 +150,48 @@ python3 tools/gradle_check.py
 python3 tools/gradle_check.py --warnings-as-errors
 ```
 
+### `tools/jvm_unit_test.py`
+
+Компилирует и **выполняет** unit-тесты чистой логики без Gradle, Maven и JUnit-jar: `kotlinc`
+плюс минимальный шим `org.junit` (аннотации `@Test`/`@Before`/`@After`/`@Ignore`, `Assert`,
+раннер через reflection). Нужен там, где нет доступа к Google Maven — например, в песочнице, где
+`./gradlew testProductionDebugUnitTest` не запускается, а `kotlin_frontend_check.py` только
+компилирует.
+
+```bash
+python3 tools/jvm_unit_test.py            # прогнать всё, что получится
+python3 tools/jvm_unit_test.py --verbose  # показать, что пропущено и почему
+python3 tools/jvm_unit_test.py --self-test # проверить сам раннер на синтетических тестах
+```
+
+`--self-test` компилирует два синтетических теста (успешный и заведомо падающий) и проверяет,
+что раннер считает успехи и **ловит** падения — иначе зелёный прогон ничего не доказывал бы.
+
+Как выбираются тесты: берётся тест-файл без Android/Robolectric/MockK/OkHttp/Gson/корутин,
+к нему рекурсивно подтягиваются исходники по импортам и одноимённым классам, а вместо аннотаций
+Room, `androidx.annotation`, `javax.inject`, `android.util.Log`, `android.os.Build` (SDK_INT = 35),
+`android.text.TextUtils`, `android.util.Base64` и минимального `android.content.Context`
+подставляются заглушки, а `R.<тип>.<имя>` генерируется по фактическим ссылкам в коде — поэтому под прогон попадают
+модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 165 тестов в 15 файлах.
+
+Что остаётся Gradle: тесты на Android/Robolectric/MockK и всё, что требует настоящих AndroidX-
+артефактов; для них скрипт печатает `skip … — импорт …`.
+
+### `tools/test_coverage_map.py`
+
+Карта упоминаний классов приложения в тестах — **не** процент покрытия и не замена JaCoCo.
+Отвечает на вопрос «есть ли вообще тест, который трогает этот класс», и показывает пакеты,
+где тестов нет совсем.
+
+```bash
+python3 tools/test_coverage_map.py            # сводка по пакетам + логика без тестов
+python3 tools/test_coverage_map.py --detail   # полный список
+```
+
+Сейчас: 166 классов, 101 упомянут в тестах (60%). Отсутствие упоминания не всегда пробел —
+UI, Hilt-модули и сервисы проверяются Robolectric-тестами и вручную (`docs/MANUAL_TESTING.md`),
+поэтому отчёт разделяет «логику» и «Android-связанное».
+
 ### `tools/static_audit.py`
 
 Проверки без Gradle (регулярные выражения + разбор XML). Ловит то, что иначе падает на сборке или

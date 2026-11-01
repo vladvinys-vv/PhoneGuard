@@ -65,7 +65,7 @@ class DeviceAuditModelsTest {
         assertEquals(3, report.issueCount)
         assertEquals(5, report.items.size)
         assertEquals(1234L, report.timestamp)
-        assertEquals(51, report.score) // 100 - 15 - 15 - 7
+        assertEquals(63, report.score) // 100 - 15 - 15 - 7
     }
 
     @Test
@@ -73,5 +73,59 @@ class DeviceAuditModelsTest {
         val report = DeviceAuditReport.from(listOf(item(AuditStatus.OK, "a")))
         assertEquals(0, report.issueCount)
         assertTrue(report.score >= 90)
+    }
+
+    @Test
+    fun `info and ok items never lower the score`() {
+        val items = (1..20).map { item(AuditStatus.INFO, "i$it") } +
+            (1..20).map { item(AuditStatus.OK, "o$it") }
+        assertEquals(100, DeviceAuditReport.scoreOf(items))
+    }
+
+    @Test
+    fun `score is clamped to one hundred`() {
+        // Отрицательных штрафов нет, но контракт «0..100» должен держаться.
+        assertEquals(100, DeviceAuditReport.scoreOf(emptyList()))
+        assertTrue(DeviceAuditReport.scoreOf(listOf(item(AuditStatus.OK)) ) <= 100)
+    }
+
+    @Test
+    fun `single critical costs exactly fifteen points`() {
+        assertEquals(85, DeviceAuditReport.scoreOf(listOf(item(AuditStatus.CRITICAL))))
+    }
+
+    @Test
+    fun `single warning costs exactly seven points`() {
+        assertEquals(93, DeviceAuditReport.scoreOf(listOf(item(AuditStatus.WARNING))))
+    }
+
+    @Test
+    fun `report without explicit timestamp gets a current one`() {
+        val before = System.currentTimeMillis()
+        val report = DeviceAuditReport.from(listOf(item(AuditStatus.OK)))
+        assertTrue("время отчёта должно быть текущим", report.timestamp in before..System.currentTimeMillis())
+    }
+
+    @Test
+    fun `issue count sums criticals and warnings only`() {
+        val report = DeviceAuditReport.from(
+            listOf(
+                item(AuditStatus.CRITICAL, "a"),
+                item(AuditStatus.WARNING, "b"),
+                item(AuditStatus.WARNING, "c"),
+                item(AuditStatus.INFO, "d"),
+                item(AuditStatus.OK, "e")
+            )
+        )
+        assertEquals(3, report.issueCount)
+        assertEquals(100 - 15 - 7 - 7, report.score)
+    }
+
+    @Test
+    fun `empty report is perfect and issue free`() {
+        val report = DeviceAuditReport.from(emptyList())
+        assertEquals(100, report.score)
+        assertEquals(0, report.issueCount)
+        assertTrue(report.items.isEmpty())
     }
 }

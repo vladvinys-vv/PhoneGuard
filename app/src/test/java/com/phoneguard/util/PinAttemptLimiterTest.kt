@@ -52,4 +52,51 @@ class PinAttemptLimiterTest {
         assertEquals(lockedUntil, whileLocked.lockedUntil)
         assertEquals(state.attempts, whileLocked.attempts)
     }
+
+    @Test
+    fun failureAfterLockoutStartsCountingAgain() {
+        var state = PinAttemptLimiter.State()
+        repeat(PinAttemptLimiter.MAX_ATTEMPTS) { state = PinAttemptLimiter.afterFailure(state, now) }
+        val afterExpiry = PinAttemptLimiter.afterFailure(state, now + PinAttemptLimiter.LOCKOUT_MS)
+        assertEquals(1, afterExpiry.attempts)
+        assertFalse(afterExpiry.isLocked(now + PinAttemptLimiter.LOCKOUT_MS))
+    }
+
+    @Test
+    fun remainingTimeIsZeroWhenNotLocked() {
+        assertEquals(0L, PinAttemptLimiter.State(attempts = 3).remainingMs(now))
+        assertEquals(0L, PinAttemptLimiter.State().remainingMs(now))
+    }
+
+    @Test
+    fun remainingTimeCountsDownDuringLockout() {
+        var state = PinAttemptLimiter.State()
+        repeat(PinAttemptLimiter.MAX_ATTEMPTS) { state = PinAttemptLimiter.afterFailure(state, now) }
+        assertEquals(PinAttemptLimiter.LOCKOUT_MS, state.remainingMs(now))
+        assertEquals(PinAttemptLimiter.LOCKOUT_MS / 2, state.remainingMs(now + PinAttemptLimiter.LOCKOUT_MS / 2))
+    }
+
+    @Test
+    fun successDuringLockoutClearsIt() {
+        var state = PinAttemptLimiter.State()
+        repeat(PinAttemptLimiter.MAX_ATTEMPTS) { state = PinAttemptLimiter.afterFailure(state, now) }
+        val unlocked = PinAttemptLimiter.afterSuccess()
+        assertFalse(unlocked.isLocked(now))
+        assertEquals(0, unlocked.attempts)
+    }
+
+    @Test
+    fun lockoutPolicyStaysFiveAttemptsAndFifteenMinutes() {
+        // Значение меняется только вместе с текстом в интерфейсе и документацией.
+        assertEquals(5, PinAttemptLimiter.MAX_ATTEMPTS)
+        assertEquals(15L * 60L * 1000L, PinAttemptLimiter.LOCKOUT_MS)
+    }
+
+    @Test
+    fun attemptsAreCountedPerStateAndDoNotLeakBetweenStates() {
+        val first = PinAttemptLimiter.afterFailure(PinAttemptLimiter.State(), now)
+        val second = PinAttemptLimiter.afterFailure(PinAttemptLimiter.State(), now)
+        assertEquals(1, first.attempts)
+        assertEquals(1, second.attempts)
+    }
 }
