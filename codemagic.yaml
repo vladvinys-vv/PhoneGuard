@@ -49,6 +49,8 @@ workflows:
         script: python3 tools/migration_check.py
       - name: Static audit
         script: python3 tools/static_audit.py
+      - name: Docs numbers check
+        script: python3 tools/docs_check.py
       - name: Strings are in sync
         script: python3 tools/sync_strings.py --check
       - name: Kotlin frontend check

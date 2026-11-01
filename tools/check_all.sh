@@ -25,6 +25,10 @@ python3 tools/migration_check.py || failed=1
 step "static_audit.py"
 python3 tools/static_audit.py || failed=1
 
+step "docs_check.py"
+# Цифры в README/docs против кода: «217 файлов», «106 из 167 классов» стареют молча.
+python3 tools/docs_check.py || failed=1
+
 step "sync_strings.py --check"
 # Сравнение с git ломается при незакоммиченных правках строк, поэтому спрашиваем сам скрипт.
 python3 tools/sync_strings.py --check || failed=1
