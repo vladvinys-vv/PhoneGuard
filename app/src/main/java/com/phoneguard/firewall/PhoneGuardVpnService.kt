@@ -64,7 +64,7 @@ class PhoneGuardVpnService : VpnService() {
 
     companion object {
         private const val TAG = "PGVpn"
-        private const val VPN_NOTIFICATION_ID = 1001
+        private const val VPN_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.VPN_FOREGROUND
         private const val VPN_CHANNEL_ID = "phoneguard_vpn_channel"
         const val ACTION_CONNECT = "com.phoneguard.CONNECT"
         const val ACTION_DISCONNECT = "com.phoneguard.DISCONNECT"

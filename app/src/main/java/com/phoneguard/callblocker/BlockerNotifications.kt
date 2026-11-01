@@ -23,10 +23,10 @@ object BlockerNotifications {
     const val CHANNEL_ID = "call_blocker_channel"
 
     /** Заблокированный входящий звонок. */
-    const val CALL_NOTIFICATION_ID = 1101
+    const val CALL_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.BLOCKED_CALL
 
     /** Заблокированное входящее SMS (отдельный id, чтобы не затирать звонок). */
-    const val SMS_NOTIFICATION_ID = 1102
+    const val SMS_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.BLOCKED_SMS
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

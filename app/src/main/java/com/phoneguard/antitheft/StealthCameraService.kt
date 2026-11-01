@@ -58,7 +58,7 @@ class StealthCameraService : LifecycleService() {
         const val OUTPUT_DIR = "phoneguard_stealth"
 
         private const val TAG = "StealthCameraService"
-        private const val NOTIFICATION_ID = 9001
+        private const val NOTIFICATION_ID = com.phoneguard.util.NotificationIds.STEALTH_CAMERA
         private const val CHANNEL_ID = "stealth_camera_channel"
         private const val CAPTURE_TIMEOUT_MS = 20_000L
     }

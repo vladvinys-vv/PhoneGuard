@@ -101,16 +101,27 @@ class SmsSpamReceiver : BroadcastReceiver() {
                 normalized?.takeIf { it != rawSender }?.let { add(it) }
             }
 
-            // Белый список важнее любых правил: его выставляет сам пользователь.
-            if (blockedNumberDao.isWhitelistedAny(candidates)) continue
+            // Решение принимает SmsSpamDecision: порядок «белый список → списки/спам-база →
+            // эвристика ссылки» закреплён тестами, а не выписан здесь заново.
+            val whitelisted = blockedNumberDao.isWhitelistedAny(candidates)
+            val blacklisted = !whitelisted && blockedNumberDao.isBlacklistedAny(candidates)
+            val spamDatabase = !whitelisted && !blacklisted && normalized != null &&
+                spamNumberRepository.isSpam(normalized)
+            // Эвристику не считаем, если номер уже заблокирован: это лишний разбор текста.
+            val suspicious = !whitelisted && !blacklisted && !spamDatabase &&
+                runCatching { phishingUrlChecker.isSuspicious(text) }.getOrDefault(false)
 
-            val blockedByRules = blockedNumberDao.isBlacklistedAny(candidates) ||
-                (normalized != null && spamNumberRepository.isSpam(normalized))
-            val suspicious = runCatching { phishingUrlChecker.isSuspicious(text) }.getOrDefault(false)
+            val verdict = SmsSpamDecision.decide(
+                SmsSpamDecision.Facts(
+                    whitelisted = whitelisted,
+                    blacklisted = blacklisted,
+                    spamDatabase = spamDatabase,
+                    suspiciousLink = suspicious
+                )
+            )
+            if (verdict == SmsSpamDecision.Verdict.IGNORE) continue
 
-            if (!blockedByRules && !suspicious) continue
-
-            if (blockedByRules) blockedByNumber = true
+            if (verdict == SmsSpamDecision.Verdict.BLOCK_NUMBER) blockedByNumber = true
 
             val stored = normalized ?: rawSender
             runCatching {
@@ -125,10 +136,18 @@ class SmsSpamReceiver : BroadcastReceiver() {
                 context = context,
                 notificationId = BlockerNotifications.SMS_NOTIFICATION_ID,
                 title = context.getString(
-                    if (blockedByRules) R.string.sms_blocked_title else R.string.sms_suspicious_title
+                    if (verdict == SmsSpamDecision.Verdict.BLOCK_NUMBER) {
+                        R.string.sms_blocked_title
+                    } else {
+                        R.string.sms_suspicious_title
+                    }
                 ),
                 text = context.getString(
-                    if (blockedByRules) R.string.sms_blocked_text else R.string.sms_suspicious_text,
+                    if (verdict == SmsSpamDecision.Verdict.BLOCK_NUMBER) {
+                        R.string.sms_blocked_text
+                    } else {
+                        R.string.sms_suspicious_text
+                    },
                     masked
                 )
             )
