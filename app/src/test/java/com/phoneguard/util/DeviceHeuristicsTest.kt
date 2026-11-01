@@ -81,4 +81,81 @@ class DeviceHeuristicsTest {
         assertTrue(DeviceHeuristics.untrustedAccessibilityPackages("", "com.phoneguard").isEmpty())
         assertTrue(DeviceHeuristics.untrustedAccessibilityPackages("::", "com.phoneguard").isEmpty())
     }
+
+    @Test
+    fun explicitPackagesMatchTheirSubpackages() {
+        assertTrue(DeviceHeuristics.isSuspiciousPackage("de.robv.android.xposed.installer"))
+        assertTrue(DeviceHeuristics.isSuspiciousPackage("com.topjohnwu.magisk.core"))
+        assertTrue(DeviceHeuristics.isSuspiciousPackage("io.va.exposed.sandbox"))
+    }
+
+    @Test
+    fun detectionIgnoresCase() {
+        assertTrue(DeviceHeuristics.isSuspiciousPackage("Com.TopJohnWu.Magisk"))
+        assertTrue(DeviceHeuristics.isSuspiciousPackage("RE.FRIDA.SERVER"))
+    }
+
+    @Test
+    fun segmentMatchCatchesVendorWrappedFrameworks() {
+        // Сегмент, а не подстрока: `lsposed` посреди имени — уже находка.
+        assertTrue(DeviceHeuristics.isSuspiciousPackage("com.example.lsposed.loader"))
+        assertTrue(DeviceHeuristics.isSuspiciousPackage("ru.custom.magisk"))
+        assertFalse(DeviceHeuristics.isSuspiciousPackage("com.lsposeded.fake"))
+    }
+
+    @Test
+    fun blankAndWhitespaceNamesAreNotFlagged() {
+        assertFalse(DeviceHeuristics.isSuspiciousPackage(""))
+        assertFalse(DeviceHeuristics.isSuspiciousPackage("   "))
+    }
+
+    @Test
+    fun accessibilitySettingToleratesSpacesAndTrailingColon() {
+        val raw = " com.evil.spy/com.evil.spy.Service : com.other/com.other.Service :"
+        assertEquals(listOf("com.evil.spy", "com.other"), DeviceHeuristics.accessibilityPackages(raw))
+    }
+
+    @Test
+    fun accessibilityEntryWithoutClassKeepsThePackage() {
+        assertEquals(listOf("com.evil.spy"), DeviceHeuristics.accessibilityPackages("com.evil.spy"))
+    }
+
+    @Test
+    fun accessibilitySettingWithoutValueYieldsNothing() {
+        assertTrue(DeviceHeuristics.accessibilityPackages(null).isEmpty())
+        assertTrue(DeviceHeuristics.accessibilityPackages("   ").isEmpty())
+        assertTrue(DeviceHeuristics.accessibilityPackages("::").isEmpty())
+    }
+
+    @Test
+    fun untrustedListKeepsThirdPartyAndDropsVendors() {
+        val raw = listOf(
+            "android/com.android.internal.AccessibilityService",
+            "com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService",
+            "com.samsung.accessibility/com.samsung.accessibility.Service",
+            "com.evil.spy/com.evil.spy.Service"
+        ).joinToString(":")
+        assertEquals(listOf("com.evil.spy"), DeviceHeuristics.untrustedAccessibilityPackages(raw, "com.phoneguard"))
+    }
+
+    @Test
+    fun ownPackageIsDroppedFromUntrustedList() {
+        val raw = "com.phoneguard/com.phoneguard.Service:com.other/com.other.Service"
+        assertEquals(listOf("com.other"), DeviceHeuristics.untrustedAccessibilityPackages(raw, "com.phoneguard"))
+    }
+
+    @Test
+    fun trustedPrefixesAcceptExactNameAndSubpackage() {
+        assertTrue(DeviceHeuristics.isTrustedAccessibilityPackage("com.samsung.accessibility"))
+        assertTrue(DeviceHeuristics.isTrustedAccessibilityPackage("com.samsung."))
+        assertTrue(DeviceHeuristics.isTrustedAccessibilityPackage("com.google.android.marvin.talkback"))
+        assertFalse(DeviceHeuristics.isTrustedAccessibilityPackage("com.samsungfake.app"))
+        assertFalse(DeviceHeuristics.isTrustedAccessibilityPackage("com.evil.spy"))
+    }
+
+    @Test
+    fun unknownVendorIsNotTrusted() {
+        assertFalse(DeviceHeuristics.isTrustedAccessibilityPackage("com.somevendor.accessibility"))
+        assertFalse(DeviceHeuristics.isTrustedAccessibilityPackage(""))
+    }
 }

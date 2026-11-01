@@ -82,6 +82,8 @@ internal object DeviceHeuristics {
         }
 
     private val TRUSTED_ACCESSIBILITY_PREFIXES = listOf(
+        // Пакет системного фреймворка называется просто `android` — он тоже доверенный.
+        "android",
         "android.",
         "com.android.",
         "com.google.android.marvin.",

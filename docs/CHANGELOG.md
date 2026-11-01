@@ -5,16 +5,18 @@
 ### Added
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 118 тестов в 13 файлах. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 145 тестов в 13 файлах. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
   `android.text.TextUtils` втаскивают под прогон модели, конвертеры и разбор улик.
   Включён в `./tools/check_all.sh` (пропускается без `kotlinc`).
-- **Тесты на непокрытую логику (71 новый):** конвертеры Room (`ConvertersTest`, включая чтение
+- **Тесты на непокрытую логику (98 новых):** конвертеры Room (`ConvertersTest`, включая чтение
   неизвестных значений enum), эвристика «спрятанных» приложений (`HiddenAppHeuristicsTest`),
   флаги фрагментации IPv4 (`PacketMetadataTest`), устойчивость парсеров пакетов
   (`PacketParserRobustnessTest`: fuzz случайных байт, обрезанные и лживые заголовки),
   формат `IntrusionEvent.summary()` (`IntrusionEventSummaryTest`), сериализация улик
-  `IntrusionEventEntity↔IntrusionEvent` (`IntrusionEventEntityExtTest`, 13 тестов).
+  `IntrusionEventEntity↔IntrusionEvent` (`IntrusionEventEntityExtTest`, 13 тестов);
+  плюс усилены существующие: `DeviceHeuristicsTest` (7 → 18), `PinAttemptLimiterTest` (4 → 10),
+  `SmsPartsTest` (4 → 10), `IntrusionScanPolicyTest` (4 → 8).
 - **Лицензия MIT.** В корень добавлен `LICENSE` (MIT, © 2026 Vlad Vinys), раздел README
   «Лицензия» больше не утверждает «all rights reserved» — это противоречило файлу лицензии.
   Заодно удалён корневой `CHANGELOG.md`: он дублировал этот файл и содержал неверную дату
@@ -254,6 +256,9 @@
 - **`IntrusionEvent.summary()` оставлял хвостовой пробел и разделял улики запятыми.** При пустом
   `evidence` получалось `"BRUTE_FORCE MEDIUM "`, а `"a=1, b=2"` неудобно грепать. Теперь
   `"BRUTE_FORCE MEDIUM"` и `"a=1 b=2"`.
+- **Пакет `android` не считался доверенной службой доступности.** В списке префиксов стоял только
+  `android.`, поэтому собственный пакет системного фреймворка попадал в «недоверенные включённые
+  службы» — ложная находка в отчёте. Добавлено точное совпадение.
 - **Улики вторжений терялись при записи в базу.** Поле хранится строкой `k=v;k=v` без
   экранирования: значение с `;` (`path=/sdcard/a;b.jpg`) читалось как две улики, значение с `=`
   теряло хвост, а обратная косая ломала разбор. Добавлено экранирование `\ ; =` при записи и
