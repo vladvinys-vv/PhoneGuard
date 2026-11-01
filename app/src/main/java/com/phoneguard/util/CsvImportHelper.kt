@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,7 +21,9 @@ import javax.inject.Singleton
  *    точка с запятой как разделитель и заголовок CSV;
  *  - дубликаты внутри файла удаляются;
  *  - результат содержит и принятые, и отклонённые строки, чтобы UI мог
- *    показать «импортировано N, пропущено M».
+ *    показать «импортировано N, пропущено M»;
+ *  - правила разбора (разделители, заголовок, приоритет колонок, BOM) вынесены в
+ *    [CsvImportParser]: здесь остались только ввод-вывод и нормализация номеров.
  */
 @Singleton
 class CsvImportHelper @Inject constructor(
@@ -30,6 +31,12 @@ class CsvImportHelper @Inject constructor(
     private val phoneNumberNormalizer: PhoneNumberNormalizer
 ) {
 
+    /**
+     * @param numbers нормализованные E.164-номера без дубликатов;
+     * @param totalLines число строк данных (пустые строки и комментарии не считаются,
+     *   а строка-заголовок считается — она часть файла, но не считается пропуском);
+     * @param skipped строки, которые не удалось разобрать как номер.
+     */
     data class ImportResult(
         val numbers: List<String>,
         val totalLines: Int,
@@ -39,56 +46,33 @@ class CsvImportHelper @Inject constructor(
     suspend fun importBlockedNumbers(uri: Uri, isWhitelist: Boolean): List<String> =
         importNumbers(uri, isWhitelist).numbers
 
+    /**
+     * Читает файл и разбирает его [CsvImportParser].
+     *
+     * @param isWhitelist не влияет на разбор: и чёрный, и белый список хранят
+     *   нормализованные номера одинаково, решение принимает вызывающий экран.
+     *   Параметр сохранён ради стабильного API.
+     */
     suspend fun importNumbers(uri: Uri, @Suppress("UNUSED_PARAMETER") isWhitelist: Boolean): ImportResult =
         withContext(Dispatchers.IO) {
-            val accepted = LinkedHashSet<String>()
-            var total = 0
-            var skipped = 0
-
-            runCatching {
+            val outcome = runCatching {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
                     BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                        reader.lineSequence().forEach { rawLine ->
-                            val line = rawLine.trim()
-                            if (line.isEmpty() || line.startsWith("#")) return@forEach
-                            total++
-
-                            val candidates = extractCandidates(line)
-                            // Сначала строгая проверка по metadata libphonenumber,
-                            // затем — мягкая нормализация (номера необычного формата).
-                            val normalized =
-                                candidates.firstNotNullOfOrNull { phoneNumberNormalizer.toValidE164(it) }
-                                    ?: candidates.firstNotNullOfOrNull { phoneNumberNormalizer.toE164(it) }
-
-                            if (normalized != null) {
-                                accepted += normalized
-                            } else if (total > 1 || !looksLikeHeader(line)) {
-                                skipped++
-                            }
-                        }
+                        // lineSequence() читается лениво, поэтому разбор идёт внутри use {}.
+                        CsvImportParser.parse(
+                            lines = reader.lineSequence(),
+                            normalizeStrict = { phoneNumberNormalizer.toValidE164(it) },
+                            normalizeLoose = { phoneNumberNormalizer.toE164(it) }
+                        )
                     }
                 }
-            }
+            }.getOrNull() ?: CsvImportParser.Outcome(emptyList(), 0, 0)
 
-            ImportResult(numbers = accepted.toList(), totalLines = total, skipped = skipped)
+            ImportResult(
+                numbers = outcome.numbers,
+                totalLines = outcome.totalLines,
+                skipped = outcome.skipped
+            )
         }
 
-    /**
-     * Возвращает потенциальные номера из строки: значение первой колонки и,
-     * если там нет цифр, любое поле похожее на номер.
-     */
-    private fun extractCandidates(line: String): List<String> {
-        val fields = line.split(';', ',', '\t', '|').map { it.trim().trim('"') }
-        val withDigits = fields.filter { field -> field.any { it.isDigit() } }
-        return withDigits.ifEmpty { listOf(line) }
-    }
-
-    private fun looksLikeHeader(line: String): Boolean {
-        val lower = line.lowercase(Locale.ROOT)
-        return HEADER_HINTS.any { hint -> lower.contains(hint) }
-    }
-
-    private companion object {
-        val HEADER_HINTS = listOf("phone", "number", "номер", "telefon", "nummer")
-    }
 }
