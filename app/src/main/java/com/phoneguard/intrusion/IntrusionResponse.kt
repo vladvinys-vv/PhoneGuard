@@ -2,6 +2,7 @@ package com.phoneguard.intrusion
 
 import androidx.annotation.StringRes
 import com.phoneguard.R
+import java.io.File
 
 sealed interface IntrusionResponseAction {
     data class BlockPackage(val packageName: String) : IntrusionResponseAction
@@ -78,10 +79,10 @@ class HoneypotManager {
      *  - содержимое похоже на настоящую находку для malware.
      */
     fun createDecoys(context: android.content.Context, event: IntrusionEvent): List<File> {
-        val dir = java.io.File(context.filesDir, DIR_NAME)
+        val dir = File(context.filesDir, DIR_NAME)
         if (!dir.exists()) dir.mkdirs()
         val created = decoyNames(event).map { name ->
-            java.io.File(dir, name).apply {
+            File(dir, name).apply {
                 if (!exists()) runCatching { writeText(contentFor(name)) }
             }
         }
