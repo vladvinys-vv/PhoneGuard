@@ -147,9 +147,10 @@ python3 tools/webhook_notify.py --dry-run # опционально: payload ув
 миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_frontend_check.py` прогоняет все
 251 файл через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
 `tools/fetch_android_jar.sh`) и отсекает ошибки, вызванные
-отсутствующими библиотеками — им найдены семь реальных ошибок сборки, в том числе в тестах;
-восьмую (nullable `Flow` в `SecurityService`, из-за которой модуль не собирался) ловит `static_audit.py` —
-kotlinx.coroutines в песочнице нет, поэтому `Flow`/`first()` не разрешаются и обычная проверка типов молчит.
+отсутствующими библиотеками — на его счету десять реальных ошибок сборки, в том числе в тестах.
+Последние три (`isBlank()` у `Flow<String?>`, `SpywareScanResult` вместо `List<SpywareApp>` и `combine`
+на семь потоков) нашлись после того, как в classpath появились заглушки `kotlinx.coroutines`
+(`tools/stubs/`): без них `Flow`/`first()` не разрешаются и настоящие ошибки типов молча теряются.
 `kotlin_analysis.py` дополнительно разбирает файлы парсером и ищет вызовы `suspend`-функций вне
 suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 

@@ -258,10 +258,31 @@ SQL** через встроенный в Python `sqlite3`:
 ### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
 
 Запускает **настоящий компилятор Kotlin** на всех 251 файле. Без Android SDK он не может
-разрешить `android.*`, `androidx.*`, `kotlinx.coroutines`, Hilt и mockk, но полностью проверяет
-синтаксис, объявления, вывод типов там, где типы известны, и правила языка. Ошибки, заведомо вызванные
+разрешить `android.*`, `androidx.*`, Hilt и mockk, но полностью проверяет синтаксис, объявления,
+вывод типов там, где типы известны, и правила языка. Ошибки, заведомо вызванные
 отсутствующими библиотеками, отфильтрованы по внутренним именам диагностик
 (`-Xrender-internal-diagnostic-names`); всё остальное — реальные проблемы.
+
+#### Заглушки `kotlinx.coroutines` (`tools/stubs/`)
+
+Корутин нет на classpath песочницы, а без них `Flow`, `StateFlow`, `first()`, `stateIn()` не
+разрешаются — и **настоящие ошибки типов не диагностируются вообще**: `Flow<String?>` становится
+«error type», `isBlank()` у значения из него проходит молча. Так в `main` попали три ошибки, из-за
+которых модуль `app` не собирался:
+
+* `SecurityService.getTrustedContacts()` — `isBlank()` у `String?` и `List<String?>` вместо `List<String>`;
+* `FullScanOrchestrator` — `SpywareScanResult` передан туда, где ждали `List<SpywareApp>`
+  (и заодно `scanForSpyware().first()` брал пустой placeholder вместо результата сканирования);
+* `AntiTheftViewModel.loadState()` — `combine` на семь потоков: перегрузки есть только до пяти.
+
+Поэтому в репозитории лежат `tools/stubs/*.kt` — сигнатуры публичного API корутин без реализации.
+Скрипт собирает их в jar (кеш по хешу исходников) и подкладывает в classpath; `--no-stubs` отключает
+это, чтобы видеть «голый» результат. Разрешение типов включает новое правило: сообщение
+`TYPE_MISMATCH`/`ARGUMENT_TYPE_MISMATCH`/`RETURN_TYPE_MISMATCH`/`UNSAFE_CALL`/`NULL_FOR_NONNULL_TYPE`,
+в котором есть тип проекта, — настоящая ошибка, а сообщения про `kotlin.Any`, `'R'`, `Char`,
+`ERROR CLASS` и типы `android.*`/`androidx.*` — шум неразрешённых зависимостей.
+Классификация проверяется `--self-test` (11 сохранённых сообщений компилятора), он же запускается в
+`tools/check_all.sh` ещё до проверки наличия `kotlinc`.
 
 ```bash
 export JAVA_HOME=/path/to/jdk-17
@@ -275,7 +296,7 @@ python3 tools/kotlin_frontend_check.py --android-jar "$(./tools/fetch_android_ja
 
 С `android.jar` на classpath (флаг `--android-jar`, переменные `ANDROID_JAR` или
 `ANDROID_HOME`/`ANDROID_SDK_ROOT` — скрипт находит `platforms/android-*/android.jar` сам)
-количество «шумных» диагностик падает примерно с 10 500 до 8 100, а часть шума становится
+количество «шумных» диагностик падает примерно с 10 500 до 7 900 (с заглушками корутин), а часть шума становится
 ошибками: если в сообщении фигурирует уже разрешённый тип `android.*`, это настоящая проблема.
 Так найдены `Geocoder.getFromLocation()` без проверки на `null` и два обращения к
 `PackageInfo.applicationInfo` без проверки на `null`.
