@@ -3,6 +3,14 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Fixed
+- **Ссылка со схемой в верхнем регистре не проверялась по базам репутации.** `ThreatIntelClient`
+  разбирал хост через OkHttp, но перед этим сравнивал `startsWith("http://")` **с учётом регистра**:
+  `HTTPS://Evil.Example/Track` склеивался в `http://HTTPS://…`, парсер отдавал `null`, домен не
+  попадал в `hostsToCheck` — то есть такая ссылка проходила мимо URLhaus/OpenPhish молча.
+  Разбор вынесен в чистый `HostExtractor` без OkHttp: схема отбрасывается без учёта регистра,
+  снимаются `user:pass@`, порт, путь/query/fragment, крайние точки и `www.` (иначе `www.evil.com`
+  из SMS не совпал бы с записью `evil.com` в фиде), IPv6/односложные имена/`example.*` отсекаются.
+  11 выполняемых тестов.
 - **Фишинговая ссылка без схемы не находилась.** В SMS мошенники пишут «Ваша карта заблокирована,
   подробности: `sberbank-online.ru`» — без `http://` и без `/` в конце. `PhishingUrlChecker`
   считал ссылкой только `http(s)://`, `www.`, сокращатели и токены с косой чертой (`.ru/`, `.com/`),
@@ -41,11 +49,11 @@
   а расхождение утверждений между README/DEVELOPMENT/CHANGELOG — это ошибка). Негативно
   протестировано: подмена чисел даёт ошибку с номером строки. Стоит в `check_all.sh`,
   в job `static-checks` GitHub Actions и в `codemagic.yaml`.
-- **Тесты на непокрытое (+26):** `OverlayAttackCheckTest` (+1 на разделители в именах),
+- **Тесты на непокрытое (+37):** `OverlayAttackCheckTest` (+1 на разделители в именах),
   `IntrusionDetectorTest` (+2: порядок и улики сигналов, пустой вход) и новый
   `ThreatIntelModelsTest` (+4: какие вердикты блокируют трафик, что попадает в `unknown`) и
   `PhishingHeuristicsTest` (+9: ссылки, ключевые слова, голые домены, ложные срабатывания).
-  Всего в JVM-прогоне теперь **196 тестов в 21 файле**.
+  Всего в JVM-прогоне теперь **207 тестов в 22 файлах**.
 - **Заглушки, которые втащили в прогон ещё три файла тестов:** `android.provider.Settings`
   (+ `ContentResolver`), `android.content.pm.PackageManager`/`PackageInfo`/`ApplicationInfo`,
   `android.app.AppOpsManager` с `Context.getSystemService`, `dagger.hilt.android.qualifiers
@@ -68,12 +76,12 @@
   реализация: `static_audit.py` больше не дублирует regex-версию, а вызывает этот модуль. Добавлен
   в `./tools/check_all.sh`, в job `static-checks` GitHub Actions и в `codemagic.yaml`.
 - **`tools/test_coverage_map.py` — карта тестового покрытия без Gradle.** Показывает, какие
-  классы вообще упомянуты в тестах (сейчас 106 из 167), и отдельно — «логика без тестов» против
+  классы вообще упомянуты в тестах (сейчас 107 из 168), и отдельно — «логика без тестов» против
   «UI/Hilt/сервисы, которые проверяются Robolectric и вручную». Честно названо картой, а не
   процентом покрытия: упоминание класса не доказывает покрытие ветвей.
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 196 тестов в 21 файле. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 207 тестов в 22 файлах. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
   `android.util.Base64`/`android.content.Context`, авто-генерация заглушки `R` и разворачивание
   `import org.junit.Assert.*` втаскивают под прогон модели, конвертеры, хеширование PIN, разбор улик
@@ -127,7 +135,7 @@
 - **`docs/CI_WEBHOOKS.md`:** таблица «входящий trigger / исходящий notify», схема payload, проверка
   подписи на Python/Node, настройка Codemagic и GitHub, локальный сценарий проверки.
 - **`tools/kotlin_frontend_check.py` — проверка настоящим компилятором.** Запускает `kotlinc 2.1`
-  на всех 219 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
+  на всех 221 файле (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
   вызванные отсутствующими библиотеками (`-Xrender-internal-diagnostic-names` + список ожидаемых
   имён с пояснениями). Найдено и исправлено 7 ошибок компиляции, которые не видел регексп-аудит
   (см. Fixed). Без `kotlinc` скрипт завершается с кодом 0 и подсказкой, как его получить.
