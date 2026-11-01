@@ -40,6 +40,10 @@ STUBBED_PREFIXES = (
     "androidx.room.", "androidx.annotation.", "javax.inject.", "kotlinx.coroutines.flow.",
     "android.util.Log", "android.util.Base64", "android.os.Build", "android.os.SystemClock",
     "android.text.TextUtils", "android.content.Context",
+    "android.content.ContentResolver", "android.content.pm.PackageManager",
+    "android.content.pm.ApplicationInfo", "android.provider.Settings",
+    "android.app.AppOpsManager", "dagger.hilt.android.qualifiers.ApplicationContext",
+    "androidx.sqlite.db.SupportSQLiteDatabase",
 )
 
 # Импорты, которые без сети не разрешить даже заглушкой.
@@ -186,6 +190,25 @@ STUB_SOURCES = {
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Update
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Delete
 object OnConflictStrategy { const val REPLACE: Int = 1; const val IGNORE: Int = 2; const val ABORT: Int = 3 }
+
+/** Заглушка RoomDatabase: для компиляции `@Database`-класса достаточно базового типа. */
+abstract class RoomDatabase {
+    open fun close() {}
+    open fun clearAllTables() {}
+}
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS) annotation class Database(
+    val entities: Array<kotlin.reflect.KClass<*>> = [],
+    val version: Int = 1,
+    val exportSchema: Boolean = true,
+    val views: Array<kotlin.reflect.KClass<*>> = [],
+    val autoMigrations: Array<AutoMigration> = [],
+)
+@Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS)
+annotation class AutoMigration(val from: Int = 0, val to: Int = 0, val spec: kotlin.reflect.KClass<*> = Any::class)
+/** Базовая миграция Room: только объявление, исполняется на устройстве. */
+abstract class Migration(val startVersion: Int, val endVersion: Int) {
+    abstract fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase)
+}
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS) annotation class DatabaseView(val value: String = "", val viewName: String = "")
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY_GETTER) annotation class PrimaryKey(val autoGenerate: Boolean = false)
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.PROPERTY, AnnotationTarget.VALUE_PARAMETER) annotation class ColumnInfo(val name: String = "", val defaultValue: String = VALUE_UNSPECIFIED) {
@@ -195,6 +218,18 @@ object OnConflictStrategy { const val REPLACE: Int = 1; const val IGNORE: Int = 
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FIELD) annotation class Index(val value: Array<String> = [], val unique: Boolean = false, val name: String = "", val orders: IntArray = [])
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FIELD) annotation class Embedded(val prefix: String = "")
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Ignore
+''',
+    "androidx/sqlite/db/SupportSQLiteDatabase.kt": '''package androidx.sqlite.db
+
+/**
+ * Заглушка SupportSQLiteDatabase: SQL-миграции на JVM не исполняются (это делает
+ * `tools/migration_check.py` в настоящем SQLite), но объявление метода `migrate` нужно,
+ * чтобы `AppDatabase` и тест его конфигурации компилировались.
+ */
+interface SupportSQLiteDatabase {
+    fun execSQL(sql: String)
+    fun query(query: String): Any?
+}
 ''',
     "androidx/annotation/Annotations.kt": '''package androidx.annotation
 
@@ -274,13 +309,156 @@ object Base64 {
  * Тесты, которым нужен настоящий Context (ресурсы, сервисы, SharedPreferences), в JVM-прогон
  * не попадают — они идут под Robolectric в Gradle.
  */
-open class Context {
+abstract class Context {
     open fun getString(resId: Int): String = "res:$resId"
     open fun getString(resId: Int, vararg formatArgs: Any?): String = "res:$resId(" + formatArgs.joinToString() + ")"
     open val packageName: String get() = "com.phoneguard"
     open val filesDir: java.io.File get() = java.io.File(System.getProperty("java.io.tmpdir"), "phoneguard-files")
     open val cacheDir: java.io.File get() = java.io.File(System.getProperty("java.io.tmpdir"), "phoneguard-cache")
     open val applicationContext: Context get() = this
+    open val contentResolver: ContentResolver get() = ContentResolver()
+    open val applicationInfo: android.content.pm.ApplicationInfo get() = android.content.pm.ApplicationInfo()
+    open val packageManager: android.content.pm.PackageManager get() = android.content.pm.PackageManager()
+    open fun getSystemService(name: String): Any? = null
+
+    companion object {
+        const val APP_OPS_SERVICE: String = "appops"
+        const val WINDOW_SERVICE: String = "window"
+        const val CONNECTIVITY_SERVICE: String = "connectivity"
+        const val TELEPHONY_SERVICE: String = "phone"
+    }
+}
+''',
+    "android/content/ContentResolver.kt": '''package android.content
+
+/** Заглушка ContentResolver: значения настроек отдаёт `android.provider.Settings`. */
+open class ContentResolver
+''',
+    "android/content/pm/PackageManager.kt": '''package android.content.pm
+
+/**
+ * Заглушка PackageManager: список приложений пуст, поэтому проверки «подозрительный пакет»
+ * на JVM видят ровно то, что им передали в тесте, и не зависят от машины.
+ */
+open class ApplicationInfo {
+    var packageName: String = ""
+    var uid: Int = 0
+    var flags: Int = 0
+    var enabled: Boolean = true
+
+    companion object {
+        const val FLAG_DEBUGGABLE: Int = 2
+        const val FLAG_SYSTEM: Int = 1
+        const val FLAG_UPDATED_SYSTEM_APP: Int = 128
+        const val FLAG_EXTERNAL_STORAGE: Int = 262144
+        const val FLAG_INSTALLED: Int = 8388608
+    }
+}
+
+open class PackageManager {
+    open fun getInstalledApplications(flags: Int): List<ApplicationInfo> = emptyList()
+    open fun getInstalledApplications(flags: ApplicationInfoFlags): List<ApplicationInfo> = emptyList()
+    open fun getApplicationLabel(info: ApplicationInfo): CharSequence = info.packageName
+    open fun getApplicationLabel(info: Any): CharSequence = ""
+
+    /** Заглушка `PackageManager.ApplicationInfoFlags` (API 33+). */
+    class ApplicationInfoFlags private constructor() {
+        companion object {
+            @JvmStatic fun of(value: Long): ApplicationInfoFlags = ApplicationInfoFlags()
+        }
+    }
+
+    /** Заглушка `PackageManager.PackageInfoFlags` (API 33+). */
+    class PackageInfoFlags private constructor() {
+        companion object {
+            @JvmStatic fun of(value: Long): PackageInfoFlags = PackageInfoFlags()
+        }
+    }
+    open fun getInstalledPackages(flags: Int): List<PackageInfo> = emptyList()
+    open fun checkPermission(permission: String, packageName: String): Int = PERMISSION_DENIED
+    open fun getPackageInfo(packageName: String, flags: Int): PackageInfo = throw NameNotFoundException(packageName)
+    open fun getPackageInfo(packageName: String, flags: PackageInfoFlags): PackageInfo = throw NameNotFoundException(packageName)
+
+    class NameNotFoundException(name: String) : Exception(name)
+
+    companion object {
+        const val PERMISSION_GRANTED: Int = 0
+        const val PERMISSION_DENIED: Int = -1
+        const val GET_PERMISSIONS: Int = 4096
+        const val GET_ACTIVITIES: Int = 1
+        const val GET_SERVICES: Int = 4
+        const val GET_RECEIVERS: Int = 2
+        const val GET_META_DATA: Int = 128
+        const val MATCH_SYSTEM_ONLY: Int = 1048576
+        const val MATCH_UNINSTALLED_PACKAGES: Int = 8192
+    }
+}
+
+/** Заглушка `android.content.pm.PackageInfo`: только то, что читают проверки. */
+open class PackageInfo {
+    var packageName: String = ""
+    var versionName: String? = null
+    var requestedPermissions: Array<String>? = null
+    var permissions: Array<Any>? = null
+    var applicationInfo: ApplicationInfo? = null
+}
+''',
+    "android/app/AppOpsManager.kt": '''package android.app
+
+/**
+ * Заглушка AppOpsManager: по умолчанию ни одно приложение не имеет «рисовать поверх других
+ * окон», поэтому проверка оверлеев на JVM не выдаёт ложных находок.
+ */
+open class AppOpsManager {
+    open fun unsafeCheckOpNoThrow(op: String, uid: Int, packageName: String?): Int = MODE_DEFAULT
+    open fun checkOpNoThrow(op: String, uid: Int, packageName: String?): Int = MODE_DEFAULT
+    open fun checkOp(op: Int, uid: Int, packageName: String?): Int = MODE_DEFAULT
+    open fun noteOp(op: String, uid: Int, packageName: String?): Int = MODE_DEFAULT
+
+    companion object {
+        const val MODE_ALLOWED: Int = 0
+        const val MODE_IGNORED: Int = 1
+        const val MODE_ERRORED: Int = 2
+        const val MODE_DEFAULT: Int = 3
+        const val OPSTR_SYSTEM_ALERT_WINDOW: String = "android:system_alert_window"
+        const val OPSTR_GET_USAGE_STATS: String = "android:get_usage_stats"
+    }
+}
+''',
+    "android/provider/Settings.kt": '''package android.provider
+
+import android.content.ContentResolver
+
+/**
+ * Заглушка Settings: значения по умолчанию — «выключено». Так проверка интрузий на JVM ведёт себя
+ * как чистый телефон: ADB выключен, сторонних служб доступности нет.
+ */
+object Settings {
+    object Global {
+        const val ADB_ENABLED: String = "adb_enabled"
+        const val DEVELOPMENT_SETTINGS_ENABLED: String = "development_settings_enabled"
+
+        @JvmStatic fun getInt(resolver: ContentResolver, name: String, def: Int): Int = def
+        @JvmStatic fun getString(resolver: ContentResolver, name: String): String? = null
+        @JvmStatic fun getLong(resolver: ContentResolver, name: String, def: Long): Long = def
+    }
+
+    object Secure {
+        const val ENABLED_ACCESSIBILITY_SERVICES: String = "enabled_accessibility_services"
+        const val ACCESSIBILITY_ENABLED: String = "accessibility_enabled"
+        const val INSTALL_NON_MARKET_APPS: String = "install_non_market_apps"
+
+        @JvmStatic fun getInt(resolver: ContentResolver, name: String, def: Int): Int = def
+        @JvmStatic fun getString(resolver: ContentResolver, name: String): String? = null
+        @JvmStatic fun getFloat(resolver: ContentResolver, name: String, def: Float): Float = def
+    }
+
+    object System {
+        const val SCREEN_OFF_TIMEOUT: String = "screen_off_timeout"
+
+        @JvmStatic fun getInt(resolver: ContentResolver, name: String, def: Int): Int = def
+        @JvmStatic fun getString(resolver: ContentResolver, name: String): String? = null
+    }
 }
 ''',
     "android/os/Build.kt": '''package android.os
@@ -353,6 +531,13 @@ object TextUtils {
     @JvmStatic fun equals(a: CharSequence?, b: CharSequence?): Boolean = a?.toString() == b?.toString()
     @JvmStatic fun join(delimiter: CharSequence, vararg tokens: Any?): String = tokens.joinToString(delimiter.toString())
 }
+''',
+    "dagger/hilt/android/qualifiers/ApplicationContext.kt": '''package dagger.hilt.android.qualifiers
+
+/** Заглушка квалификатора Hilt: для компиляции чистых классов хватает самой аннотации. */
+@Retention(AnnotationRetention.RUNTIME)
+@Target(AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.FIELD, AnnotationTarget.FUNCTION)
+annotation class ApplicationContext
 ''',
     "javax/inject/Inject.kt": '''package javax.inject
 
@@ -441,10 +626,24 @@ def package_of(path: Path) -> str:
     return match.group(1) if match else ""
 
 
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+LINE_COMMENT = re.compile(r"(?m)^\s*//.*$")
+
+
+def code_only(text: str) -> str:
+    """Текст без комментариев и KDoc.
+
+    Иначе упоминание класса в документации (`[ThreatIntelClient]`) втягивало бы в замыкание
+    весь файл с сетевыми и корутинными зависимостями, и тест на чистые модели выпадал из прогона.
+    """
+    return LINE_COMMENT.sub("", BLOCK_COMMENT.sub(" ", text))
+
+
 def resolve_sources(test: Path, index: dict[str, tuple[Path, str]]) -> tuple[list[Path], str | None]:
     """Транзитивное замыкание исходников, нужных тесту. Возвращает (файлы, причина_пропуска)."""
     included: dict[Path, str] = {test: test.read_text(encoding="utf-8")}
-    queue = [(test, included[test])]
+    code: dict[Path, str] = {test: code_only(included[test])}
+    queue = [(test, code[test])]
     while queue:
         path, text = queue.pop()
         own_package = package_of(path)
@@ -461,7 +660,8 @@ def resolve_sources(test: Path, index: dict[str, tuple[Path, str]]) -> tuple[lis
             if reason:
                 return [], f"{source_path.relative_to(ROOT)} требует {reason}"
             included[source_path] = source_path.read_text(encoding="utf-8")
-            queue.append((source_path, included[source_path]))
+            code[source_path] = code_only(included[source_path])
+            queue.append((source_path, code[source_path]))
     return sorted(p for p in included if p != test), None
 
 

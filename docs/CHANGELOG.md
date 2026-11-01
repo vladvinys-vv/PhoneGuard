@@ -2,7 +2,35 @@
 
 ## [Unreleased] — интеграции и исправления
 
+### Fixed
+- **Заглушка `Context` в прогоне была не абстрактной, хотя в `android.jar` класс абстрактный.**
+  Из-за этого в тест попал `Context()` и JVM-прогон его «съел», а настоящая компиляция
+  (`kotlin_frontend_check.py` с `android.jar`) упала на
+  `Cannot create an instance of an abstract class`. Заглушка приведена к SDK, тест убран —
+  проверять `collectEnvironmentSignals` без Robolectric нельзя, о чём и написано в DEVELOPMENT.
+- **Проверка оверлеев не находила приложения с разделителями в имени.** `OverlayAttackCheck`
+  сравнивал имя пакета и ярлык с шаблонами подстрокой, а шаблоны записаны через точку и дефис
+  (`chat.head`, `pop-up`, `screen.filter`, `screen.dim`). В результате `com.x.chathead` с ярлыком
+  `ChatHead` — то есть самая частая форма имени — считался безопасным, и чек молчал о приложении
+  с правом рисовать поверх других окон. Теперь сравнение идёт по нормализованной строке
+  (нижний регистр, без `.`, `-`, `_` и пробелов), поэтому `ChatHead`, `chat_head` и `chat head`
+  совпадают, а `Bank`, `Fridays`, `Wikipedia` — по-прежнему нет. Дефект нашёлся сразу, как только
+  `OverlayAttackCheckTest` перестал пропускаться в JVM-прогоне.
 ### Added
+- **Тесты на непокрытое (+8):** `OverlayAttackCheckTest` (+1 на разделители в именах),
+  `IntrusionDetectorTest` (+2: порядок и улики сигналов, пустой вход) и новый
+  `ThreatIntelModelsTest` (+4: какие вердикты блокируют трафик, что попадает в `unknown`).
+  Всего в JVM-прогоне теперь **178 тестов в 19 файлах**.
+- **Заглушки, которые втащили в прогон ещё три файла тестов:** `android.provider.Settings`
+  (+ `ContentResolver`), `android.content.pm.PackageManager`/`PackageInfo`/`ApplicationInfo`,
+  `android.app.AppOpsManager` с `Context.getSystemService`, `dagger.hilt.android.qualifiers
+  .ApplicationContext`, `android.content.Context.applicationInfo`. Плюс `androidx.room`
+  (`Database`, `Migration`, `RoomDatabase`, `AutoMigration`) и `androidx.sqlite.db
+  .SupportSQLiteDatabase`: класс `AppDatabase` компилируется, но его тест всё равно уходит под
+  Gradle — замыкание тянет `DatabaseKeyManager` с `SharedPreferences` и SQLCipher.
+- **Замыкание исходников больше не тянет файлы из-за упоминаний в KDoc.** `ThreatIntelModels`
+  ссылались в документации на `ThreatIntelClient`, и тест чистых моделей выпадал из прогона,
+  потому что клиент требует корутины и OkHttp. Теперь поиск идёт по тексту без комментариев.
 - **`tools/migration_check.py` — миграции Room против сущностей, с настоящим SQL.**
   Пропущенная колонка или разрыв цепочки версий означает не «красный тест», а приложение, которое
   не запускается у обновляющихся пользователей (`Migration didn't properly handle …`).
@@ -20,7 +48,7 @@
   процентом покрытия: упоминание класса не доказывает покрытие ветвей.
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 167 тестов в 16 файлах. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 178 тестов в 19 файлах. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
   `android.util.Base64`/`android.content.Context`, авто-генерация заглушки `R` и разворачивание
   `import org.junit.Assert.*` втаскивают под прогон модели, конвертеры, хеширование PIN, разбор улик

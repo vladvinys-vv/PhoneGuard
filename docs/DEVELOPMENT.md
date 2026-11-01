@@ -172,7 +172,7 @@ python3 tools/jvm_unit_test.py --self-test # проверить сам ранн�
 Room, `androidx.annotation`, `javax.inject`, `android.util.Log`, `android.os.Build` (SDK_INT = 35),
 `android.text.TextUtils`, `android.util.Base64` и минимального `android.content.Context`
 подставляются заглушки, а `R.<тип>.<имя>` генерируется по фактическим ссылкам в коде — поэтому под прогон попадают
-модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 167 тестов в 16 файлах.
+модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 178 тестов в 19 файлах.
 
 Что остаётся Gradle: тесты на Android/Robolectric/MockK и всё, что требует настоящих AndroidX-
 артефактов; для них скрипт печатает `skip … — импорт …`.
