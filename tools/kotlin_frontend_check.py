@@ -155,6 +155,71 @@ def find_android_jar(explicit: str | None) -> str | None:
     return None
 
 
+# Частые классы JDK. Нужны, чтобы ловить «используется без импорта» даже когда сам импорт
+# удалён из проекта (тогда вывести имя из импортов невозможно). Список не претендует на
+# полноту: он покрывает то, что реально встречается в Android-коде.
+COMMON_JDK_CLASSES = {
+    "ArrayList", "Arrays", "Base64", "BigDecimal", "BigInteger", "BufferedReader", "BufferedWriter",
+    "ByteArrayInputStream", "ByteArrayOutputStream", "Calendar", "Callable", "Charset",
+    "Collectors", "Collections", "Comparator", "ConcurrentHashMap", "CopyOnWriteArrayList",
+    "CountDownLatch", "Date", "DateFormat", "DateTimeFormatter", "Duration", "EnumMap", "EnumSet",
+    "ExecutorService", "Executors", "File", "FileInputStream", "FileNotFoundException",
+    "FileOutputStream", "Files", "HashMap", "HashSet", "IOException", "InetAddress",
+    "InputStreamReader", "Instant", "LinkedHashMap", "LinkedHashSet", "Locale", "LocalDate",
+    "LocalDateTime", "Matcher", "MessageDigest", "Objects", "Optional", "OutputStreamWriter",
+    "Path", "Paths", "Pattern", "Predicate", "Random", "ReentrantLock", "Runnable", "SecureRandom",
+    "Semaphore", "ServerSocket", "SimpleDateFormat", "Socket", "SortedMap", "StandardCharsets",
+    "Stream", "Supplier", "System", "Thread", "TimeUnit", "Timer", "TimerTask", "TreeMap",
+    "UUID", "ZonedDateTime", "ZoneId",
+}
+
+
+def import_index(sources: list[str]) -> tuple[set[str], dict[str, str]]:
+    """(JDK-классы, которые где-то импортируются; класс проекта -> его пакет)."""
+    jdk: set[str] = set(COMMON_JDK_CLASSES)
+    project: dict[str, str] = {}
+    for path in sources:
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        jdk |= set(re.findall(r"^import\s+java[\w.]*\.(\w+)$", text, re.M))
+        package = re.search(r"^package\s+([\w.]+)", text, re.M)
+        for name in re.findall(
+            r"^(?:internal |private |public |abstract |open |sealed |data |enum )*"
+            r"(?:class|object|interface) (\w+)", text, re.M
+        ):
+            project[name] = package.group(1) if package else ""
+    return jdk, project
+
+
+def missing_import(path: str, line: str, message: str, jdk: set[str], project: dict[str, str]) -> str | None:
+    """Ловит настоящую ошибку компиляции: JDK/свой класс используется, но не импортирован.
+
+    `UNRESOLVED_REFERENCE` обычно списывают на отсутствующие android/androidx-зависимости,
+    и так пропускается реальная поломка вроде `List<File>` без `import java.io.File`.
+    """
+    match = re.search(r"unresolved reference '(\w+)'", message, re.IGNORECASE)
+    if match is None:
+        return None
+    symbol = match.group(1)
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if re.search(rf"^import\s+[\w.]*\.{re.escape(symbol)}$", text, re.M):
+        return None
+    if re.search(rf"^import\s+[\w.]+\.\*$", text, re.M) and symbol not in jdk:
+        return None  # звёздный импорт внешней библиотеки — не наша ошибка
+    package = re.search(r"^package\s+([\w.]+)", text, re.M)
+    if symbol in jdk:
+        return f"JDK-класс `{symbol}` используется без импорта (строка {line}) — сборка упадёт"
+    if symbol in project and project[symbol] != (package.group(1) if package else ""):
+        return (f"класс проекта `{symbol}` из пакета {project[symbol]} без импорта "
+                f"(строка {line}) — сборка упадёт")
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scope", choices=["main", "all"], default="all")
@@ -192,6 +257,7 @@ def main() -> int:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         log = (proc.stdout or "") + (proc.stderr or "")
 
+    jdk_symbols, project_classes = import_index(sources)
     real: list[str] = []
     noise = 0
     for line in log.splitlines():
@@ -201,6 +267,11 @@ def main() -> int:
         name = m.group("name")
         rel = str(Path(m.group("path")).relative_to(ROOT)) if m.group("path").startswith(str(ROOT)) else m.group("path")
         entry = f"{rel}:{m.group('line')}: [{name}] {m.group('msg')}"
+        if name in ("UNRESOLVED_REFERENCE", "UNRESOLVED_REFERENCE_WRONG_RECEIVER"):
+            hint = missing_import(m.group("path"), m.group("line"), m.group("msg"), jdk_symbols, project_classes)
+            if hint:
+                real.append(f"{entry} -> {hint}")
+                continue
         if name in ALWAYS_REAL or name not in EXPECTED:
             real.append(entry)
         elif android_jar and any(

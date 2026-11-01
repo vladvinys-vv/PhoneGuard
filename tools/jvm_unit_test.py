@@ -278,6 +278,9 @@ open class Context {
     open fun getString(resId: Int): String = "res:$resId"
     open fun getString(resId: Int, vararg formatArgs: Any?): String = "res:$resId(" + formatArgs.joinToString() + ")"
     open val packageName: String get() = "com.phoneguard"
+    open val filesDir: java.io.File get() = java.io.File(System.getProperty("java.io.tmpdir"), "phoneguard-files")
+    open val cacheDir: java.io.File get() = java.io.File(System.getProperty("java.io.tmpdir"), "phoneguard-cache")
+    open val applicationContext: Context get() = this
 }
 ''',
     "android/os/Build.kt": '''package android.os
