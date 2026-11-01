@@ -36,4 +36,9 @@ class VaultRepository @Inject constructor(
     suspend fun decryptFileFromVault(item: VaultItem): File? = withContext(Dispatchers.IO) {
         encryptionManager.decryptFileFromVault(item)
     }
+
+    /** Удаляет расшифрованную копию, когда она больше не нужна. */
+    suspend fun cleanupPreview(file: File) = withContext(Dispatchers.IO) {
+        encryptionManager.cleanupDecryptedFile(file)
+    }
 }

@@ -15,12 +15,6 @@ interface BlockedNumberDao {
     @Query("SELECT * FROM blocked_numbers WHERE phoneNumber = :phoneNumber LIMIT 1")
     suspend fun getBlockedNumber(phoneNumber: String): BlockedNumber?
 
-    @Query("SELECT EXISTS(SELECT 1 FROM blocked_numbers WHERE phoneNumber = :phoneNumber AND isWhitelist = 0)")
-    suspend fun isBlacklisted(phoneNumber: String): Boolean
-
-    @Query("SELECT EXISTS(SELECT 1 FROM blocked_numbers WHERE phoneNumber = :phoneNumber AND isWhitelist = 1)")
-    suspend fun isWhitelisted(phoneNumber: String): Boolean
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBlockedNumber(number: BlockedNumber)
 
@@ -32,9 +26,6 @@ interface BlockedNumberDao {
 
     @Query("DELETE FROM blocked_numbers")
     suspend fun deleteAll()
-
-    @Query("SELECT * FROM blocked_numbers ORDER BY timestamp DESC LIMIT :limit OFFSET :offset")
-    suspend fun getPagedBlockedNumbers(limit: Int, offset: Int): List<BlockedNumber>
 
     @Query("SELECT COUNT(*) FROM blocked_numbers")
     suspend fun getBlockedNumbersCount(): Int
@@ -58,6 +49,12 @@ interface BlockedNumberDao {
     /**
      * Проверка нескольких написаний одного номера (сырой + E.164),
      * чтобы списки совпадали независимо от формата записи.
+     *
+     * Эти два запроса заменили прежние `isBlacklisted`/`isWhitelisted`: они
+     * сравнивали ровно одну строку, поэтому номер, сохранённый как `0170…`,
+     * не находился при входящем `+49170…`. Заодно убраны `getPagedBlockedNumbers`
+     * (страницы теперь отдельные для чёрного и белого списков) и `isBlacklisted`
+     * без единого вызова в проекте.
      */
     @Query("SELECT EXISTS(SELECT 1 FROM blocked_numbers WHERE phoneNumber IN (:phoneNumbers) AND isWhitelist = 0)")
     suspend fun isBlacklistedAny(phoneNumbers: List<String>): Boolean

@@ -7,6 +7,7 @@ import android.content.Context
 import android.util.Log
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 import com.phoneguard.R
@@ -44,7 +45,7 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
 ) : IntrusionResponseExecutor {
 
     private val honeypotScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val reportedDecoys = mutableMapOf<String, Long>()
+    private val honeypotReportGate = HoneypotReportGate()
     private var honeypotObserver: HoneypotObserver? = null
 
     override suspend fun execute(event: IntrusionEvent, actions: List<IntrusionResponseAction>) {
@@ -178,25 +179,21 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
         honeypotObserver = observer
     }
 
-    /** Антидребезг для honeypot: не чаще одного события на путь за 10 минут. */
+    /**
+     * Антидребезг для honeypot: не чаще одного события на путь за 10 минут.
+     *
+     * Сама арифметика вынесена в [HoneypotReportGate] — её можно проверить
+     * JVM-тестом, а интервалы там считаются по монотонным часам.
+     */
     private fun shouldReportHoneypotAccess(path: String): Boolean {
         val file = File(path)
         if (!file.exists()) return false
-        val now = System.currentTimeMillis()
-        if (now - file.lastModified() < HONEYPOT_SELF_WRITE_WINDOW_MS) return false
-
-        synchronized(reportedDecoys) {
-            val last = reportedDecoys[path]
-            if (last != null && now - last < HONEYPOT_REPORT_INTERVAL_MS) return false
-            // Карта не должна расти бесконечно: путь приманки уникален, но её имя
-            // может меняться, а событий за месяцы накапливаются тысячи.
-            if (reportedDecoys.size >= MAX_REPORTED_DECOYS) {
-                reportedDecoys.entries.removeAll { (_, at) -> now - at >= HONEYPOT_REPORT_INTERVAL_MS }
-                if (reportedDecoys.size >= MAX_REPORTED_DECOYS) reportedDecoys.clear()
-            }
-            reportedDecoys[path] = now
-            return true
-        }
+        return honeypotReportGate.shouldReport(
+            path = path,
+            lastModifiedWallMs = file.lastModified(),
+            nowWallMs = System.currentTimeMillis(),
+            nowElapsedMs = SystemClock.elapsedRealtime()
+        )
     }
 
     private fun exportLog(event: IntrusionEvent) {
@@ -220,13 +217,6 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
     private companion object {
         const val TAG = "IntrusionResponseExecutor"
 
-        /** Файл, изменённый менее 5 секунд назад, считаем своей записью. */
-        const val HONEYPOT_SELF_WRITE_WINDOW_MS = 5_000L
-
-        /** Не больше одного события на один файл-приманку за 10 минут. */
-        const val HONEYPOT_REPORT_INTERVAL_MS = 10 * 60_000L
-
-        /** Предел карты антидребезга, чтобы она не росла безгранично. */
-        const val MAX_REPORTED_DECOYS = 200
+        /** Пороги антидребезга honeypot живут в [HoneypotReportGate]. */
     }
 }

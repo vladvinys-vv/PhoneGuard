@@ -12,7 +12,16 @@ package com.phoneguard.util
  * [LOCKOUT_MS]; успешный ввод обнуляет счётчик. Состояние хранится в
  * DataStore, поэтому перезагрузка телефона блокировку не снимает.
  *
- * Логика вынесена в чистую функцию, чтобы её можно было покрыть JVM-тестами
+ * Блокировка отсчитывается по двум часам сразу:
+ *  * `lockedUntil` — системное время. Единственный ориентир, который
+ *    переживает перезагрузку устройства;
+ *  * `lockoutRemainingMs` + `lockoutElapsedMark` — монотонное
+ *    `SystemClock.elapsedRealtime()`. Пока устройство не перезагружалось, оно
+ *    главнее: перевести системные часы вперёд, чтобы «переждать» 15 минут,
+ *    больше нельзя (раньше это был рабочий обход — подбор PIN продолжался,
+ *    стоило только сменить время или дождаться синхронизации NTP).
+ *
+ * Логика вынесена в чистые функции, чтобы её можно было покрыть JVM-тестами
  * без Android (см. `PinAttemptLimiterTest`).
  */
 object PinAttemptLimiter {
@@ -25,11 +34,35 @@ object PinAttemptLimiter {
 
     data class State(
         val attempts: Int = 0,
-        val lockedUntil: Long = 0L
+        val lockedUntil: Long = 0L,
+        /** Сколько блокировки оставалось в момент [lockoutElapsedMark]. */
+        val lockoutRemainingMs: Long = 0L,
+        /** `SystemClock.elapsedRealtime()` в момент блокировки (0 — метки нет). */
+        val lockoutElapsedMark: Long = 0L
     ) {
-        fun isLocked(now: Long): Boolean = now < lockedUntil
+        /**
+         * Сколько ещё действует блокировка.
+         *
+         * @param nowWallMs системное время (`System.currentTimeMillis()`)
+         * @param nowElapsedMs монотонное время (`SystemClock.elapsedRealtime()`)
+         */
+        fun remainingMs(nowWallMs: Long, nowElapsedMs: Long): Long {
+            if (lockedUntil == 0L && lockoutRemainingMs == 0L) return 0L
+            // Метка есть и монотонные часы не откатились назад ⇒ перезагрузки не было.
+            val sameBoot = lockoutElapsedMark > 0L && nowElapsedMs >= lockoutElapsedMark
+            val remaining = if (sameBoot) {
+                lockoutRemainingMs - (nowElapsedMs - lockoutElapsedMark)
+            } else {
+                // После перезагрузки монотонные часы начинаются с нуля — остаётся
+                // только системное время, причём его откат назад не должен
+                // превращаться в бесконечную блокировку.
+                lockedUntil - nowWallMs
+            }
+            return remaining.coerceIn(0L, LOCKOUT_MS)
+        }
 
-        fun remainingMs(now: Long): Long = (lockedUntil - now).coerceAtLeast(0L)
+        fun isLocked(nowWallMs: Long, nowElapsedMs: Long): Boolean =
+            remainingMs(nowWallMs, nowElapsedMs) > 0L
     }
 
     /** Успешная проверка PIN: счётчик и блокировка сбрасываются. */
@@ -39,15 +72,21 @@ object PinAttemptLimiter {
      * Неудачная проверка PIN.
      *
      * @param previous состояние до попытки
-     * @param now текущее время в миллисекундах
+     * @param nowWallMs текущее системное время в миллисекундах
+     * @param nowElapsedMs текущее монотонное время в миллисекундах
      */
-    fun afterFailure(previous: State, now: Long): State {
-        if (previous.isLocked(now)) return previous
+    fun afterFailure(previous: State, nowWallMs: Long, nowElapsedMs: Long): State {
+        if (previous.isLocked(nowWallMs, nowElapsedMs)) return previous
         val attempts = previous.attempts + 1
         return if (attempts >= MAX_ATTEMPTS) {
-            State(attempts = 0, lockedUntil = now + LOCKOUT_MS)
+            State(
+                attempts = 0,
+                lockedUntil = nowWallMs + LOCKOUT_MS,
+                lockoutRemainingMs = LOCKOUT_MS,
+                lockoutElapsedMark = nowElapsedMs
+            )
         } else {
-            State(attempts = attempts, lockedUntil = 0L)
+            State(attempts = attempts)
         }
     }
 }

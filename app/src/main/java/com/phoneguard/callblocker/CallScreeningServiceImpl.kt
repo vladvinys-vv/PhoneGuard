@@ -161,27 +161,28 @@ class CallScreeningServiceImpl : CallScreeningService() {
 
         // 5. Международные номера.
         val blockInternational = preferencesManager.blockInternationalNumbers.first()
-        if (blockInternational && isForeignNumber(rawNumber, normalized)) {
+        if (blockInternational && isForeignNumber(normalized)) {
             return true
         }
 
         return false
     }
 
-    /** Номер считается «иностранным», если он не парсится в регионе устройства как национальный. */
-    private fun isForeignNumber(rawNumber: String, normalized: String): Boolean {
-        if (!rawNumber.startsWith("+")) return false
+    /**
+     * Номер «иностранный», если его код страны отличается от кода региона устройства.
+     *
+     * Проверяется каноническая форма, а не исходная запись: номер с префиксом `00`
+     * раньше не блокировался вовсе. Само правило — в [InternationalNumberRule].
+     */
+    private fun isForeignNumber(normalized: String): Boolean {
         val region = phoneNumberNormalizer.currentRegion()
-        val withRegion = phoneNumberNormalizer.canonical(rawNumber) ?: return false
-        val asNational = runCatching {
-            // Если номер валиден как национальный для региона устройства — он «свой».
-            com.google.i18n.phonenumbers.PhoneNumberUtil.getInstance()
-                .parse(withRegion, region)
-        }.getOrNull() ?: return false
-        val countryCode = asNational.countryCode
-        val expected = com.google.i18n.phonenumbers.PhoneNumberUtil.getInstance()
-            .getCountryCodeForRegion(region)
-        return expected != 0 && countryCode != expected
+        val util = com.google.i18n.phonenumbers.PhoneNumberUtil.getInstance()
+        return InternationalNumberRule.isForeign(
+            e164 = normalized,
+            homeCountryCode = util.getCountryCodeForRegion(region)
+        ) { number ->
+            runCatching { util.parse(number, region).countryCode }.getOrNull()
+        }
     }
 
     private suspend fun logBlockedCall(rawNumber: String?) {

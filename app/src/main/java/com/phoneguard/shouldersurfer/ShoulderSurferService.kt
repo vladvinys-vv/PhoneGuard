@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -215,7 +216,8 @@ class ShoulderSurferService : LifecycleService() {
     }
 
     private fun analyzeImage(imageProxy: ImageProxy) {
-        val currentTime = System.currentTimeMillis()
+        // Интервалы — по монотонным часам (см. ниже про MIN_ALERT_INTERVAL_MS).
+        val currentTime = SystemClock.elapsedRealtime()
         if (currentTime - lastDetectionTime < adaptiveIntervalMs) {
             imageProxy.close()
             return
@@ -232,7 +234,7 @@ class ShoulderSurferService : LifecycleService() {
 
             faceDetector.process(inputImage)
                 .addOnSuccessListener { faces ->
-                    lastDetectionTime = System.currentTimeMillis()
+                    lastDetectionTime = SystemClock.elapsedRealtime()
                     handleFaces(faces)
                 }
                 .addOnFailureListener { e ->
@@ -276,7 +278,7 @@ class ShoulderSurferService : LifecycleService() {
     private fun notifySurferDetected() {
         // Раньше уведомление приходило на каждый кадр с лицом (раз в ~2 секунды) —
         // телефон буквально «пищал» постоянно. Теперь не чаще раза в 30 секунд.
-        val now = System.currentTimeMillis()
+        val now = SystemClock.elapsedRealtime()
         if (now - lastAlertTime < MIN_ALERT_INTERVAL_MS) return
         lastAlertTime = now
 

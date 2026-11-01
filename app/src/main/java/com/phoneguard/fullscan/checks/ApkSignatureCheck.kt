@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import com.phoneguard.malware.ApkSignatureScanner
 import com.phoneguard.R
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -58,11 +59,13 @@ class ApkSignatureCheck @Inject constructor(
             emptyList()
         }
 
-        val deadline = System.currentTimeMillis() + TIME_BUDGET_MS
+        // Бюджет времени — по монотонным часам: перевод системного времени
+        // не должен обрывать проверку раньше срока (или растягивать её).
+        val deadline = SystemClock.elapsedRealtime() + TIME_BUDGET_MS
         var inspected = 0
 
         candidates.forEach { packageInfo ->
-            if (System.currentTimeMillis() > deadline) return@forEach
+            if (SystemClock.elapsedRealtime() > deadline) return@forEach
             val packageName = packageInfo.packageName
             if (packageName == context.packageName) return@forEach
 

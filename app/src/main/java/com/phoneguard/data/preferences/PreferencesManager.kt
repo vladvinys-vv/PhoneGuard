@@ -1,6 +1,7 @@
 package com.phoneguard.data.preferences
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
@@ -37,6 +38,10 @@ class PreferencesManager(private val context: Context) {
         /** Счётчик неудачных вводов PIN и время окончания блокировки (см. [PinAttemptLimiter]). */
         private val KEY_PIN_FAILED_ATTEMPTS = intPreferencesKey("pin_failed_attempts")
         private val KEY_PIN_LOCKED_UNTIL = longPreferencesKey("pin_locked_until")
+
+        /** Блокировка по монотонным часам: перезагрузку не переживает, зато не зависит от перевода времени. */
+        private val KEY_PIN_LOCKOUT_REMAINING_MS = longPreferencesKey("pin_lockout_remaining_ms")
+        private val KEY_PIN_LOCKOUT_ELAPSED_MARK = longPreferencesKey("pin_lockout_elapsed_mark")
         private val KEY_BACKUP_NUMBER = stringPreferencesKey("backup_number")
         private val KEY_SIM_LOCK_ENABLED = booleanPreferencesKey("sim_lock_enabled")
         private val KEY_DEVICE_ADMIN_ENABLED = booleanPreferencesKey("device_admin_enabled")
@@ -97,6 +102,8 @@ class PreferencesManager(private val context: Context) {
             // Новый PIN — новый счётчик попыток: старая блокировка не должна мешать.
             it.remove(KEY_PIN_FAILED_ATTEMPTS)
             it.remove(KEY_PIN_LOCKED_UNTIL)
+            it.remove(KEY_PIN_LOCKOUT_REMAINING_MS)
+            it.remove(KEY_PIN_LOCKOUT_ELAPSED_MARK)
         }
     }
 
@@ -112,22 +119,27 @@ class PreferencesManager(private val context: Context) {
     suspend fun verifyPin(pin: String): Boolean {
         val preferences = context.dataStore.data.first()
         val now = System.currentTimeMillis()
+        val nowElapsed = SystemClock.elapsedRealtime()
         val state = PinAttemptLimiter.State(
             attempts = preferences[KEY_PIN_FAILED_ATTEMPTS] ?: 0,
-            lockedUntil = preferences[KEY_PIN_LOCKED_UNTIL] ?: 0L
+            lockedUntil = preferences[KEY_PIN_LOCKED_UNTIL] ?: 0L,
+            lockoutRemainingMs = preferences[KEY_PIN_LOCKOUT_REMAINING_MS] ?: 0L,
+            lockoutElapsedMark = preferences[KEY_PIN_LOCKOUT_ELAPSED_MARK] ?: 0L
         )
-        if (state.isLocked(now)) return false
+        if (state.isLocked(now, nowElapsed)) return false
 
         val storedHash = preferences[KEY_PIN_HASH] ?: return false
         val isValid = SecurityUtils.verifyPin(pin, storedHash)
         val next = if (isValid) {
             PinAttemptLimiter.afterSuccess()
         } else {
-            PinAttemptLimiter.afterFailure(state, now)
+            PinAttemptLimiter.afterFailure(state, now, nowElapsed)
         }
         context.dataStore.edit { edit ->
             if (next.attempts == 0) edit.remove(KEY_PIN_FAILED_ATTEMPTS) else edit[KEY_PIN_FAILED_ATTEMPTS] = next.attempts
             if (next.lockedUntil == 0L) edit.remove(KEY_PIN_LOCKED_UNTIL) else edit[KEY_PIN_LOCKED_UNTIL] = next.lockedUntil
+            if (next.lockoutRemainingMs == 0L) edit.remove(KEY_PIN_LOCKOUT_REMAINING_MS) else edit[KEY_PIN_LOCKOUT_REMAINING_MS] = next.lockoutRemainingMs
+            if (next.lockoutElapsedMark == 0L) edit.remove(KEY_PIN_LOCKOUT_ELAPSED_MARK) else edit[KEY_PIN_LOCKOUT_ELAPSED_MARK] = next.lockoutElapsedMark
         }
         return isValid
     }
@@ -137,13 +149,21 @@ class PreferencesManager(private val context: Context) {
         val preferences = context.dataStore.data.first()
         val state = PinAttemptLimiter.State(
             attempts = preferences[KEY_PIN_FAILED_ATTEMPTS] ?: 0,
-            lockedUntil = preferences[KEY_PIN_LOCKED_UNTIL] ?: 0L
+            lockedUntil = preferences[KEY_PIN_LOCKED_UNTIL] ?: 0L,
+            lockoutRemainingMs = preferences[KEY_PIN_LOCKOUT_REMAINING_MS] ?: 0L,
+            lockoutElapsedMark = preferences[KEY_PIN_LOCKOUT_ELAPSED_MARK] ?: 0L
         )
-        return state.remainingMs(System.currentTimeMillis())
+        return state.remainingMs(System.currentTimeMillis(), SystemClock.elapsedRealtime())
     }
 
     suspend fun clearPinCode() {
-        context.dataStore.edit { it.remove(KEY_PIN_HASH) }
+        context.dataStore.edit {
+            it.remove(KEY_PIN_HASH)
+            it.remove(KEY_PIN_FAILED_ATTEMPTS)
+            it.remove(KEY_PIN_LOCKED_UNTIL)
+            it.remove(KEY_PIN_LOCKOUT_REMAINING_MS)
+            it.remove(KEY_PIN_LOCKOUT_ELAPSED_MARK)
+        }
     }
 
     // Backup number

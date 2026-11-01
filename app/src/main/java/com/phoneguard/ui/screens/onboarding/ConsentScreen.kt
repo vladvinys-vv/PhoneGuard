@@ -103,20 +103,21 @@ fun ConsentScreen(
                 style = MaterialTheme.typography.bodyMedium
             )
 
-            consents.forEach { consent ->
+            // forEachIndexed вместо forEach + indexOf: равенство ConsentItem не
+            // учитывает индекс, и при двух одинаковых строках (например, после
+            // копирования) indexOf мог вернуть чужую позицию и переключить не тот
+            // переключатель. Заодно исчез квадратичный поиск на каждом клике.
+            consents.forEachIndexed { index, consent ->
                 ConsentCard(
                     item = consent,
                     onToggle = { accepted ->
-                        val index = consents.indexOf(consent)
-                        if (index >= 0) {
-                            when {
-                                !accepted -> consents[index] = consent.copy(accepted = false)
-                                consent.isGranted(context) ->
-                                    consents[index] = consent.copy(accepted = true)
-                                else -> {
-                                    pendingIndex = index
-                                    permissionLauncher.launch(consent.permission)
-                                }
+                        when {
+                            !accepted -> consents[index] = consent.copy(accepted = false)
+                            consent.isGranted(context) ->
+                                consents[index] = consent.copy(accepted = true)
+                            else -> {
+                                pendingIndex = index
+                                permissionLauncher.launch(consent.permission)
                             }
                         }
                     }

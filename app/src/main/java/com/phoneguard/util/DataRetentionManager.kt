@@ -30,7 +30,9 @@ class DataRetentionManager @Inject constructor(
     companion object {
         private const val TAG = "DataRetentionManager"
         private const val RETENTION_DAYS = 90L
-        private const val RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000
+        // Все множители Long: иначе промежуточное 24*60*60*1000 (86 400 000) ещё
+        // влезает в Int, а любое увеличение срока — уже нет.
+        private const val RETENTION_MS = RETENTION_DAYS * 24L * 60L * 60L * 1000L
     }
 
     fun scheduleCleanup(scope: CoroutineScope) {
