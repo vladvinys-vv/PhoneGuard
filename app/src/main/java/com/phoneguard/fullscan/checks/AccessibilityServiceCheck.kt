@@ -38,13 +38,6 @@ class AccessibilityServiceCheck @Inject constructor(
         val riskReason: String
     )
 
-    // Признаки в имени пакета/приложения, характерные для инструментов перехвата экрана
-    private val suspiciousPackagePatterns = listOf(
-        "autoclick", "auto.click", "accessibility.click",
-        "spy", "monitor", "keylog", "screenshot",
-        "recorder", "tracker", "watcher", "grabber"
-    )
-
     fun performCheck(): AccessibilityResult {
         val enabledServices = try {
             Settings.Secure.getString(
@@ -73,10 +66,8 @@ class AccessibilityServiceCheck @Inject constructor(
                     null
                 }
 
-                val matchedPattern = suspiciousPackagePatterns.firstOrNull { pattern ->
-                    pkg.contains(pattern, ignoreCase = true) ||
-                        appName?.contains(pattern, ignoreCase = true) == true
-                }
+                // Признаки живут в AccessibilityHeuristics — там они и проверяются тестами.
+                val matchedPattern = AccessibilityHeuristics.matchingPattern(pkg, appName)
 
                 SuspiciousAccessibilityService(
                     packageName = pkg,
