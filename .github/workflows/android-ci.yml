@@ -31,6 +31,10 @@ jobs:
       - name: Static audit (imports, R.*, Room, manifest, strings)
         run: python3 tools/static_audit.py
 
+      # Числа в документации не должны расходиться с кодом.
+      - name: Docs numbers match the code
+        run: python3 tools/docs_check.py
+
       - name: Strings are in sync with tools/sync_strings.py
         run: python3 tools/sync_strings.py --check
 
