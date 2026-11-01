@@ -17,6 +17,11 @@ step "gradle_check.py"
 python3 tools/gradle_check.py || failed=1
 python3 tools/gradle_check.py --self-test || failed=1
 
+step "migration_check.py"
+# SQL-миграции Room против сущностей: пропущенная колонка = падение у обновляющихся
+# пользователей («Migration didn't properly handle»), а не просто красный тест.
+python3 tools/migration_check.py || failed=1
+
 step "static_audit.py"
 python3 tools/static_audit.py || failed=1
 

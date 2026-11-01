@@ -1071,112 +1071,23 @@ SQL_TYPES = [
 ]
 
 
-def _sql_type(kotlin_type: str) -> str | None:
-    base = kotlin_type.split('<')[0].strip().rstrip('?')
-    for prefixes, sql in SQL_TYPES:
-        if base in prefixes:
-            return sql
-    # Байтовые массивы Room хранит как BLOB, enum'ы и прочие классы — как TEXT
-    # (через TypeConverter).
-    if base == 'ByteArray':
-        return 'BLOB'
-    if base and base[0].isupper():
-        return 'TEXT'
-    return None
-
-
-def _entity_schemas() -> dict[str, dict[str, tuple[str, bool]]]:
-    """tableName -> {column: (sql_type, not_null)} из @Entity-классов."""
-    schemas: dict[str, dict[str, tuple[str, bool]]] = {}
-    for path in (ROOT / 'app/src/main/java').rglob('*.kt'):
-        text = path.read_text(encoding='utf-8')
-        for m in re.finditer(r'@Entity\s*\(', text):
-            ann = _balanced(text, m.end() - 1)
-            table_m = re.search(r'tableName\s*=\s*"([^"]+)"', ann)
-            cls_pos = text.find('data class ', m.end())
-            if cls_pos < 0 or not table_m:
-                continue
-            paren = text.find('(', cls_pos)
-            if paren < 0:
-                continue
-            columns: dict[str, tuple[str, bool]] = {}
-            for raw in _split_top_level(_balanced(text, paren)):
-                if '@Ignore' in raw:
-                    continue
-                col_m = re.search(r'@ColumnInfo\s*\(\s*name\s*=\s*"([^"]+)"', raw)
-                prop_m = re.search(r'\b(?:val|var)\s+(\w+)\s*:\s*([\w<>,. ?]+)', raw)
-                if not prop_m:
-                    continue
-                name = col_m.group(1) if col_m else prop_m.group(1)
-                kotlin_type = prop_m.group(2).strip()
-                sql = _sql_type(kotlin_type)
-                if sql is None:
-                    continue
-                columns[name] = (sql, '?' not in kotlin_type)
-            schemas[table_m.group(1)] = columns
-    return schemas
-
-
-def _migration_schemas() -> dict[str, dict[str, tuple[str, bool]]]:
-    """Таблицы, созданные/изменённые миграциями: tableName -> колонки."""
-    path = ROOT / 'app/src/main/java/com/phoneguard/data/local/AppDatabase.kt'
-    if not path.exists():
-        return {}
-    text = path.read_text(encoding='utf-8')
-    schemas: dict[str, dict[str, tuple[str, bool]]] = {}
-    for m in re.finditer(r'CREATE TABLE IF NOT EXISTS\s+`(\w+)`\s*\(', text):
-        table = m.group(1)
-        body = _balanced(text, m.end() - 1)
-        columns: dict[str, tuple[str, bool]] = {}
-        for part in _split_top_level(body):
-            col_m = re.match(r'`(\w+)`\s+([A-Z]+)(.*)$', part, re.S)
-            if not col_m:
-                continue
-            columns[col_m.group(1)] = (
-                col_m.group(2),
-                'NOT NULL' in col_m.group(3),
-            )
-        schemas[table] = columns
-    for m in re.finditer(r'ALTER TABLE\s+`(\w+)`\s+ADD COLUMN\s+`(\w+)`\s+([A-Z]+)([^"\n]*?)"', text):
-        table, column, sql_type, rest = m.groups()
-        schemas.setdefault(table, {})[column] = (sql_type, 'NOT NULL' in rest)
-    return schemas
-
-
 def check_migrations_match_entities() -> None:
-    """Миграции должны давать ровно ту схему, что описана в @Entity (иначе краш на обновлении)."""
-    entities = _entity_schemas()
-    migrations = _migration_schemas()
-    for table, expected in sorted(migrations.items()):
-        actual = entities.get(table)
-        if actual is None:
-            continue
-        for column in sorted(set(expected) | set(actual)):
-            if column not in actual:
-                ERRORS.append(
-                    f"AppDatabase.kt: миграция создаёт колонку `{table}.{column}`, "
-                    f"которой нет в @Entity"
-                )
-                continue
-            if column not in expected:
-                ERRORS.append(
-                    f"AppDatabase.kt: в миграциях нет колонки `{table}.{column}`, "
-                    f"но она есть в @Entity (Room бросит IllegalStateException)"
-                )
-                continue
-            exp_type, exp_not_null = expected[column]
-            act_type, act_not_null = actual[column]
-            if exp_type != act_type:
-                ERRORS.append(
-                    f"AppDatabase.kt: `{table}.{column}` — миграция {exp_type}, @Entity {act_type}"
-                )
-            if exp_not_null != act_not_null:
-                ERRORS.append(
-                    f"AppDatabase.kt: `{table}.{column}` — NOT NULL в миграции "
-                    f"{'есть' if exp_not_null else 'нет'}, в @Entity "
-                    f"{'есть' if act_not_null else 'нет'}"
-                )
+    """Миграции Room против `@Entity` — единая реализация в `tools/migration_check.py`.
 
+    Там SQL миграций реально исполняется в SQLite, поэтому ловятся ещё и повторные колонки,
+    `ALTER` по несуществующей таблице и разрывы цепочки версий. Здесь только переиспользуем.
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        import migration_check
+        errors, warnings, _unchecked = migration_check.check()
+    except Exception as error:  # noqa: BLE001 — проверка не должна валить весь аудит молча
+        ERRORS.append(f"AppDatabase.kt: проверка миграций не отработала — {error}")
+        return
+    finally:
+        sys.path.pop(0)
+    ERRORS.extend(f"AppDatabase.kt: {text}" for text in errors)
+    WARNINGS.extend(f"AppDatabase.kt: {text}" for text in warnings)
 
 
 def _normalize_route(route: str) -> str:

@@ -45,6 +45,8 @@ workflows:
         script: chmod +x ./gradlew
       - name: Gradle scripts check
         script: python3 tools/gradle_check.py
+      - name: Room migrations check
+        script: python3 tools/migration_check.py
       - name: Static audit
         script: python3 tools/static_audit.py
       - name: Strings are in sync
