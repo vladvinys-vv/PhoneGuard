@@ -282,6 +282,6 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
         /** Канал уведомлений о попытках подбора PIN по SMS. */
         private const val ALERT_CHANNEL_ID = "sms_command_channel"
-        private const val ALERT_NOTIFICATION_ID = 8101
+        private const val ALERT_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SMS_ALARM
     }
 }

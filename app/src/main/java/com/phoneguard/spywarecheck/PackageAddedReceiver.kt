@@ -121,19 +121,14 @@ class PackageAddedReceiver : BroadcastReceiver() {
         private const val TAG = "PackageAddedReceiver"
         private const val CHANNEL_ID = "package_added_channel"
 
-        /** База для id уведомлений: дальше добавляется хеш имени пакета. */
-        private const val NOTIFICATION_ID_BASE = 2000
-
         /**
-         * Маска, ограничивающая id диапазоном 2000..6095.
+         * Уведомление на каждый пакет, а не одно общее.
          *
-         * Раньше использовалось `and 0xFFFF` (до 67 535), и такие id пересекались с
-         * уведомлениями других компонентов (8101 — тревога по SMS, 9001 — камера).
+         * Диапазон живёт в [com.phoneguard.util.NotificationIds]: прежний
+         * `2000..6095` накрывал `4101` — подтверждение подмены SIM, и установка
+         * приложения могла стереть предупреждение о подмене.
          */
-        private const val NOTIFICATION_ID_MASK = 0x0FFF
-
-        /** Уведомление на каждый пакет, а не одно общее. */
         fun notificationIdFor(packageName: String): Int =
-            NOTIFICATION_ID_BASE + (packageName.hashCode() and NOTIFICATION_ID_MASK)
+            com.phoneguard.util.NotificationIds.packageAdded(packageName)
     }
 }

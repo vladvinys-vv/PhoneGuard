@@ -61,9 +61,9 @@ class ShoulderSurferService : LifecycleService() {
         private const val MIN_ALERT_INTERVAL_MS = 30_000L
 
         private const val CHANNEL_ID = "shoulder_surfer_channel"
-        private const val NOTIFICATION_ID = 1002
+        private const val NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SHOULDER_SURFER_FOREGROUND
         private const val ALERT_CHANNEL_ID = "shoulder_surfer_alert_channel"
-        private const val ALERT_NOTIFICATION_ID = 1003
+        private const val ALERT_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SHOULDER_SURFER_ALERT
         const val ACTION_START = "com.phoneguard.shouldersurfer.START"
         const val ACTION_STOP = "com.phoneguard.shouldersurfer.STOP"
 

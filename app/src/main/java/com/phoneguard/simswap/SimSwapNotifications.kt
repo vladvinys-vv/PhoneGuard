@@ -29,7 +29,7 @@ object SimSwapNotifications {
     const val CHANNEL_ID = "sim_swap_channel"
 
     /** Отдельный id: не пересекается с VPN (1001), звонками (1101/1102) и анти-вором. */
-    const val SIM_SWAP_NOTIFICATION_ID = 4101
+    const val SIM_SWAP_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SIM_SWAP
 
     /** Показывает уведомление о неподтверждённой смене SIM. */
     fun notifyUnconfirmedSwap(context: Context) {
