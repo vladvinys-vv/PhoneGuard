@@ -106,11 +106,27 @@ class OverlayAttackCheck @Inject constructor(
             "chat.head", "pop-up"
         )
 
+        /**
+         * Приводит имя к «слитному» виду: `chat.head`, `chat head`, `chat_head` и `ChatHead`
+         * должны совпадать, ведь разделители в названиях пишут кто как.
+         *
+         * Раньше сравнение шло простым `contains(pattern)`, поэтому шаблоны с точкой и дефисом
+         * (`chat.head`, `pop-up`, `screen.filter`) не находили **ни одного** реального имени:
+         * приложение `com.x.chathead` с ярлыком `ChatHead` проходило проверку как безопасное.
+         */
+        private fun normalize(value: String): String =
+            value.lowercase().filter { it.isLetterOrDigit() }
+
         /** Первый совпавший признак имени пакета/приложения (видимость для тестов). */
-        fun matchingPattern(packageName: String, appLabel: String): String? =
-            SUSPICIOUS_OVERLAY_PATTERNS.firstOrNull { pattern ->
-                packageName.contains(pattern, ignoreCase = true) ||
-                    appLabel.contains(pattern, ignoreCase = true)
+        fun matchingPattern(packageName: String, appLabel: String): String? {
+            val packageNameNormalized = normalize(packageName)
+            val appLabelNormalized = normalize(appLabel)
+            return SUSPICIOUS_OVERLAY_PATTERNS.firstOrNull { pattern ->
+                val needle = normalize(pattern)
+                needle.isNotEmpty() &&
+                    (packageNameNormalized.contains(needle) ||
+                        appLabelNormalized.contains(needle))
             }
+        }
     }
 }

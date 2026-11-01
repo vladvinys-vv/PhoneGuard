@@ -23,7 +23,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Static audit (imports, R.*, Room, manifest, strings, migrations)
+      # Пропущенная колонка в миграции Room = падение у обновляющихся пользователей,
+      # а не просто красный тест, поэтому проверяем до всего остального.
+      - name: Room migrations vs entities
+        run: python3 tools/migration_check.py
+
+      - name: Static audit (imports, R.*, Room, manifest, strings)
         run: python3 tools/static_audit.py
 
       - name: Strings are in sync with tools/sync_strings.py

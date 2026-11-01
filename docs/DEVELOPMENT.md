@@ -32,10 +32,10 @@
 ./tools/check_all.sh
 ```
 
-Она запускает `gradle_check.py`, `static_audit.py`, проверяет `sync_strings.py --check` и, если
-установлены, `kotlin_frontend_check.py` (kotlinc), `aapt2_check.py` (aapt2) и `kotlin_analysis.py`
-(tree-sitter). Обязательные проверки (`gradle_check.py`, `static_audit.py` и строки) прогоняются в
-CI-job `static-checks`, компиляторная проверка — в `kotlin-frontend`; сборка и тесты — в `lint`,
+Она запускает `gradle_check.py`, `migration_check.py`, `static_audit.py`, проверяет
+`sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
+`aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
+(`gradle_check.py`, `migration_check.py`, `static_audit.py` и строки) прогоняются в CI-job `static-checks`, компиляторная проверка — в `kotlin-frontend`; сборка и тесты — в `lint`,
 `unit-test`, `build-debug`, `build-release`.
 
 Если job'ы падают за 1–2 секунды **без запущенных шагов**, это не YAML: GitHub в этом случае
@@ -172,7 +172,7 @@ python3 tools/jvm_unit_test.py --self-test # проверить сам ранн�
 Room, `androidx.annotation`, `javax.inject`, `android.util.Log`, `android.os.Build` (SDK_INT = 35),
 `android.text.TextUtils`, `android.util.Base64` и минимального `android.content.Context`
 подставляются заглушки, а `R.<тип>.<имя>` генерируется по фактическим ссылкам в коде — поэтому под прогон попадают
-модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 167 тестов в 16 файлах.
+модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 178 тестов в 19 файлах.
 
 Что остаётся Gradle: тесты на Android/Robolectric/MockK и всё, что требует настоящих AndroidX-
 артефактов; для них скрипт печатает `skip … — импорт …`.
@@ -199,6 +199,27 @@ UI, Hilt-модули и сервисы проверяются Robolectric-те�
 но не импортирован в этом файле (и нет звёздного импорта библиотеки), это ошибка со ссылкой
 на строку.
 
+### `tools/migration_check.py`
+
+Сверка SQL-миграций Room с сущностями. Ошибка здесь означает не «красный тест», а **приложение,
+которое не запускается после обновления**: Room проверяет схему сразу после миграции и бросает
+`Migration didn't properly handle …`, причём у пользователей, а не у разработчика. `MigrationTestHelper`
+в песочнице без Google Maven не запустить, поэтому проверка статическая **плюс настоящее исполнение
+SQL** через встроенный в Python `sqlite3`:
+
+1. цепочка версий непрерывна (1 → `version`, ровно по одной ступени) и `LATEST_VERSION` совпадает
+   с `@Database(version = …)`;
+2. каждый `execSQL` реально выполняется SQLite — ловятся опечатки в синтаксисе, повторное
+   `ADD COLUMN`, `ALTER` по несуществующей таблице;
+3. итоговая схема (таблицы, колонки, `NOT NULL`) совпадает с `@Entity`; enum-колонки ожидаются как
+   `TEXT`, потому что `Converters` пишет имена констант.
+
+Сейчас: 7 миграций, 7 таблиц, версия 8, 0 ошибок. Колонки таблиц, созданных Room ещё в версии 1
+(`blocked_log`, `blocked_numbers`), сверить нечем — инструмент честно печатает их как `info`, а не
+делает вид, что проверил. Тот же код вызывает `static_audit.py` (одна реализация, без дублей).
+Проверка негативно протестирована: удаление `MIGRATION_5_6` даёт «нет миграции 5 → 6», а лишнее
+поле в `@Entity` без `ALTER` — «есть в сущности, но её не добавляет ни одна миграция».
+
 ### `tools/static_audit.py`
 
 Проверки без Gradle (регулярные выражения + разбор XML). Ловит то, что иначе падает на сборке или
@@ -208,7 +229,8 @@ UI, Hilt-модули и сервисы проверяются Robolectric-те�
 незащищённые `startActivity`/`startService`, мёртвые компоненты (включая `<activity>`, кроме
 ярлыков `LAUNCHER` и `BROWSABLE`-ссылок — так нашлась недоступная `SimSwapConfirmationActivity`),
 недостижимые экраны, YAML workflows и конфиги (`.github/workflows`, `codemagic.yaml`, `.jules`),
-миграции против `@Entity`,
+миграции против `@Entity`
+(через `migration_check.py`),
 маршруты навигации, `Icons.Default.*`, `uses-feature`, backup-правила, mockk-стабы, арность
 конструкторов в тестах, типы литералов на позициях параметров, пропущенные обязательные
 именованные аргументы, Gradle-обвязку, **уникальность id уведомлений** и **целостность deep links**.
@@ -255,6 +277,12 @@ GitHub-зеркала `Sable/android-platforms` (~26 МБ, несколько с
 npm pack kotlin-compiler@2.1.0 && tar xzf kotlin-compiler-2.1.0.tgz
 export PATH="$PWD/package/bin:$PATH"
 ```
+
+Важно про JDK: `jdk4py` по умолчанию ставит JDK 25, на котором `kotlinc` 2.1.0 падает с
+`exception: java.lang.IllegalArgumentException: 25.0.2`, поэтому берём JDK 17
+(`pip install jdk4py==17.0.9.2`, `JAVA_HOME=…/jdk4py/java-runtime`). Скачивание релиза с
+`github.com/…/releases/download/…` в песочнице может быть недоступно (редирект уходит на
+`release-assets.githubusercontent.com`), а реестр npm — доступен; отсюда и способ выше.
 
 Именно этой проверкой найдены и исправлены реальные ошибки сборки: `@Volatile` на `val`,
 приватный `loadApps()` вызывался из UI, `return` внутри lambda `withContext`, имя enum-класса

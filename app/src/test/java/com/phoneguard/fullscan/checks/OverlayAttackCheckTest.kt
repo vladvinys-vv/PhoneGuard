@@ -20,6 +20,19 @@ class OverlayAttackCheckTest {
     }
 
     @Test
+    fun separatorsInNamesDoNotHideAMatch() {
+        // Регресс: шаблоны `chat.head` и `pop-up` сравнивались как подстроки с точкой/дефисом,
+        // поэтому `com.x.chathead` (самая частая форма имени пакета) считался безопасным.
+        assertEquals("chat.head", OverlayAttackCheck.matchingPattern("com.x.chathead", "ChatHead"))
+        assertEquals("chat.head", OverlayAttackCheck.matchingPattern("com.x.chat_head", "Chat"))
+        assertEquals("chat.head", OverlayAttackCheck.matchingPattern("com.x.other", "Chat Head"))
+        assertEquals("pop-up", OverlayAttackCheck.matchingPattern("com.x.popupnotes", "Popup Notes"))
+        assertEquals("pop-up", OverlayAttackCheck.matchingPattern("com.x.pop_up", "Notes"))
+        assertEquals("screen.dim", OverlayAttackCheck.matchingPattern("com.x.screendim", "Night"))
+        assertEquals("screen.filter", OverlayAttackCheck.matchingPattern("com.x.other", "Screen Filter"))
+    }
+
+    @Test
     fun appLabelMatchingIsCaseInsensitive() {
         assertEquals("floating", OverlayAttackCheck.matchingPattern("com.example.player", "Floating Player"))
     }
