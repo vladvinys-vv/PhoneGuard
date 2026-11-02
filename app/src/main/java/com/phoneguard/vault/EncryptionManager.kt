@@ -150,6 +150,13 @@ class EncryptionManager @Inject constructor(
         target.delete()
     }
 
+    /** Виден ли путь как «внутри каталога сейфа» — используется и проверкой, и тестами. */
+    internal fun isInsideVault(path: java.io.File): Boolean {
+        val root = runCatching { vaultDir.canonicalPath }.getOrNull() ?: return false
+        val target = runCatching { path.canonicalPath }.getOrNull() ?: return false
+        return VaultFileNames.isInside(root, target)
+    }
+
     fun deleteVaultFile(item: VaultItem) {
         existingVaultFileOrNull(item.fileName)?.delete()
     }
@@ -161,9 +168,7 @@ class EncryptionManager @Inject constructor(
     private fun existingVaultFileOrNull(fileName: String): File? {
         if (fileName.isBlank()) return null
         val file = File(vaultDir, fileName)
-        val vaultPath = runCatching { vaultDir.canonicalPath }.getOrNull() ?: return null
-        val filePath = runCatching { file.canonicalPath }.getOrNull() ?: return null
-        if (!filePath.startsWith(vaultPath + File.separator)) return null
+        if (!isInsideVault(file)) return null
         return file.takeIf { it.exists() }
     }
 
@@ -207,30 +212,12 @@ class EncryptionManager @Inject constructor(
      * Отбрасываются только разделители пути и управляющие символы — имена
      * пользовательских файлов не обязаны быть латиницей.
      */
-    internal fun sanitizeFileName(name: String): String {
-        val base = name.substringAfterLast('/').substringAfterLast('\\')
-        val cleaned = base
-            .map { ch -> if (ch.isISOControl() || ch in FORBIDDEN_CHARS) '_' else ch }
-            .joinToString("")
-            .trim()
-            .trimStart('.')
-            .take(MAX_NAME_LENGTH)
-        return cleaned.ifBlank { "file_${System.currentTimeMillis()}" }
-    }
+    internal fun sanitizeFileName(name: String): String =
+        VaultFileNames.sanitize(name, fallback = "file_${System.currentTimeMillis()}")
 
     /** Добавляет суффикс, если файл с таким именем уже лежит в сейфе. */
-    private fun uniqueFileName(fileName: String): String {
-        if (!File(vaultDir, fileName).exists()) return fileName
-        val dot = fileName.lastIndexOf('.')
-        val base = if (dot > 0) fileName.substring(0, dot) else fileName
-        val extension = if (dot > 0) fileName.substring(dot) else ""
-        var counter = 1
-        while (true) {
-            val candidate = "$base($counter)$extension"
-            if (!File(vaultDir, candidate).exists()) return candidate
-            counter++
-        }
-    }
+    private fun uniqueFileName(fileName: String): String =
+        VaultFileNames.unique(fileName) { candidate -> File(vaultDir, candidate).exists() }
 
     companion object {
         /**
@@ -242,13 +229,10 @@ class EncryptionManager @Inject constructor(
          */
         const val MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024
 
-        private const val MAX_NAME_LENGTH = 100
-
         /** Сколько расшифрованная копия живёт в кэше предпросмотра. */
         const val PREVIEW_MAX_AGE_MS = 10 * 60 * 1000L
 
         /** Должно совпадать с `<cache-path>` в `res/xml/file_paths.xml`. */
         const val PREVIEW_DIR_NAME = "vault_preview"
-        private val FORBIDDEN_CHARS = setOf(':', '*', '?', '"', '<', '>', '|', '\u0000')
     }
 }
