@@ -20,6 +20,9 @@ import com.phoneguard.model.ScanHistory
  *
  * Формат повторяет прежний: `{ "blockedLogs": [...], "firewallLogs": [...],
  * "scanHistory": [...] }`, отступ — два пробела.
+ *
+ * Отличие от прежнего: телефонные номера и IP-адреса пишутся **замаскированными**
+ * (`LogRedaction`) — выгрузка уходит наружу, а это данные третьих лиц, а не пользователя.
  */
 internal object ExportJson {
 
@@ -35,7 +38,9 @@ internal object ExportJson {
         out.append("  \"blockedLogs\": ")
         writeArray(out, blockedLogs) { log ->
             out.append("{\n")
-            field(out, "phoneNumber", quote(log.phoneNumber))
+            // Телефон блокировавшегося абонента — данные третьего лица: в выгрузку
+            // попадает только маска (см. LogRedaction), в базе номер остаётся как есть.
+            field(out, "phoneNumber", quote(LogRedaction.maskPhoneNumber(log.phoneNumber).orEmpty()))
             out.append(",\n")
             field(out, "isSms", log.isSms.toString())
             out.append(",\n")
@@ -51,7 +56,7 @@ internal object ExportJson {
             out.append(",\n")
             field(out, "appName", quote(log.appName))
             out.append(",\n")
-            field(out, "ipAddress", log.ipAddress.quoteOrNull())
+            field(out, "ipAddress", LogRedaction.maskIp(log.ipAddress).quoteOrNull())
             out.append(",\n")
             field(out, "domainName", log.domainName.quoteOrNull())
             out.append(",\n")

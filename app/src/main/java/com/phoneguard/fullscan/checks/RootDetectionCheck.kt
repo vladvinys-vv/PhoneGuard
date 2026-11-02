@@ -24,33 +24,11 @@ class RootDetectionCheck @Inject constructor(
         val confidence: Float // 0.0 .. 1.0
     )
 
-    /** Стандартные пути к su binary */
-    private val suPaths = listOf(
-        "/system/bin/su",
-        "/system/xbin/su",
-        "/system/sbin/su",
-        "/sbin/su",
-        "/vendor/bin/su",
-        "/data/local/su",
-        "/data/local/xbin/su",
-        "/system/bin/.ext/su",
-        "/su/bin/su",
-        "/magisk/.core/bin/su"
-    )
+    /** Пути, пакеты и порог вердикта — в чистом [RootSignals] (там же их тесты). */
+    private val suPaths get() = RootSignals.SU_PATHS
 
-    /** Пакеты известных root-приложений */
-    private val rootPackagePrefixes = listOf(
-        "com.topjohnwu.magisk",
-        "eu.chainfire.supersu",
-        "com.thirdparty.superuser",
-        "com.koushikdutta.superuser",
-        "com.noshufou.android.su",
-        "com.dimonvideo.luckypatcher",
-        "com.chelpus.lackypatch"
-    )
+    private val rootPackagePrefixes get() = RootSignals.ROOT_PACKAGE_PREFIXES
 
-    /** Build tags, указывающие на root */
-    private val testKeysTags = listOf("test-keys", "dev-keys", "eng")
 
     fun performCheck(): RootCheckResult {
         val details = mutableListOf<String>()
@@ -67,7 +45,7 @@ class RootDetectionCheck @Inject constructor(
 
         // 2. Проверка build tags
         val buildTags = android.os.Build.TAGS ?: ""
-        val hasTestKeys = testKeysTags.any { buildTags.contains(it, ignoreCase = true) }
+        val hasTestKeys = RootSignals.hasTestKeys(buildTags)
         if (hasTestKeys) {
             details.add(context.getString(R.string.root_detail_tags_suspicious, buildTags))
             rootIndicators++
@@ -115,9 +93,7 @@ class RootDetectionCheck @Inject constructor(
         // исключение, а на рутованном — необратимое изменение системы. Поэтому
         // проверяем известные маркеры перезаписанного системного раздела.
         val systemWritable = try {
-            File("/system/xbin/.su").exists() ||
-                File("/system/bin/.ext").exists() ||
-                File("/system/app/Superuser.apk").exists()
+            RootSignals.SYSTEM_MARKERS.any { marker -> File(marker).exists() }
         } catch (_: Exception) { false }
         if (systemWritable) {
             details.add(context.getString(R.string.root_detail_system_writable))
@@ -141,13 +117,12 @@ class RootDetectionCheck @Inject constructor(
         // Каждая проверка добавляет ровно одну строку в details (и при
         // срабатывании, и при отсутствии индикатора), поэтому их количество и
         // есть число проверок — раньше здесь была константа 6, которая
-        // разъезжалась при добавлении новой проверки.
-        val totalChecks = details.size.coerceAtLeast(1)
-        val confidence = rootIndicators.toFloat() / totalChecks.toFloat()
+        // разъезжалась при добавлении новой проверки. Порог и доля — в [RootSignals].
+        val verdict = RootSignals.verdict(rootIndicators, details.size)
         return RootCheckResult(
-            isRooted = rootIndicators >= 3,
+            isRooted = verdict.isRooted,
             details = details,
-            confidence = confidence
+            confidence = verdict.confidence
         )
     }
 }

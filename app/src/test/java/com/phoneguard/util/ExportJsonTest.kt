@@ -17,6 +17,28 @@ import org.junit.Test
  */
 class ExportJsonTest {
 
+    /** Выгрузка с «злым» доменом: нужна только для проверки экранирования. */
+    private object FirewallEscapingSample {
+        fun render(): String = StringBuilder().also { out ->
+            ExportJson.write(
+                out,
+                emptyList(),
+                listOf(
+                    FirewallLog(
+                        packageName = "com.example.app",
+                        appName = "Example",
+                        ipAddress = null,
+                        domainName = "evil\"domain\nname\\",
+                        timestamp = 1L,
+                        connectionType = FirewallLog.ConnectionType.WIFI,
+                        trafficDirection = FirewallLog.TrafficDirection.OUTBOUND
+                    )
+                ),
+                emptyList()
+            )
+        }.toString()
+    }
+
     private fun blocked(number: String) = BlockedLog(phoneNumber = number, isSms = false)
 
     private fun firewall(ip: String? = "1.2.3.4", domain: String? = null) = FirewallLog(
@@ -67,10 +89,26 @@ class ExportJsonTest {
 
     @Test
     fun stringsWithQuotesAndNewlinesAreEscaped() {
-        val json = document(blockedLogs = listOf(blocked("+49\"170\n1234\\")))
-        assertTrue(json.contains("+49\\\"170\\n1234\\\\"))
-        // Сырой перевод строки внутри значения означает, что экранирования нет.
-        assertFalse(json.contains("+49\"170\n1234"))
+        // Проверяем экранирование на домене, а не на номере: номер в выгрузке
+        // маскируется (LogRedaction), и «сырой» строки в файле уже не будет.
+        val json = FirewallEscapingSample.render()
+        assertTrue(json.contains("evil\\\"domain\\nname\\\\"))
+        assertFalse(json.contains("evil\"domain\nname"))
+    }
+
+    @Test
+    fun phoneNumbersAreMaskedInExport() {
+        val json = document(blockedLogs = listOf(blocked("+491701234567")))
+        assertFalse("полный номер не должен попадать в файл", json.contains("+491701234567"))
+        assertTrue(json.contains("+491"))
+        assertTrue("маска на месте середины номера", json.contains(LogRedaction.MASK_CHAR.toString()))
+    }
+
+    @Test
+    fun ipAddressesAreMaskedInExport() {
+        val json = document(firewallLogs = listOf(firewall(ip = "192.168.1.42")))
+        assertFalse(json.contains("192.168.1.42"))
+        assertTrue(json.contains("192.168.${LogRedaction.MASK_CHAR}.${LogRedaction.MASK_CHAR}"))
     }
 
     @Test
@@ -112,7 +150,8 @@ class ExportJsonTest {
             firewallLogs = listOf(firewall()),
             scanHistory = listOf(scanEntry())
         )
-        assertTrue(json.contains("+491701234567"))
+        // Номер в выгрузке маскируется: проверяем именно маску, а не исходное значение.
+        assertTrue(json.contains(LogRedaction.maskPhoneNumber("+491701234567")!!))
         assertTrue(json.contains("com.example.app"))
         assertTrue(json.contains("1700000000000"))
         assertTrue(json.contains("\"riskScore\": 70"))

@@ -67,4 +67,17 @@ internal object VaultFileNames {
      */
     fun isInside(rootPath: String, targetPath: String): Boolean =
         targetPath.startsWith(rootPath.trimEnd(File.separatorChar) + File.separator)
+
+    /**
+     * Лежит ли [target] **непосредственно** внутри каталога [root].
+     *
+     * Нужно для удаления расшифрованного предпросмотра: удалять можно только прямого ребёнка
+     * каталога предпросмотра, а не файл из вложенного каталога и не сам каталог. Сравнение
+     * идёт по каноническим путям, поэтому симлинк наружу не пройдёт проверку.
+     */
+    fun isDirectChildOf(root: File, target: File): Boolean {
+        val canonicalRoot = runCatching { root.canonicalFile }.getOrNull() ?: return false
+        val canonicalTarget = runCatching { target.canonicalFile }.getOrNull() ?: return false
+        return canonicalTarget.parentFile == canonicalRoot
+    }
 }

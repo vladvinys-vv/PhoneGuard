@@ -88,6 +88,12 @@ object Assert {
         if (expected != actual) throw AssertionFailure("${message?.plus(": ") ?: ""}ожидалось <$expected>, получено <$actual>")
     }
     @JvmStatic fun assertEquals(expected: Double, actual: Double, delta: Double) = assertEquals(null, expected, actual, delta)
+    // Перегрузки для Float: в настоящем JUnit они есть, и без них тест с `assertEquals(0.0f, x, 0.0001f)`
+    // не собирается в шиме (ошибка «no applicable candidate»), хотя с настоящим JUnit компилируется.
+    @JvmStatic fun assertEquals(expected: Float, actual: Float, delta: Float) =
+        assertEquals(null, expected.toDouble(), actual.toDouble(), delta.toDouble())
+    @JvmStatic fun assertEquals(message: String?, expected: Float, actual: Float, delta: Float) =
+        assertEquals(message, expected.toDouble(), actual.toDouble(), delta.toDouble())
     @JvmStatic fun assertEquals(message: String?, expected: Double, actual: Double, delta: Double) {
         if (expected.isNaN() != actual.isNaN() || (!expected.isNaN() && kotlin.math.abs(expected - actual) > delta)) {
             throw AssertionFailure("${message?.plus(": ") ?: ""}ожидалось <$expected>, получено <$actual>")
