@@ -114,23 +114,34 @@ class SimSwapDetector(
 
     suspend fun confirmCurrentSimSwap() {
         val latest = repository.latest()
-        latest?.let { repository.confirm(it.id) }
-        preferencesManager.setSimSwapConfirmed(true)
-        preferencesManager.setSimSwapUnconfirmed(false)
+        // План действий — в чистом SimSwapConfirmPolicy (см. её KDoc).
+        val plan = SimSwapConfirmPolicy.plan(SimSwapConfirmPolicy.Choice.CONFIRM, latest != null)
+        applyConfirmation(plan, latest)
         disableSensitiveAppsGuard()
-        SimSwapNotifications.cancel(context)
     }
 
     suspend fun rejectCurrentSimSwap() {
         val latest = repository.latest()
-        latest?.let {
-            repository.confirm(it.id)
-            repository.markAttackSuspected(it.id)
+        val plan = SimSwapConfirmPolicy.plan(SimSwapConfirmPolicy.Choice.REJECT, latest != null)
+        applyConfirmation(plan, latest)
+        if (plan.activateLostMode) activateLostMode()
+    }
+
+    /** Выполняет план подтверждения/отказа; правила решает [SimSwapConfirmPolicy]. */
+    private suspend fun applyConfirmation(plan: SimSwapConfirmPolicy.Plan, latest: SimSwapEvent?) {
+        if (plan.confirmLatestEvent && latest != null) {
+            repository.confirm(latest.id)
         }
-        preferencesManager.setSimSwapConfirmed(true)
-        preferencesManager.setSimSwapUnconfirmed(false)
-        SimSwapNotifications.cancel(context)
-        activateLostMode()
+        if (plan.markAttackSuspected && latest != null) {
+            repository.markAttackSuspected(latest.id)
+        }
+        if (plan.clearUnconfirmedFlag) {
+            preferencesManager.setSimSwapConfirmed(true)
+            preferencesManager.setSimSwapUnconfirmed(false)
+        }
+        if (plan.cancelNotification) {
+            SimSwapNotifications.cancel(context)
+        }
     }
 
     private suspend fun activateLostMode() {

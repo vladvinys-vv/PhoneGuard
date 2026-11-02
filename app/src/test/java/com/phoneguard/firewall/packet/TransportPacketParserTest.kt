@@ -23,6 +23,34 @@ class TransportPacketParserTest {
     }
 
     @Test
+    fun `TCP metadata is a value object with all flags decoded`() {
+        // Полное сравнение значения, а не отдельных полей: так ловится «забытый» флаг
+        // (например, RST, который копируется из ACK) и неверный headerLength.
+        val packet = tcpPacket(sourcePort = 1_024, destinationPort = 5_000, headerLength = 20)
+        packet[33] = 0x02
+        val metadata = TcpPacketParser.parse(packet, requireNotNull(IPv4PacketParser.parse(packet)))
+        assertEquals(
+            TcpMetadata(
+                sourcePort = 1_024,
+                destinationPort = 5_000,
+                headerLength = 20,
+                syn = true,
+                ack = false,
+                fin = false,
+                rst = false
+            ),
+            metadata
+        )
+    }
+
+    @Test
+    fun `UDP metadata is a value object`() {
+        val packet = udpPacket(sourcePort = 53, destinationPort = 4_443)
+        val metadata = UdpPacketParser.parse(packet, requireNotNull(IPv4PacketParser.parse(packet)))
+        assertEquals(UdpMetadata(sourcePort = 53, destinationPort = 4_443, length = 8), metadata)
+    }
+
+    @Test
     fun `parses TCP FIN and RST flags`() {
         val packet = tcpPacket()
         packet[33] = 0x05

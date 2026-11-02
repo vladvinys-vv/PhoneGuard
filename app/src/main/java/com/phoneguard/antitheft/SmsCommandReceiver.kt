@@ -81,20 +81,31 @@ class SmsCommandReceiver : BroadcastReceiver() {
     }
 
     private suspend fun processCommand(context: Context, command: String, sender: String) {
-        val parsed = SmsRemoteCommand.parse(command) ?: return
+        val parsed = SmsRemoteCommand.parse(command)
+        // PIN проверяется только когда команда вообще найдена (как и раньше).
+        val pinValid = parsed?.let { preferencesManager.verifyPin(it.pin) } ?: false
 
-        // PIN проверяется до любой реакции: без него команда игнорируется.
-        if (!preferencesManager.verifyPin(parsed.pin)) {
-            Log.w(TAG, "SMS command rejected: wrong PIN")
-            // Подбор PIN по SMS больше не бесконечен (см. PinAttemptLimiter), но
-            // пользователь должен узнать о попытках: показываем локальное уведомление.
-            notifyRejectedCommand(context)
-            return
+        // Решение — в чистом SmsCommandGuard (см. его KDoc: матрица зафиксирована тестами).
+        when (SmsCommandGuard.decide(
+            commandParsed = parsed != null,
+            pinValid = pinValid,
+            actionKnown = parsed?.action != null
+        )) {
+            SmsCommandGuard.Decision.IGNORE -> return
+            SmsCommandGuard.Decision.REJECT_WRONG_PIN -> {
+                Log.w(TAG, "SMS command rejected: wrong PIN")
+                // Подбор PIN по SMS больше не бесконечен (см. PinAttemptLimiter), но
+                // пользователь должен узнать о попытках: показываем локальное уведомление.
+                notifyRejectedCommand(context)
+                return
+            }
+            // Неизвестная команда не выполняется, но PIN уже проверен — так попытка
+            // подбора остаётся видимой для пользователя.
+            SmsCommandGuard.Decision.NOTHING_TO_DO -> return
+            SmsCommandGuard.Decision.EXECUTE -> Unit
         }
 
-        // Неизвестная команда (action == null) не выполняется, но PIN уже проверен —
-        // так попытка подбора остаётся видимой для пользователя.
-        when (parsed.action) {
+        when (parsed?.action) {
             SmsRemoteCommand.Action.LOCK -> lockDevice(context, sender)
             SmsRemoteCommand.Action.ALARM -> triggerAlarm(context)
             SmsRemoteCommand.Action.LOCATION -> sendLocation(context, sender)
@@ -211,13 +222,14 @@ class SmsCommandReceiver : BroadcastReceiver() {
         val stateValue = runCatching { telephonyManager.simState }
             .getOrDefault(TelephonyManager.SIM_STATE_UNKNOWN)
         // Ответ уходит на телефон владельца — он тоже должен быть на языке устройства.
-        val simState = when (stateValue) {
-            TelephonyManager.SIM_STATE_READY -> context.getString(R.string.sim_state_ready)
-            TelephonyManager.SIM_STATE_ABSENT -> context.getString(R.string.sim_state_absent)
-            TelephonyManager.SIM_STATE_PIN_REQUIRED -> context.getString(R.string.sim_state_pin_required)
-            TelephonyManager.SIM_STATE_PUK_REQUIRED -> context.getString(R.string.sim_state_puk_required)
-            TelephonyManager.SIM_STATE_NETWORK_LOCKED -> context.getString(R.string.sim_state_network_locked)
-            else -> context.getString(R.string.sim_state_unknown)
+        // Соответствие «код SIM → состояние» живёт в чистом AntitheftStatusPolicy.
+        val simState = when (AntitheftStatusPolicy.simStateOf(stateValue)) {
+            AntitheftStatusPolicy.SimState.READY -> context.getString(R.string.sim_state_ready)
+            AntitheftStatusPolicy.SimState.ABSENT -> context.getString(R.string.sim_state_absent)
+            AntitheftStatusPolicy.SimState.PIN_REQUIRED -> context.getString(R.string.sim_state_pin_required)
+            AntitheftStatusPolicy.SimState.PUK_REQUIRED -> context.getString(R.string.sim_state_puk_required)
+            AntitheftStatusPolicy.SimState.NETWORK_LOCKED -> context.getString(R.string.sim_state_network_locked)
+            AntitheftStatusPolicy.SimState.UNKNOWN -> context.getString(R.string.sim_state_unknown)
         }
         val deviceId = runCatching {
             Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
@@ -229,7 +241,9 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
         val statusMsg = buildString {
             append(context.getString(R.string.sms_status_line, simState, deviceId))
-            if (battery >= 0) append(context.getString(R.string.sms_status_battery, battery))
+            if (AntitheftStatusPolicy.includeBatteryLevel(battery)) {
+                append(context.getString(R.string.sms_status_battery, battery))
+            }
         }
         sendSms(context, sender, statusMsg)
     }
