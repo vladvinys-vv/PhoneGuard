@@ -38,12 +38,12 @@ class SystemIntegrityCheck @Inject constructor(
 
     fun performCheck(): IntegrityResult {
         val details = mutableListOf<String>()
-        var compromisedIndicators = 0
+        val signals = mutableSetOf<IntegrityPolicy.Signal>()
 
         // 1. Verified Boot (Android Verified Boot) и состояние загрузчика.
         val verifiedBootState = readSystemProperty("ro.boot.verifiedbootstate") ?: "unknown"
         val flashLocked = readSystemProperty("ro.boot.flash.locked")
-        val isBootUnlocked = flashLocked != null && flashLocked != "1"
+        val isBootUnlocked = IntegrityPolicy.isBootloaderUnlocked(flashLocked)
 
         details.add(context.getString(R.string.integrity_verified_boot, verifiedBootState))
         details.add(
@@ -54,23 +54,28 @@ class SystemIntegrityCheck @Inject constructor(
             }
         )
 
-        if (verifiedBootState == "orange" || verifiedBootState == "yellow") {
+        if (IntegrityPolicy.isVerifiedBootUnsafe(verifiedBootState)) {
             details.add(context.getString(R.string.integrity_verified_boot_unsafe, verifiedBootState))
-            compromisedIndicators++
+            signals += IntegrityPolicy.Signal.VERIFIED_BOOT_UNSAFE
         }
         if (isBootUnlocked) {
             details.add(context.getString(R.string.integrity_bootloader_unlocked_warn))
-            compromisedIndicators++
+            signals += IntegrityPolicy.Signal.BOOTLOADER_UNLOCKED
         }
 
         // 2. Дата сборки прошивки — старая прошивка несёт известные уязвимости.
         val buildDate = Build.TIME
+        val nowMs = System.currentTimeMillis()
         if (buildDate > 0) {
-            val yearsSinceBuild = (System.currentTimeMillis() - buildDate) /
-                (365L * 24 * 60 * 60 * 1000)
-            if (yearsSinceBuild >= 2) {
-                details.add(context.getString(R.string.integrity_build_old, yearsSinceBuild.toInt()))
-                compromisedIndicators++
+            if (IntegrityPolicy.isStaleBuild(buildDate, nowMs)) {
+                details.add(
+                    context.getString(
+                        R.string.integrity_build_old,
+                        IntegrityPolicy.buildAgeYears(buildDate, nowMs)
+                    )
+                )
+                // Слабая улика: сама по себе не делает систему скомпрометированной.
+                signals += IntegrityPolicy.Signal.STALE_FIRMWARE
             } else {
                 details.add(context.getString(R.string.integrity_build_fresh))
             }
@@ -91,7 +96,7 @@ class SystemIntegrityCheck @Inject constructor(
                     suspiciousSystemFiles.joinToString()
                 )
             )
-            compromisedIndicators++
+            signals += IntegrityPolicy.Signal.SYSTEM_ROOT_FILES
         } else {
             details.add(context.getString(R.string.integrity_system_files_none))
         }
@@ -99,16 +104,10 @@ class SystemIntegrityCheck @Inject constructor(
         // 4. Признаки отладочной/кастомной сборки в fingerprint.
         val fingerprint = Build.FINGERPRINT.orEmpty()
         val tags = Build.TAGS.orEmpty()
-        val hasDebugTags = tags.contains("test-keys", ignoreCase = true) ||
-            tags.contains("dev-keys", ignoreCase = true) ||
-            fingerprint.contains("userdebug", ignoreCase = true) ||
-            fingerprint.contains("eng.", ignoreCase = true)
-        if (hasDebugTags) {
+        if (IntegrityPolicy.hasDebugBuildMarks(tags, fingerprint)) {
             details.add(context.getString(R.string.integrity_debug_build, tags))
-            compromisedIndicators++
-        } else if (fingerprint.contains("lineage", ignoreCase = true) ||
-            fingerprint.contains("custom", ignoreCase = true)
-        ) {
+            signals += IntegrityPolicy.Signal.DEBUG_BUILD
+        } else if (IntegrityPolicy.isCustomRom(fingerprint)) {
             // Кастомная прошивка — информация, а не компрометация.
             details.add(
                 context.getString(R.string.integrity_custom_rom, fingerprint.takeLast(30))
@@ -123,7 +122,7 @@ class SystemIntegrityCheck @Inject constructor(
         details.add(context.getString(R.string.integrity_limit_heuristics))
 
         return IntegrityResult(
-            isCompromised = compromisedIndicators >= 2,
+            isCompromised = IntegrityPolicy.isCompromised(signals),
             details = details
         )
     }
@@ -141,9 +140,12 @@ class SystemIntegrityCheck @Inject constructor(
         }
 
         return runCatching {
-            val process = Runtime.getRuntime().exec(arrayOf("getprop", name))
+            // `redirectErrorStream(true)` обязателен: если сначала читать stdout, а stderr
+            // закрывать после, процесс может заблокироваться на заполненном буфере stderr.
+            val process = ProcessBuilder("getprop", name)
+                .redirectErrorStream(true)
+                .start()
             val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-            process.errorStream?.close()
             process.waitFor()
             process.destroy()
             output.ifBlank { null }
