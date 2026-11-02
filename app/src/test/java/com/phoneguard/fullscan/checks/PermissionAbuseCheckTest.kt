@@ -47,9 +47,20 @@ class PermissionAbuseCheckTest {
     }
 
     @Test
-    fun `assessRisk returns HIGH for SMS plus other permissions`() {
+    fun `assessRisk returns CRITICAL for SMS plus phone`() {
+        // `SMS + PHONE` входит в список критических комбинаций (перехват сообщений и
+        // состояние телефона), поэтому ожидание HIGH было ошибкой теста: на настоящем
+        // прогоне он падал. Та же логика продублирована в чистых тестах
+        // PermissionRiskPolicyTest, которые выполняются без Robolectric.
         val check = PermissionAbuseCheck(context())
         val result = check.assessRisk(setOf(PermissionGroup.SMS, PermissionGroup.PHONE), labels)
+        assertEquals(PermissionAbuseCheck.RiskLevel.CRITICAL, result.first)
+    }
+
+    @Test
+    fun `assessRisk returns HIGH for SMS plus unrelated permission`() {
+        val check = PermissionAbuseCheck(context())
+        val result = check.assessRisk(setOf(PermissionGroup.SMS, PermissionGroup.STORAGE), labels)
         assertEquals(PermissionAbuseCheck.RiskLevel.HIGH, result.first)
     }
 
