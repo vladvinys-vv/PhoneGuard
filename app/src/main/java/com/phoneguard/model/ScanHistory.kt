@@ -19,7 +19,15 @@ data class ScanIssue(
     val title: String,
     val description: String,
     val recommendation: String,
-    val isHeuristic: Boolean = false
+    val isHeuristic: Boolean = false,
+    /**
+     * Заглушка «проблем не найдено», а не настоящая находка.
+     *
+     * Такая запись нужна экрану отчёта (иначе список пуст и непонятно, что скан
+     * завершился), но в счётчики попадать не должна: раньше чистый телефон
+     * сохранялся в историю как «найдена 1 проблема» и аналитика считала единицу.
+     */
+    val isPlaceholder: Boolean = false
 )
 
 enum class IssueSeverity { CRITICAL, WARNING, INFO }

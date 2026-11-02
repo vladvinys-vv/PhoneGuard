@@ -430,20 +430,20 @@ class FullScanOrchestrator @Inject constructor(
 
         if (issues.isEmpty()) {
             // Раньше текст был захардкожен по-русски и попадал в отчёт на любом языке.
+            // `isPlaceholder` обязателен: иначе эта запись попадала в счётчики, и чистый
+            // телефон сохранялся в историю как «найдена 1 проблема».
             issues.add(
                 ScanIssue(
                     severity = IssueSeverity.INFO,
                     title = deviceAuditText(R.string.scan_no_issues_title),
                     description = deviceAuditText(R.string.scan_no_issues_description),
-                    recommendation = deviceAuditText(R.string.scan_no_issues_recommendation)
+                    recommendation = deviceAuditText(R.string.scan_no_issues_recommendation),
+                    isPlaceholder = true
                 )
             )
         }
-        val criticalCount = issues.count { it.severity == IssueSeverity.CRITICAL }
-        val warningCount = issues.count { it.severity == IssueSeverity.WARNING }
-        val infoCount = issues.count { it.severity == IssueSeverity.INFO }
-        val riskScore = (100 - criticalCount * 30 - warningCount * 10).coerceIn(0, 100)
-        return FullScanReport(riskScore, issues, criticalCount, warningCount, infoCount)
+        // Счётчики и оценка — в чистом ScanReportPolicy (см. её KDoc: здесь была ошибка).
+        return ScanReportPolicy.build(issues)
     }
 
     /**
@@ -476,7 +476,9 @@ class FullScanOrchestrator @Inject constructor(
         context.getString(resId, *args)
 
     private suspend fun saveScanHistory(report: FullScanReport): Long {
-        val totalIssues = report.criticalCount + report.warningCount + report.infoCount
+        // Через политику, а не `report.issues.size`: заглушка «проблем не найдено»
+        // не является находкой.
+        val totalIssues = ScanReportPolicy.findingCount(report)
         return scanHistoryDao.insertScan(ScanHistory(
             riskScore = report.riskScore, issuesFound = totalIssues,
             reportJson = gson.toJson(report)))

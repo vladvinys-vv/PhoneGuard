@@ -1,5 +1,6 @@
 package com.phoneguard.util
 
+import android.os.SystemClock
 import android.util.Log
 import com.phoneguard.BuildConfig
 import javax.inject.Inject
@@ -17,21 +18,21 @@ class PerformanceMonitor @Inject constructor() {
 
     /** Замер одной операции. `null`-совместим с прежним Firebase `Trace?`. */
     inner class Trace internal constructor(private val name: String) {
-        private var startedAt: Long = 0L
-        private var running: Boolean = false
-        private var lastDurationMs: Long = 0L
+        /**
+         * Монотонные часы: `SystemClock.elapsedRealtime()` не зависит от перевода
+         * системного времени (раньше длительность считалась по
+         * `System.currentTimeMillis()` и могла получиться отрицательной).
+         */
+        private val timer = ElapsedTimer { SystemClock.elapsedRealtime() }
 
         fun start() {
-            startedAt = System.currentTimeMillis()
-            running = true
+            timer.start()
         }
 
         fun stop() {
-            if (!running) return
-            running = false
-            lastDurationMs = System.currentTimeMillis() - startedAt
+            val duration = timer.stop() ?: return
             if (BuildConfig.DEBUG) {
-                Log.d(TAG, "trace=$name durationMs=$lastDurationMs")
+                Log.d(TAG, "trace=$name durationMs=$duration")
             }
         }
 
@@ -41,7 +42,7 @@ class PerformanceMonitor @Inject constructor() {
             }
         }
 
-        fun durationMs(): Long = lastDurationMs
+        fun durationMs(): Long = timer.durationMs()
     }
 
     fun startTrace(traceName: String): Trace = Trace(traceName)
