@@ -172,7 +172,7 @@ python3 tools/jvm_unit_test.py --self-test # проверить сам ранн�
 Room, `androidx.annotation`, `javax.inject`, `android.util.Log`, `android.os.Build` (SDK_INT = 35),
 `android.text.TextUtils`, `android.util.Base64` и минимального `android.content.Context`
 подставляются заглушки, а `R.<тип>.<имя>` генерируется по фактическим ссылкам в коде — поэтому под прогон попадают
-модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 355 тестов в 39 файлах.
+модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 358 тестов в 39 файлах.
 
 Что остаётся Gradle: тесты на Android/Robolectric/MockK и всё, что требует настоящих AndroidX-
 артефактов; для них скрипт печатает `skip … — импорт …`.
@@ -275,7 +275,10 @@ SQL** через встроенный в Python `sqlite3`:
   (и заодно `scanForSpyware().first()` брал пустой placeholder вместо результата сканирования);
 * `AntiTheftViewModel.loadState()` — `combine` на семь потоков: перегрузки есть только до пяти.
 
-Поэтому в репозитории лежат `tools/stubs/*.kt` — сигнатуры публичного API корутин без реализации.
+Поэтому в репозитории лежат `tools/stubs/*.kt` — сигнатуры публичного API корутин **и
+`androidx.lifecycle`** (`ViewModel`, `viewModelScope`, `LifecycleService`, `Lifecycle`) без реализации.
+Заглушки корутин открыли типы потоков, а заглушка `ViewModel` — тела ViewModel-методов: раньше
+`viewModelScope.launch { … }` не разрешался, и код внутри лямбды не проверялся вообще.
 Скрипт собирает их в jar (кеш по хешу исходников) и подкладывает в classpath; `--no-stubs` отключает
 это, чтобы видеть «голый» результат. Разрешение типов включает новое правило: сообщение
 `TYPE_MISMATCH`/`ARGUMENT_TYPE_MISMATCH`/`RETURN_TYPE_MISMATCH`/`UNSAFE_CALL`/`NULL_FOR_NONNULL_TYPE`,
@@ -296,7 +299,7 @@ python3 tools/kotlin_frontend_check.py --android-jar "$(./tools/fetch_android_ja
 
 С `android.jar` на classpath (флаг `--android-jar`, переменные `ANDROID_JAR` или
 `ANDROID_HOME`/`ANDROID_SDK_ROOT` — скрипт находит `platforms/android-*/android.jar` сам)
-количество «шумных» диагностик падает примерно с 10 500 до 7 900 (с заглушками корутин), а часть шума становится
+количество «шумных» диагностик падает примерно с 10 500 до 5 100 при `--scope main` (и до 7 800 при проверке тестов) — с заглушками корутин и androidx.lifecycle, а часть шума становится
 ошибками: если в сообщении фигурирует уже разрешённый тип `android.*`, это настоящая проблема.
 Так найдены `Geocoder.getFromLocation()` без проверки на `null` и два обращения к
 `PackageInfo.applicationInfo` без проверки на `null`.

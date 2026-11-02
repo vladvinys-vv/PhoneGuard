@@ -153,4 +153,64 @@ class PacketRateLimiterTest {
         // Перезагрузка: монотонные часы начинаются заново.
         assertFalse("откат часов не должен открывать окно заново", limiter.allowLog(1_000))
     }
+
+    @Test
+    fun freshUidWindowSurvivesEviction() {
+        val limiter = PacketRateLimiter(maxTrackedUids = 2)
+        val fresh = start + PacketRateLimiter.PORT_SCAN_WINDOW_MS * 10
+        // Два «старых» UID с истёкшими окнами и один свежий.
+        limiter.shouldReportPortScan(uid = 1, destPort = 1, nowElapsedMs = start)
+        limiter.shouldReportPortScan(uid = 2, destPort = 1, nowElapsedMs = start)
+        limiter.shouldReportPortScan(uid = 3, destPort = 1, nowElapsedMs = fresh)
+
+        assertTrue(
+            "карта UID ограничена (${limiter.trackedUidCount()})",
+            limiter.trackedUidCount() <= 2
+        )
+        // Окно свежего UID не обнулялось: он продолжает набирать порты.
+        (2..PacketRateLimiter.PORTS_PER_WINDOW).forEach { port ->
+            assertFalse(limiter.shouldReportPortScan(uid = 3, destPort = port, nowElapsedMs = fresh + port))
+        }
+        assertTrue(
+            "порог перебора по-прежнему срабатывает",
+            limiter.shouldReportPortScan(uid = 3, destPort = PacketRateLimiter.PORTS_PER_WINDOW + 1, nowElapsedMs = fresh + 100)
+        )
+    }
+
+    @Test
+    fun evictionKeepsCooldownOfReportingUid() {
+        val limiter = PacketRateLimiter(maxTrackedUids = 1)
+        (1..PacketRateLimiter.PORTS_PER_WINDOW + 1).forEach { port ->
+            limiter.shouldReportPortScan(uid = 1, destPort = port, nowElapsedMs = start + port)
+        }
+        // Окно истекло, но кулдаун (10 минут) ещё идёт.
+        val later = start + PacketRateLimiter.PORT_SCAN_WINDOW_MS + 1
+        limiter.shouldReportPortScan(uid = 2, destPort = 1, nowElapsedMs = later)
+
+        val reports = (1..PacketRateLimiter.PORTS_PER_WINDOW + 1).count { port ->
+            limiter.shouldReportPortScan(uid = 1, destPort = 1000 + port, nowElapsedMs = later + port)
+        }
+        assertEquals(
+            "вытеснение не должно сбрасывать кулдаун уже отчитавшегося UID",
+            0,
+            reports
+        )
+    }
+
+    @Test
+    fun evictionPrefersUidsOutsideCooldown() {
+        val limiter = PacketRateLimiter(maxTrackedUids = 1)
+        (1..PacketRateLimiter.PORTS_PER_WINDOW + 1).forEach { port ->
+            limiter.shouldReportPortScan(uid = 7, destPort = port, nowElapsedMs = start + port)
+        }
+        // UID 8 «свежее» по времени, но без кулдауна — вытесняться должен он.
+        val later = start + PacketRateLimiter.PORT_SCAN_WINDOW_MS + 1
+        limiter.shouldReportPortScan(uid = 8, destPort = 1, nowElapsedMs = later + 10)
+        assertEquals(1, limiter.trackedUidCount())
+
+        val reports = (1..PacketRateLimiter.PORTS_PER_WINDOW + 1).count { port ->
+            limiter.shouldReportPortScan(uid = 7, destPort = 2000 + port, nowElapsedMs = later + 20 + port)
+        }
+        assertEquals("UID в кулдауне сохранил защиту", 0, reports)
+    }
 }
