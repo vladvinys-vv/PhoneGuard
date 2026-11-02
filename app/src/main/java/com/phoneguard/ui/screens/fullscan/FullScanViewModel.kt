@@ -3,6 +3,7 @@ package com.phoneguard.ui.screens.fullscan
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phoneguard.fullscan.FullScanOrchestrator
+import com.phoneguard.fullscan.ScanReportPolicy
 import com.phoneguard.model.FullScanReport
 import com.phoneguard.model.ScanHistory
 import com.phoneguard.util.AnalyticsHelper
@@ -123,7 +124,8 @@ class FullScanViewModel @Inject constructor(
                             _progress.value = null
                             analyticsHelper.logScanCompleted(
                                 riskScore = state.report.riskScore,
-                                issuesFound = state.report.issues.size
+                                // Не `issues.size`: там есть заглушка «проблем не найдено».
+                                issuesFound = ScanReportPolicy.findingCount(state.report)
                             )
                             compareWithPrevious(state.report, previousEntry)
                             loadHistory()
@@ -155,7 +157,7 @@ class FullScanViewModel @Inject constructor(
         val previous = previousEntry ?: return
         _comparison.value = ScanComparison(
             riskScoreDiff = currentReport.riskScore - previous.riskScore,
-            issuesDiff = currentReport.issues.size - previous.issuesFound
+            issuesDiff = ScanReportPolicy.findingCount(currentReport) - previous.issuesFound
         )
     }
 
