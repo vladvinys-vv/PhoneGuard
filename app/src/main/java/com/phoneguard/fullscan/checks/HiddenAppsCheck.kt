@@ -108,12 +108,19 @@ class HiddenAppsCheck @Inject constructor(
                 pm.getApplicationLabel(appInfo).toString()
             } catch (_: Exception) { pkg }
 
+            // Приоритет причин — в чистом HiddenAppRiskPolicy (проверяется JVM-тестами);
+            // здесь только выбор ресурса.
+            if (!HiddenAppRiskPolicy.isReportable(hasSuspiciousName, dangerous.size)) {
+                return@mapNotNull null
+            }
             val permissionNames = dangerous.joinToString(", ") { it.substringAfterLast('.') }
-            val riskReason = when {
-                hasSuspiciousName && dangerous.isNotEmpty() ->
+            val riskReason = when (HiddenAppRiskPolicy.reason(hasSuspiciousName, dangerous.size)) {
+                HiddenAppRiskPolicy.Reason.SUSPICIOUS_WITH_PERMISSIONS ->
                     context.getString(R.string.hidden_app_reason_suspicious_perms, permissionNames)
-                hasSuspiciousName -> context.getString(R.string.hidden_app_reason_suspicious)
-                else -> context.getString(R.string.hidden_app_reason_perms, permissionNames)
+                HiddenAppRiskPolicy.Reason.SUSPICIOUS_NAME ->
+                    context.getString(R.string.hidden_app_reason_suspicious)
+                HiddenAppRiskPolicy.Reason.PERMISSIONS_ONLY ->
+                    context.getString(R.string.hidden_app_reason_perms, permissionNames)
             }
 
             HiddenApp(
