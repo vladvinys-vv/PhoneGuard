@@ -1722,6 +1722,91 @@ CLASS_DECL_IN_FILE = re.compile(r'^\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:internal\s+|p
                                 r'(?:class|object)\s+(\w+)')
 
 
+def _braces(text: str, open_idx: int) -> str:
+    """Содержимое фигурной скобки, начиная с индекса `open_idx` (символ '{')."""
+    depth = 0
+    for i in range(open_idx, len(text)):
+        if text[i] == '{':
+            depth += 1
+        elif text[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return text[open_idx + 1:i]
+    return text[open_idx + 1:]
+
+
+MEMBER_CALL_RE = re.compile(r'(?<![\w.])([A-Z]\w*)\.([a-z_]\w*)\s*(?:<[^>]*>)?\(')
+
+
+def check_class_member_calls() -> None:
+    """Метод экземпляра, вызванный через имя класса (ошибка компиляции).
+
+    Реальный случай: `SmsSender` звал `PhoneNumberNormalizer.toValidE164(candidate)`,
+    хотя `toValidE164` — член экземпляра, а не `companion object`. Компилятор говорит
+    `unresolved reference`, но офлайн-проверки этого не видели: файл использует Android
+    SDK и в прогон «чистой логики» не попадает, а компиляторная проверка отбрасывает
+    диагностики в файлах с неразрешёнными зависимостями.
+
+    Правило: `Класс.член(...)` допустимо только для `object` и для функций
+    `companion object`; вызов обычного метода класса — ошибка.
+    """
+    files = sorted(
+        p for src in SRC_SETS if src.exists() for p in src.rglob('*.kt')
+    )
+    sources = {path: strip_comments(path.read_text(encoding='utf-8')) for path in files}
+
+    instance_funs: dict[str, set[str]] = {}
+    companion_funs: dict[str, set[str]] = {}
+    class_names: set[str] = set()
+    object_names: set[str] = set()
+
+    for code in sources.values():
+        object_names.update(re.findall(r'(?<![\w.])object\s+(\w+)', code))
+        for m in re.finditer(r'(?<![\w.])class\s+(\w+)', code):
+            name = m.group(1)
+            class_names.add(name)
+            brace = code.find('{', m.end())
+            if brace < 0:
+                continue
+            body = _braces(code, brace)
+            # Тела companion object вырезаем: их функции вызываются через имя класса.
+            companion_text = ''
+            rest = body
+            for comp in list(re.finditer(r'(?<![\w.])companion\s+object\b', body)):
+                comp_brace = body.find('{', comp.end())
+                if comp_brace < 0:
+                    continue
+                block = _braces(body, comp_brace)
+                companion_text += block + "\n"
+                rest = rest.replace(block, '', 1)
+            instance_funs.setdefault(name, set()).update(
+                re.findall(r'(?<![\w.])fun\s+(?:<[^>]*>\s*)?(\w+)\s*\(', rest)
+            )
+            companion_funs.setdefault(name, set()).update(
+                re.findall(r'(?<![\w.])fun\s+(?:<[^>]*>\s*)?(\w+)\s*\(', companion_text)
+            )
+
+    for path, code in sources.items():
+        for m in MEMBER_CALL_RE.finditer(code):
+            owner, member = m.group(1), m.group(2)
+            if owner in object_names:
+                continue
+            if owner not in class_names:
+                continue
+            if member not in instance_funs.get(owner, set()):
+                continue
+            if member in companion_funs.get(owner, set()):
+                continue
+            before = code[max(0, m.start() - 12):m.start()]
+            if 'class ' in before or '::' in before:
+                continue
+            line = code.count('\n', 0, m.start()) + 1
+            ERRORS.append(
+                f"{path.relative_to(ROOT)}:{line}: {owner}.{member}(...) — метод экземпляра "
+                f"вызван через имя класса (нужен экземпляр или companion-функция)"
+            )
+
+
 def check_notification_channels() -> None:
     """Канал, на который отправляется уведомление, должен где-то создаваться.
 
@@ -2023,11 +2108,36 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
                 "object Holder { data class Nested(val reason: String, val severity: String) }\n",
                 encoding="utf-8"
             )
+            # Метод экземпляра через имя класса — ошибка компиляции; companion-функция
+            # и вызов через `object` — норма.
+            (ctor_dir / "Sample.kt").write_text(
+                "package com.phoneguard.selftest\n"
+                "class Sample(val region: String) {\n"
+                "    fun instanceFun(x: String): String? = x\n"
+                "    companion object {\n"
+                "        const val REGION = \"DE\"\n"
+                "        fun factory(): Sample = Sample(REGION)\n"
+                "    }\n"
+                "}\n"
+                "object Obj { fun f(): Int = 1 }\n"
+                "object SampleUse {\n"
+                "    fun bad() = Sample.instanceFun(\"x\")\n"
+                "    fun okFactory() = Sample.factory()\n"
+                "    fun okObject() = Obj.f()\n"
+                "}\n",
+                encoding="utf-8"
+            )
             saved_sets = globals()["SRC_SETS"]
             globals()["SRC_SETS"] = [ctor_dir.parent.parent.parent.parent]
             ERRORS.clear()
             check_constructor_arity()
             check_missing_named_arguments()
+            check_class_member_calls()
+            member_errors = [e for e in ERRORS if "метод экземпляра" in e]
+            if len(member_errors) != 1 or "instanceFun" not in member_errors[0]:
+                failures.append(f"вызов метода экземпляра через класс не найден ({ERRORS})")
+            if any("factory" in e or "Obj.f" in e for e in ERRORS):
+                failures.append(f"ложное срабатывание: companion/object ({ERRORS})")
             globals()["SRC_SETS"] = saved_sets
 
             arity_errors = [e for e in ERRORS if "передано 3 арг" in e]
@@ -2052,7 +2162,8 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
         return 1
     print(
         "static_audit --self-test: ok (канал без создания, созданный канал, совпадающие id, "
-        "арность конструктора, неизвестный именованный параметр, одноимённые классы)"
+        "арность конструктора, неизвестный именованный параметр, одноимённые классы, "
+        "метод экземпляра через имя класса)"
     )
     return 0
 
@@ -2060,6 +2171,8 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
 def main() -> int:
     if "--self-test" in sys.argv:
         return self_test()
+
+    check_class_member_calls()
 
     index, owners = collect_index()
     check_duplicates(owners)

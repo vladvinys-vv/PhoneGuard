@@ -24,9 +24,16 @@ object SmsSender {
 
     private const val TAG = "SmsSender"
 
+    /**
+     * Нормализатор создаётся один раз на процесс: в конструкторе он определяет регион
+     * по SIM (обращение к `TelephonyManager`), повторять это на каждое SMS незачем.
+     */
+    @Volatile
+    private var normalizer: PhoneNumberNormalizer? = null
+
     /** Отправляет [text] на [destination]; безопасно для длинных сообщений и пустых номеров. */
     fun send(context: Context, destination: String?, text: String): Boolean {
-        val address = resolveAddress(destination) ?: return false
+        val address = resolveAddress(context, destination) ?: return false
         val message = text.trim()
         if (message.isEmpty()) return false
 
@@ -47,17 +54,20 @@ object SmsSender {
     }
 
     /**
-     * Номер в E.164, если он парсится; иначе исходная строка без пробелов.
+     * Адрес получателя: E.164 через [PhoneNumberNormalizer], иначе компактная строка.
      *
-     * Запасной вариант нужен для коротких номеров сервисов и буквенных отправителей
-     * (bank-ID, «SBER»), которые не являются телефонами в смысле libphonenumber.
+     * Правила живут в чистом [SmsAddressResolver] (его проверяют JVM-тесты). Здесь —
+     * только создание нормализатора: раньше стояло `PhoneNumberNormalizer.toValidE164(...)`,
+     * то есть вызов метода экземпляра через имя класса, и файл **не компилировался**
+     * («unresolved reference 'toValidE164'»).
      */
-    private fun resolveAddress(raw: String?): String? {
-        val candidate = raw?.trim().orEmpty()
-        if (candidate.isEmpty()) return null
-        PhoneNumberNormalizer.toValidE164(candidate)?.let { return it }
-        val compact = candidate.filterNot { it.isWhitespace() || it == '-' || it == '(' || it == ')' }
-        return compact.takeIf { it.any(Char::isLetterOrDigit) }
+    private fun resolveAddress(context: Context, raw: String?): String? {
+        val applicationContext = context.applicationContext ?: context
+        val phoneNumberNormalizer = normalizer
+            ?: PhoneNumberNormalizer(applicationContext).also { normalizer = it }
+        return SmsAddressResolver.resolve(raw) { candidate ->
+            runCatching { phoneNumberNormalizer.toValidE164(candidate) }.getOrNull()
+        }
     }
 
     /**
