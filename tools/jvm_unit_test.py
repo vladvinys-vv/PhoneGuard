@@ -826,6 +826,27 @@ class ShimFailingTest {
 """
 
 
+def compile_failure_kind(output: str) -> str:
+    """Отличает настоящую ошибку компиляции от отсутствующих Android-зависимостей.
+
+    Раньше любая неудачная компиляция теста превращалась в «пропуск» с причиной
+    «не компилируется без Android/Robolectric/MockK», и прогон оставался зелёным.
+    Из-за этого **синтаксическая ошибка** в новом исходнике (или ошибка типов в
+    чистой логике) молча выкидывала его тест из прогона.
+
+    Синтаксическая ошибка не бывает следствием отсутствующей библиотеки, поэтому
+    она считается провалом раннера; всё остальное по-прежнему шум зависимостей.
+    """
+    for line in output.splitlines():
+        lowered = line.lower()
+        if ": error:" not in lowered:
+            continue
+        message = lowered.split(": error:", 1)[1].strip()
+        if message.startswith("syntax error") or "expecting" in message:
+            return "syntax"
+    return "deps"
+
+
 def self_test(kotlinc: str, java: str, shim: Path) -> int:
     """Проверяет сам раннер: ловит ли он падения и умеет ли считать успешные тесты."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -855,7 +876,32 @@ def self_test(kotlinc: str, java: str, shim: Path) -> int:
                     f"получено {passed}/{failed}"
                 )
                 return 1
-    print("jvm_unit_test --self-test: ok (успех, падение, assertThrows и несколько классов в файле)")
+        # Классификация неудачной компиляции: синтаксис — провал, зависимости — пропуск.
+        samples = [
+            ("/x/A.kt:4:8: error: syntax error: Expecting an expression.", "syntax"),
+            ("/x/A.kt:9:5: error: unresolved reference 'TelephonyManager'", "deps"),
+            ("/x/A.kt:2:1: error: cannot access class 'android.content.Context'", "deps"),
+        ]
+        for text, expected in samples:
+            actual = compile_failure_kind(text)
+            if actual != expected:
+                print(f"jvm_unit_test --self-test: классификация провала — {text!r} → {actual}")
+                return 1
+
+        # Живой случай: битый синтаксис в файле теста должен дать "syntax".
+        broken = work / "BrokenSyntaxTest.kt"
+        broken.write_text(
+            "package selftest\nclass BrokenSyntaxTest {\n    @org.junit.Test\n"
+            "    fun ok() { val x = when (1) { 0, else -> 2 } }\n}\n",
+            encoding="utf-8"
+        )
+        ok, output = compile_and_run(kotlinc, java, shim, [broken], [], work / "broken")
+        if ok or compile_failure_kind(output) != "syntax":
+            print(f"jvm_unit_test --self-test: битый синтаксис не распознан:\n{output[:1200]}")
+            return 1
+
+    print("jvm_unit_test --self-test: ok (успех, падение, assertThrows, несколько классов, "
+          "различение синтаксической ошибки и отсутствующей зависимости)")
     return 0
 
 
@@ -884,6 +930,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         skipped: list[tuple[Path, str]] = []
+        hard_failures: list[tuple[Path, str]] = []
         collected: list[str] = []
         executed: list[Path] = []
         for test in sorted(TEST.rglob("*Test.kt")):
@@ -898,7 +945,11 @@ def main() -> int:
             prepared = prepare_test(test, work)
             ok, out = compile_and_run(kotlinc, java, shim, [prepared], sources, work / test.stem)
             if not ok:
-                skipped.append((test, "не компилируется без Android/Robolectric/MockK"))
+                if compile_failure_kind(out) == "syntax":
+                    # Синтаксис нельзя списать на отсутствующие библиотеки.
+                    hard_failures.append((test, out))
+                else:
+                    skipped.append((test, "не компилируется без Android/Robolectric/MockK"))
                 continue
             executed.append(test)
             collected.append(out)
@@ -918,11 +969,21 @@ def main() -> int:
 
         executed_names = ", ".join(t.stem for t in executed) or "—"
         print(f"тест-файлов выполнено: {len(executed)} ({executed_names})")
+        if skipped:
+            print(
+                f"тест-файлов пропущено: {len(skipped)} "
+                "(нет Android/Robolectric/MockK; --verbose — почему)"
+            )
         print(f"тестов: {passed + failed}, прошло: {passed}, упало: {failed}")
-        if not summary:
+        for test, output in hard_failures:
+            print(f"FAIL {test.relative_to(ROOT)} — синтаксическая ошибка в исходниках теста")
+            for line in output.splitlines():
+                if ": error:" in line:
+                    print(f"  {line.strip()}")
+        if not summary and not hard_failures:
             print("раннер не отработал — смотрите вывод компиляции выше")
             return 1
-        return 1 if failed else 0
+        return 1 if failed or hard_failures else 0
 
 
 if __name__ == "__main__":
