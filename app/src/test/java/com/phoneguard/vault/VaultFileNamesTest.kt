@@ -1,6 +1,7 @@
 package com.phoneguard.vault
 
 import java.io.File
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -104,5 +105,44 @@ class VaultFileNamesTest {
         val root = File("/data/user/0/com.phoneguard/files/vault").canonicalPath
         val escape = File(root, "../../databases/phoneguard.db").canonicalPath
         assertFalse(VaultFileNames.isInside(root, escape))
+    }
+
+    @Test
+    fun `непосредственный ребёнок каталога предпросмотра удаляем`() {
+        val root = Files.createTempDirectory("preview").toFile()
+        val file = File(root, "decrypted_1.tmp").apply { writeText("x") }
+        assertTrue(VaultFileNames.isDirectChildOf(root, file))
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun `файл из вложенного каталога предпросмотра не удаляем`() {
+        val root = Files.createTempDirectory("preview").toFile()
+        val nested = File(root, "sub").apply { mkdirs() }
+        val file = File(nested, "decrypted_1.tmp").apply { writeText("x") }
+        assertFalse("удалять можно только прямых детей", VaultFileNames.isDirectChildOf(root, file))
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun `сам каталог предпросмотра не считается своим ребёнком`() {
+        val root = Files.createTempDirectory("preview").toFile()
+        assertFalse(VaultFileNames.isDirectChildOf(root, root))
+        root.deleteRecursively()
+    }
+
+    @Test
+    fun `симлинк за пределы каталога предпросмотра не удаляем`() {
+        val root = Files.createTempDirectory("preview").toFile()
+        val outside = Files.createTempDirectory("outside").toFile()
+        val target = File(outside, "secret.txt").apply { writeText("x") }
+        val link = File(root, "link.tmp")
+        Files.createSymbolicLink(link.toPath(), target.toPath())
+        assertFalse(
+            "канонический путь резолвится наружу — удалять нельзя",
+            VaultFileNames.isDirectChildOf(root, link)
+        )
+        root.deleteRecursively()
+        outside.deleteRecursively()
     }
 }

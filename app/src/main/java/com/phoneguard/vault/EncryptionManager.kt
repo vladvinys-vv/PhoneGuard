@@ -16,15 +16,6 @@ import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Файл больше лимита сейфа.
- *
- * Отдельный тип нужен, чтобы UI показал «файл слишком большой», а не сырое
- * сообщение исключения (раньше туда попадала русская строка из кода, и в
- * английской/немецкой локали ошибка была на русском).
- */
-class VaultFileTooLargeException : IOException("Vault entry exceeds the size limit")
-
 /** Провайдер не отдал поток: файл удалён или доступ отозван. */
 class VaultSourceUnavailableException(uri: Uri) :
     IOException("Cannot open input stream for $uri")
@@ -143,10 +134,10 @@ class EncryptionManager @Inject constructor(
      * `delete()` по произвольному `File` был бы удалением чужих данных.
      */
     fun cleanupDecryptedFile(file: File) {
-        val target = runCatching { file.canonicalFile }.getOrNull() ?: return
-        val root = runCatching { previewDir.canonicalPath }.getOrNull() ?: return
-        if (target.parentFile?.path != root) return
-        target.delete()
+        // Удаляем только непосредственного ребёнка каталога предпросмотра: правило —
+        // в чистом [VaultFileNames.isDirectChildOf] (путь приходит извне).
+        if (!VaultFileNames.isDirectChildOf(previewDir, file)) return
+        runCatching { file.canonicalFile.delete() }
     }
 
     /** Виден ли путь как «внутри каталога сейфа» — используется и проверкой, и тестами. */
@@ -179,18 +170,9 @@ class EncryptionManager @Inject constructor(
         ).build()
     }
 
-    private fun copyWithLimit(input: InputStream, output: java.io.OutputStream, maxBytes: Long): Long {
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        var total = 0L
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            total += read
-            if (total > maxBytes) throw VaultFileTooLargeException()
-            output.write(buffer, 0, read)
-        }
-        return total
-    }
+    /** Само копирование и лимит — в чистом [VaultStreams] (там же его тесты). */
+    private fun copyWithLimit(input: InputStream, output: java.io.OutputStream, maxBytes: Long): Long =
+        VaultStreams.copyWithLimit(input, output, maxBytes)
 
     private fun getFileName(uri: Uri): String {
         var fileName: String? = null
