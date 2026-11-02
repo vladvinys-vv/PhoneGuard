@@ -97,14 +97,18 @@ class ThreatIntelClient @Inject constructor(
                     Log.w(TAG, "OpenPhish feed слишком большой: $declaredLength байт")
                     return@withContext emptySet()
                 }
-                val hosts = LinkedHashSet<String>()
-                var lineCount = 0
                 // Построчное чтение вместо `body.string()`: фид целиком в памяти не нужен.
-                body.source().use { source ->
-                    while (lineCount < MAX_FEED_LINES && !source.exhausted()) {
-                        extractHost(source.readUtf8Line()?.trim().orEmpty())?.let { hosts += it }
-                        lineCount++
-                    }
+                // Границы по строкам И по символам — раньше ответ без переводов строк
+                // читался бы одним куском и мог уронить приложение по OOM.
+                val parsed = body.charStream().use { reader ->
+                    FeedLineReader.read(reader, MAX_FEED_LINES, MAX_FEED_CHARS)
+                }
+                if (parsed.truncated) {
+                    Log.w(TAG, "OpenPhish feed обрезан по лимиту (${parsed.lines.size} строк)")
+                }
+                val hosts = LinkedHashSet<String>()
+                parsed.lines.forEach { line ->
+                    extractHost(line.trim())?.let { hosts += it }
                 }
                 hosts
             }
@@ -163,6 +167,11 @@ class ThreatIntelClient @Inject constructor(
         /** Хосты, которые бессмысленно проверять через фиды. */
         /** Предохранители для публичного фида (защита от гигантских/подменённых ответов). */
         private const val MAX_FEED_LINES = 50_000
+
+        /** Предохранитель по объёму: столько символов фида читаем максимум. */
+        private const val MAX_FEED_CHARS = 8 * 1024 * 1024
+
+        /** Тот же предел в байтах — для проверки заголовка `Content-Length`. */
         private const val MAX_FEED_BYTES = 8L * 1024 * 1024
 
         /** Таймауты для DI-провайдера [OkHttpClient]. */
