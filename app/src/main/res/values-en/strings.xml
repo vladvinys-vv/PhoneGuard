@@ -556,6 +556,9 @@
     <string name="scan_issue_usb_debug_title">USB debugging is enabled (heuristic)</string>
     <string name="scan_issue_usb_debug_desc">ADB access is a risk when someone has physical access to the device.</string>
     <string name="scan_issue_usb_debug_rec">Turn it off: Settings &gt; Developer options &gt; USB debugging.</string>
+    <string name="scan_issue_wireless_debug_title">Wireless debugging is on (heuristic)</string>
+    <string name="scan_issue_wireless_debug_desc">ADB over the network allows connecting to the device without a cable, even from another room.</string>
+    <string name="scan_issue_wireless_debug_rec">Turn it off: Settings &gt; Developer options &gt; Wireless debugging.</string>
     <string name="scan_issue_dev_options_title">Developer options are enabled (heuristic)</string>
     <string name="scan_issue_dev_options_desc">Developer mode increases the risk when someone has physical access.</string>
     <string name="scan_issue_dev_options_rec">Turn it off if you are not a developer.</string>
@@ -651,6 +654,8 @@
     <string name="dev_options_dev_off">Developer options: disabled</string>
     <string name="dev_options_adb_hint">USB debugging allows connecting to the device over ADB.</string>
     <string name="dev_options_adb_recommendation">Recommendation: disable USB debugging in Settings &gt; Developer options.</string>
+    <string name="dev_options_wireless_on">Wireless debugging: ON ⚠</string>
+    <string name="dev_options_wireless_off">Wireless debugging: off</string>
     <string name="dev_options_recommendation">Recommendation: disable developer options if you are not a developer.</string>
     <string name="phishing_no_sms_access">Could not check SMS: no access or no data.</string>
     <string name="phishing_malicious_hosts">Hosts from messages found in threat intel: %1$s</string>

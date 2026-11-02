@@ -552,6 +552,9 @@
     <string name="scan_issue_usb_debug_title">Включена USB-отладка (эвристика)</string>
     <string name="scan_issue_usb_debug_desc">Подключение по ADB — риск при физическом доступе к устройству.</string>
     <string name="scan_issue_usb_debug_rec">Отключите: Настройки &gt; Для разработчиков &gt; Отладка по USB.</string>
+    <string name="scan_issue_wireless_debug_title">Включена отладка по Wi-Fi (эвристика)</string>
+    <string name="scan_issue_wireless_debug_desc">ADB по сети позволяет подключаться к устройству без кабеля, в том числе из другой комнаты.</string>
+    <string name="scan_issue_wireless_debug_rec">Отключите: Настройки &gt; Для разработчиков &gt; Отладка по Wi-Fi.</string>
     <string name="scan_issue_dev_options_title">Включены параметры разработчика (эвристика)</string>
     <string name="scan_issue_dev_options_desc">Режим разработчика повышает риск при физическом доступе к устройству.</string>
     <string name="scan_issue_dev_options_rec">Отключите, если вы не разработчик.</string>
@@ -647,6 +650,8 @@
     <string name="dev_options_dev_off">Developer Options: выключены</string>
     <string name="dev_options_adb_hint">USB-отладка позволяет подключаться к устройству через ADB.</string>
     <string name="dev_options_adb_recommendation">Рекомендация: отключить USB-отладку в Настройки &gt; Для разработчиков.</string>
+    <string name="dev_options_wireless_on">Отладка по Wi-Fi: ВКЛЮЧЕНА ⚠</string>
+    <string name="dev_options_wireless_off">Отладка по Wi-Fi: выключена</string>
     <string name="dev_options_recommendation">Рекомендация: отключить Developer Options, если вы не разработчик.</string>
     <string name="phishing_no_sms_access">Не удалось проверить SMS: нет доступа или нет данных.</string>
     <string name="phishing_malicious_hosts">Домены из сообщений найдены в threat-intel: %1$s</string>
