@@ -82,8 +82,14 @@ class PacketRateLimiter(
      */
     @Synchronized
     fun shouldReportPortScan(uid: Int, destPort: Int, nowElapsedMs: Long): Boolean {
-        trimUidMaps()
+        val report = recordPortScan(uid, destPort, nowElapsedMs)
+        // Вытесняем уже после записи: иначе новый UID выводил карту за предел до
+        // следующего вызова, и размер «гулял» на единицу.
+        evictUidsIfNeeded(nowElapsedMs)
+        return report
+    }
 
+    private fun recordPortScan(uid: Int, destPort: Int, nowElapsedMs: Long): Boolean {
         val lastReport = lastReportAt[uid]
         if (lastReport != null && elapsed(nowElapsedMs, lastReport) < portScanCooldownMs) return false
 
@@ -99,7 +105,6 @@ class PacketRateLimiter(
         ports.clear()
         portWindowStart[uid] = nowElapsedMs
         lastReportAt[uid] = nowElapsedMs
-        trimUidMaps()
         return true
     }
 
@@ -117,21 +122,54 @@ class PacketRateLimiter(
 
     /** Сколько UID сейчас отслеживается (для тестов и диагностики). */
     @Synchronized
-    fun trackedUidCount(): Int = maxOf(portsByUid.size, portWindowStart.size, lastReportAt.size)
+    fun trackedUidCount(): Int = size()
 
     /**
      * Защита от роста карт: UID-ов в системе ограниченное число, но после
      * переустановок и «двойников» работающих профилей набор может расти.
-     * При выходе за [maxTrackedUids] карты очищаются целиком — это дешевле и
-     * безопаснее, чем хранить их бесконечно.
+     *
+     * Раньше при выходе за [maxTrackedUids] карты очищались **целиком**. Вместе с мусором
+     * пропадали кулдауны UID, которые уже отчитались о переборе портов: сканер, сменивший
+     * «личность» (или просто профиль с большим числом пакетов), мог присылать повторные
+     * события хоть каждую минуту, а окно свежего UID обнулялось. Теперь:
+     *  1) сначала уходят записи, у которых истекло окно наблюдения **и** прошёл кулдаун;
+     *  2) если этого мало — самые «старые» по последней активности, причём UID в активном
+     *     кулдауне вытесняются в последнюю очередь (их защита ещё нужна).
      */
-    private fun trimUidMaps() {
-        val size = maxOf(portsByUid.size, portWindowStart.size, lastReportAt.size)
-        if (size <= maxTrackedUids) return
-        portsByUid.clear()
-        portWindowStart.clear()
-        lastReportAt.clear()
+    private fun evictUidsIfNeeded(nowElapsedMs: Long) {
+        if (size() <= maxTrackedUids) return
+
+        val stale = portWindowStart.keys.filter { uid ->
+            val windowExpired = elapsed(nowElapsedMs, portWindowStart.getValue(uid)) > portScanWindowMs
+            windowExpired && cooldownExpired(uid, nowElapsedMs)
+        }
+        stale.forEach(::forgetUid)
+        if (size() <= maxTrackedUids) return
+
+        val excess = size() - maxTrackedUids
+        portWindowStart.entries
+            .sortedWith(
+                compareBy(
+                    { entry -> if (cooldownExpired(entry.key, nowElapsedMs)) 0 else 1 },
+                    { entry ->
+                        maxOf(entry.value, lastReportAt[entry.key] ?: Long.MIN_VALUE)
+                    }
+                )
+            )
+            .take(excess)
+            .forEach { (uid, _) -> forgetUid(uid) }
     }
+
+    private fun cooldownExpired(uid: Int, nowElapsedMs: Long): Boolean =
+        lastReportAt[uid]?.let { elapsed(nowElapsedMs, it) >= portScanCooldownMs } ?: true
+
+    private fun forgetUid(uid: Int) {
+        portsByUid.remove(uid)
+        portWindowStart.remove(uid)
+        lastReportAt.remove(uid)
+    }
+
+    private fun size(): Int = maxOf(portsByUid.size, portWindowStart.size, lastReportAt.size)
 
     /** Монотонные часы могут откатиться только при перезагрузке — тогда окно считаем новым. */
     private fun elapsed(now: Long, start: Long): Long = (now - start).coerceAtLeast(0L)

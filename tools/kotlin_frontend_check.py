@@ -34,7 +34,9 @@ Android SDK. Этот скрипт запускает настоящий ком�
 `SecurityService.getTrustedContacts()` (`isBlank()` у `String?`) и передача
 `SpywareScanResult` туда, где ждали `List<SpywareApp>` — app-модуль не собирался, а
 проверка показывала «0 проблем». Поэтому скрипт собирает `tools/stubs/*.kt`
-(сигнатуры API корутин без реализации) в jar и подкладывает его в classpath.
+(сигнатуры API корутин и `androidx.lifecycle` без реализации) в jar и подкладывает его в classpath.
+Заглушка `ViewModel`/`viewModelScope` включает проверку **тел ViewModel-методов** — до неё
+`viewModelScope.launch { … }` не разрешался и код внутри не проверялся вовсе.
 С `--no-stubs` можно посмотреть, что видно на «голом» classpath.
 
 С `--android-jar` (или `ANDROID_JAR`/`ANDROID_HOME`) проверка становится строже: ошибки
@@ -185,12 +187,18 @@ def find_kotlinc() -> str | None:
 STUBS_DIR = ROOT / "tools/stubs"
 
 
-def build_stubs_jar(kotlinc: str) -> str | None:
-    """Компилирует `tools/stubs/*.kt` в jar (кеш по хешу исходников)."""
+def build_stubs_jar(kotlinc: str, android_jar: str | None = None) -> str | None:
+    """Компилирует `tools/stubs/*.kt` в jar (кеш по хешу исходников).
+
+    `android_jar` нужен заглушкам, которые наследуются от Android-классов
+    (`androidx.lifecycle.LifecycleService` — от `android.app.Service`).
+    """
+    digest_extra = (android_jar or "").encode()
     sources = sorted(STUBS_DIR.glob("*.kt"))
     if not sources:
         return None
     digest = hashlib.sha256()
+    digest.update(digest_extra)
     for path in sources:
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
@@ -199,7 +207,10 @@ def build_stubs_jar(kotlinc: str) -> str | None:
         return str(cache)
 
     with tempfile.TemporaryDirectory() as out:
-        cmd = [kotlinc, "-nowarn", "-jvm-target", "17", "-d", out, *[str(p) for p in sources]]
+        cmd = [kotlinc, "-nowarn", "-jvm-target", "17", "-d", out]
+        if android_jar:
+            cmd += ["-classpath", android_jar]
+        cmd += [str(p) for p in sources]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             print("kotlin_frontend_check: не удалось собрать заглушки корутин")
@@ -419,7 +430,7 @@ def main() -> int:
         return 0
 
     android_jar = find_android_jar(args.android_jar)
-    stubs_jar = None if args.no_stubs else build_stubs_jar(kotlinc)
+    stubs_jar = None if args.no_stubs else build_stubs_jar(kotlinc, android_jar)
     classpath = ":".join(p for p in (android_jar, stubs_jar) if p)
     with tempfile.TemporaryDirectory() as out:
         cmd = [
@@ -468,7 +479,7 @@ def main() -> int:
         else "нет Android SDK на classpath"
     )
     if stubs_jar:
-        classpath_note += ", заглушки корутин подключены"
+        classpath_note += ", заглушки корутин и androidx.lifecycle подключены"
     print(f"\n{len(real)} problem(s), {noise} ожидаемых диагностик "
           f"({classpath_note}), {len(sources)} файлов")
     if not real:

@@ -3,6 +3,19 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Fixed
+- **Детектор перебора портов можно было «обнулить», засветив лишние UID.** В `PacketRateLimiter`
+  при выходе за предел отслеживаемых UID все три карты очищались целиком, вместе с кулдаунами уже
+  отчитавшихся UID: сканер, сменивший «личность» (или профиль с большим числом пакетов), получал
+  повторное событие о переборе, а окно свежего UID обнулялось. Теперь сначала уходят записи с
+  истёкшим окном **и** прошедшим кулдауном, затем — самые «старые» по последней активности, причём
+  UID в активном кулдауне вытесняются в последнюю очередь. Вытеснение выполняется после записи
+  нового UID, а не до (иначе размер карты «гулял» на единицу). 3 новых выполняемых теста.
+- **Тела ViewModel-методов не проверялись вообще.** В песочнице нет `androidx.lifecycle`, поэтому
+  `viewModelScope.launch { … }` не разрешался и код внутри лямбды оставался вне проверки типов.
+  Добавлена заглушка `tools/stubs/androidx-lifecycle.kt` (`ViewModel`, `viewModelScope`,
+  `LifecycleService`, `Lifecycle`, `LifecycleEventObserver`), заглушки теперь собираются с `android.jar`
+  (иначе `LifecycleService` не наследуется от `Service`). Проверено вставкой заведомо ошибочной
+  строки внутрь `combine` в `AntiTheftViewModel`: проверка падает на `UNSAFE_CALL`, после откатa — 0.
 - **Выключенный «автоответ» отключал и предупреждения, и журнал инцидентов.** В
   `AndroidIntrusionResponseExecutor.execute()` стояло `if (!isAutoIntrusionResponseEnabled) return`
   перед всем циклом действий, поэтому при выключенной настройке не выполнялись `ShowWarning` и
@@ -272,7 +285,7 @@
   `IntrusionDetectorTest` (+2: порядок и улики сигналов, пустой вход) и новый
   `ThreatIntelModelsTest` (+4: какие вердикты блокируют трафик, что попадает в `unknown`) и
   `PhishingHeuristicsTest` (+9: ссылки, ключевые слова, голые домены, ложные срабатывания).
-  Всего в JVM-прогоне теперь **355 тестов в 39 файлах**.
+  Всего в JVM-прогоне теперь **358 тестов в 39 файлах**.
 - **Заглушки, которые втащили в прогон ещё три файла тестов:** `android.provider.Settings`
   (+ `ContentResolver`), `android.content.pm.PackageManager`/`PackageInfo`/`ApplicationInfo`,
   `android.app.AppOpsManager` с `Context.getSystemService`, `dagger.hilt.android.qualifiers
@@ -300,7 +313,7 @@
   процентом покрытия: упоминание класса не доказывает покрытие ветвей.
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 355 тестов в 39 файлах. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 358 тестов в 39 файлах. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
   `android.util.Base64`/`android.content.Context`, авто-генерация заглушки `R` и разворачивание
   `import org.junit.Assert.*` втаскивают под прогон модели, конвертеры, хеширование PIN, разбор улик
