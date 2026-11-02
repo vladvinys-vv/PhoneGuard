@@ -1350,34 +1350,54 @@ def _primary_constructor_arity(text: str) -> dict[str, tuple[int, int]]:
 
 
 def check_constructor_arity() -> None:
-    """Вызов конструктора класса проекта с неверным числом аргументов (ошибка компиляции)."""
-    arity: dict[str, tuple[int, int]] = {}
+    """Вызов конструктора класса проекта с неверным числом аргументов (ошибка компиляции).
+
+    Классы с одинаковым именем в разных файлах (`State`, `Verdict`) разрешаются по файлу:
+    сначала ищем объявление в том же файле, затем — единственное объявление в проекте.
+    Раньше карта «имя -> арность» склеивалась по всему проекту (`setdefault`, первый
+    победил), из-за чего правильные вызовы помечались как ошибки компиляции.
+    """
     sources = {
         p: strip_comments(p.read_text(encoding='utf-8'))
         for src in SRC_SETS if src.exists()
         for p in src.rglob('*.kt')
     }
-    for code in sources.values():
-        for name, value in _primary_constructor_arity(code).items():
-            arity.setdefault(name, value)
-    if not arity:
+    arity_by_file: dict[Path, dict[str, tuple[int, int]]] = {}
+    owners: dict[str, set[Path]] = {}
+    for path, code in sources.items():
+        arity_by_file[path] = _primary_constructor_arity(code)
+        for name in arity_by_file[path]:
+            owners.setdefault(name, set()).add(path)
+
+    def resolve(name: str, path: Path) -> tuple[int, int] | None:
+        local = arity_by_file.get(path, {}).get(name)
+        if local is not None:
+            return local
+        files = owners.get(name)
+        # Имя встречается в нескольких файлах — без вывода типа не угадать, чей это
+        # конструктор; лучше пропустить, чем дать ложную ошибку компиляции.
+        if not files or len(files) != 1:
+            return None
+        return arity_by_file[next(iter(files))][name]
+
+    if not owners:
         return
+    skipped_names = ('Intent', 'Bundle', 'MutableStateFlow', 'StateFlow')
     for path, code in sources.items():
         for m in re.finditer(r'(?<![\w.])([A-Z]\w*)\s*(?:<[^>]+>)?\s*\(', code):
             name = m.group(1)
-            if name not in arity:
-                continue
             before = code[max(0, m.start() - 12):m.start()]
-            if 'class ' in before or '::' in before:
+            if 'class ' in before or '::' in before or name in skipped_names:
+                continue
+            expected = resolve(name, path)
+            if expected is None:
                 continue
             open_idx = code.index('(', m.end() - 1)
-            if name in ('Intent', 'Bundle', 'MutableStateFlow', 'StateFlow'):
-                continue
             args = [a for a in _split_top_level(_balanced(code, open_idx)) if a]
             close_idx = open_idx + 2 + len(_balanced(code, open_idx))
             if code[close_idx:].lstrip().startswith('{'):
                 args.append('<lambda>')
-            required, total = arity[name]
+            required, total = expected
             if required <= len(args) <= total:
                 continue
             # `Foo()` без параметров может быть вызовом companion-функции/интерфейса — пропускаем.
@@ -1495,23 +1515,41 @@ def check_missing_named_arguments() -> None:
         for src in SRC_SETS if src.exists()
         for p in src.rglob('*.kt')
     }
-    params: dict[str, list[tuple[str, str, bool]]] = {}
-    overloaded: set[str] = set()
-    for code in sources.values():
-        for name, value in _primary_constructor_params(code).items():
-            params.setdefault(name, value)
+    # Как и в check_constructor_arity(): одинаковые имена классов (`State`, `Verdict`)
+    # разрешаются по файлу, иначе параметры одного класса проверяются у вызовов другого.
+    params_by_file: dict[Path, dict[str, list[tuple[str, str, bool]]]] = {}
+    owners: dict[str, set[Path]] = {}
+    overloaded_by_file: dict[Path, set[str]] = {}
+    for path, code in sources.items():
+        params_by_file[path] = _primary_constructor_params(code)
+        for name in params_by_file[path]:
+            owners.setdefault(name, set()).add(path)
+        overloaded: set[str] = set()
         for m in re.finditer(r'\bconstructor\s*\(', code):
             # У класса есть дополнительные конструкторы — сопоставление по именам ненадёжно.
             head = code[:m.start()]
             cls = list(re.finditer(r'\bclass\s+(\w+)', head))
             if cls:
                 overloaded.add(cls[-1].group(1))
+        overloaded_by_file[path] = overloaded
+
+    def resolve_params(name: str, path: Path) -> list[tuple[str, str, bool]] | None:
+        local = params_by_file.get(path, {}).get(name)
+        if local is not None:
+            return None if name in overloaded_by_file.get(path, set()) else local
+        files = owners.get(name)
+        if not files or len(files) != 1:
+            return None
+        owner = next(iter(files))
+        if name in overloaded_by_file.get(owner, set()):
+            return None
+        return params_by_file[owner][name]
 
     for path, code in sources.items():
         for m in re.finditer(r'(?<![\w.])([A-Z]\w*)\s*(?:<[^>]+>)?\s*\(', code):
             name = m.group(1)
-            decl = params.get(name)
-            if not decl or name in overloaded:
+            decl = resolve_params(name, path)
+            if not decl:
                 continue
             before = code[max(0, m.start() - 12):m.start()]
             if 'class ' in before or '::' in before:
@@ -1963,6 +2001,47 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
             check_notification_ids()
             if not [e for e in ERRORS if "1001" in e]:
                 failures.append(f"совпадающие id не найдены ({ERRORS})")
+
+            # Арность/именованные параметры конструкторов: настоящие ошибки ловятся,
+            # а классы с одинаковым именем в разных файлах (`Thing` vs `Other.State`)
+            # больше не смешиваются.
+            ctor_dir = root / "ctor/app/src/main/java/com/phoneguard/selftest"
+            ctor_dir.mkdir(parents=True)
+            (ctor_dir / "Thing.kt").write_text(
+                "package com.phoneguard.selftest\n"
+                "data class Thing(val a: Int, val b: Int)\n"
+                "object Use {\n"
+                "    fun ok() = Thing(1, 2)\n"
+                "    fun bad() = Thing(1, 2, 3)\n"
+                "    fun named() = Thing(a = 1, c = 2)\n"
+                "    fun qualified() = Holder.Nested(alpha = 1)\n"
+                "}\n",
+                encoding="utf-8"
+            )
+            (ctor_dir / "Holder.kt").write_text(
+                "package com.phoneguard.selftest\n"
+                "object Holder { data class Nested(val reason: String, val severity: String) }\n",
+                encoding="utf-8"
+            )
+            saved_sets = globals()["SRC_SETS"]
+            globals()["SRC_SETS"] = [ctor_dir.parent.parent.parent.parent]
+            ERRORS.clear()
+            check_constructor_arity()
+            check_missing_named_arguments()
+            globals()["SRC_SETS"] = saved_sets
+
+            arity_errors = [e for e in ERRORS if "передано 3 арг" in e]
+            named_errors = [e for e in ERRORS if "таких параметров нет: c" in e]
+            false_positives = [
+                e for e in ERRORS
+                if "передано 2 арг" in e or "alpha" in e or "reason" in e
+            ]
+            if len(arity_errors) != 1:
+                failures.append(f"лишний аргумент конструктора не найден ({ERRORS})")
+            if len(named_errors) != 1:
+                failures.append(f"неизвестный именованный аргумент не найден ({ERRORS})")
+            if false_positives:
+                failures.append(f"ложные срабатывания арности ({false_positives})")
     finally:
         globals()["ROOT"] = saved_root
         ERRORS.clear()
@@ -1971,7 +2050,10 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
         for failure in failures:
             print(f"static_audit --self-test: {failure}")
         return 1
-    print("static_audit --self-test: ok (канал без создания, созданный канал, совпадающие id)")
+    print(
+        "static_audit --self-test: ok (канал без создания, созданный канал, совпадающие id, "
+        "арность конструктора, неизвестный именованный параметр, одноимённые классы)"
+    )
     return 0
 
 

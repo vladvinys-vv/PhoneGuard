@@ -64,16 +64,19 @@ class ApkSignatureCheck @Inject constructor(
         val deadline = SystemClock.elapsedRealtime() + TIME_BUDGET_MS
         var inspected = 0
 
-        candidates.forEach { packageInfo ->
-            if (SystemClock.elapsedRealtime() > deadline) return@forEach
+        // `for` вместо `forEach`: по исчерпании бюджета нужен `break`, а `return@forEach`
+        // пропускал только текущий элемент и продолжал крутиться по всем пакетам.
+        for (packageInfo in candidates) {
+            if (!ApkSignaturePolicy.withinBudget(SystemClock.elapsedRealtime(), deadline)) break
             val packageName = packageInfo.packageName
-            if (packageName == context.packageName) return@forEach
+            if (packageName == context.packageName) continue
 
+            val sourceDir = packageInfo.applicationInfo?.sourceDir ?: continue
             val signature = apkSignatureScanner.inspectApk(
                 packageName = packageName,
-                apkFile = java.io.File(packageInfo.applicationInfo?.sourceDir ?: return@forEach)
+                apkFile = java.io.File(sourceDir)
             )
-            if (signature.error != null && !signature.hasCertificates) return@forEach
+            if (signature.error != null && !signature.hasCertificates) continue
             inspected++
 
             val appName = try {
@@ -84,47 +87,40 @@ class ApkSignatureCheck @Inject constructor(
                 packageName
             }
 
-            if (signature.isInstalledFromDebugKey && !isDebuggable(packageInfo)) {
-                val fromStore = installSource(packageManager, packageName)?.let { it in STORE_INSTALLERS } == true
+            // Решение «находка или нет» принимает чистый ApkSignaturePolicy; здесь
+            // только сбор данных с устройства и строки ресурсов.
+            val state = ApkSignaturePolicy.State(
+                installedFromDebugKey = signature.isInstalledFromDebugKey,
+                debuggable = isDebuggable(packageInfo),
+                installedFromStore = ApkSignaturePolicy.isStoreInstaller(
+                    installSource(packageManager, packageName)
+                ),
+                weakSignature = signature.hasWeakSignature,
+                certificateExpired = signature.isCertificateExpired,
+                modifiedAfterInstall = signature.apkModifiedAfterInstall
+            )
+            val algorithms = signature.certificates
+                .joinToString { it.signatureAlgorithm }
+                .take(MAX_ALGORITHM_TEXT)
+
+            ApkSignaturePolicy.assess(state).forEach { verdict ->
                 findings += SignatureFinding(
                     packageName = packageName,
                     appName = appName,
-                    severity = if (fromStore) Severity.CRITICAL else Severity.WARNING,
-                    reason = if (fromStore) {
-                        context.getString(R.string.apk_sig_reason_debug_store)
-                    } else {
-                        context.getString(R.string.apk_sig_reason_debug)
+                    // Наборы Severity совпадают по именам, поэтому `valueOf` безопасен.
+                    severity = Severity.valueOf(verdict.severity.name),
+                    reason = when (verdict.reason) {
+                        ApkSignaturePolicy.Reason.DEBUG_KEY_FROM_STORE ->
+                            context.getString(R.string.apk_sig_reason_debug_store)
+                        ApkSignaturePolicy.Reason.DEBUG_KEY ->
+                            context.getString(R.string.apk_sig_reason_debug)
+                        ApkSignaturePolicy.Reason.WEAK_ALGORITHM ->
+                            context.getString(R.string.apk_sig_reason_weak, algorithms)
+                        ApkSignaturePolicy.Reason.EXPIRED_CERTIFICATE ->
+                            context.getString(R.string.apk_sig_reason_expired)
+                        ApkSignaturePolicy.Reason.MODIFIED_AFTER_INSTALL ->
+                            context.getString(R.string.apk_sig_reason_modified)
                     }
-                )
-            }
-
-            if (signature.hasWeakSignature) {
-                findings += SignatureFinding(
-                    packageName = packageName,
-                    appName = appName,
-                    severity = Severity.WARNING,
-                    reason = context.getString(
-                        R.string.apk_sig_reason_weak,
-                        signature.certificates.joinToString { it.signatureAlgorithm }.take(80)
-                    )
-                )
-            }
-
-            if (signature.isCertificateExpired) {
-                findings += SignatureFinding(
-                    packageName = packageName,
-                    appName = appName,
-                    severity = Severity.INFO,
-                    reason = context.getString(R.string.apk_sig_reason_expired)
-                )
-            }
-
-            if (signature.apkModifiedAfterInstall) {
-                findings += SignatureFinding(
-                    packageName = packageName,
-                    appName = appName,
-                    severity = Severity.WARNING,
-                    reason = context.getString(R.string.apk_sig_reason_modified)
                 )
             }
         }
@@ -177,11 +173,7 @@ class ApkSignatureCheck @Inject constructor(
         /** Бюджет времени на проверку подписей, чтобы полный скан не «зависал». */
         private const val TIME_BUDGET_MS = 15_000L
 
-        private val STORE_INSTALLERS = setOf(
-            "com.android.vending",
-            "com.google.android.packageinstaller",
-            "com.huawei.appmarket",
-            "com.sec.android.app.samsungapps"
-        )
+        /** Ограничение длины списка алгоритмов в тексте находки. */
+        private const val MAX_ALGORITHM_TEXT = 80
     }
 }
