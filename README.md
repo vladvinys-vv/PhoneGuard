@@ -92,7 +92,7 @@ PhoneGuard/
 ### Локализация
 
 Интерфейс переведён на русский, английский и немецкий: `values` (по умолчанию русский),
-`values-en`, `values-ru`, `values-de` — 636 ключей в каждой локали, паритет проверяется
+`values-en`, `values-ru`, `values-de` — 641 ключ в каждой локали, паритет проверяется
 `tools/static_audit.py`. Язык переключается в настройках и применяется через `attachBaseContext`.
 
 Проверки полного сканирования не знают о `Context`: они возвращают `CheckDetail(textRes, args)`
@@ -145,7 +145,7 @@ python3 tools/webhook_notify.py --dry-run # опционально: payload ув
 ещё до компиляции. `static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
 миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_frontend_check.py` прогоняет все
-260 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
+262 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
 `tools/fetch_android_jar.sh`) и отсекает ошибки, вызванные
 отсутствующими библиотеками — на его счету десять реальных ошибок сборки, в том числе в тестах.
 Последние три (`isBlank()` у `Flow<String?>`, `SpywareScanResult` вместо `List<SpywareApp>` и `combine`

@@ -357,6 +357,17 @@ class FullScanOrchestrator @Inject constructor(
                 )
             )
         }
+        if (devOptions.isWirelessDebuggingEnabled) {
+            issues.add(
+                ScanIssue(
+                    severity = IssueSeverity.WARNING,
+                    title = text(R.string.scan_issue_wireless_debug_title),
+                    description = text(R.string.scan_issue_wireless_debug_desc),
+                    recommendation = text(R.string.scan_issue_wireless_debug_rec),
+                    isHeuristic = true
+                )
+            )
+        }
         if (devOptions.isDeveloperOptionsEnabled) {
             issues.add(
                 ScanIssue(
