@@ -83,15 +83,6 @@ class PermissionAbuseCheck @Inject constructor(
         // из runtime-разрешений, и раньше она давала ложные срабатывания.
     )
 
-    // Критические комбинации (набор групп = шпионское поведение)
-    private val criticalCombinations = listOf(
-        setOf(PermissionGroup.CAMERA, PermissionGroup.MICROPHONE, PermissionGroup.LOCATION),
-        setOf(PermissionGroup.SMS, PermissionGroup.CONTACTS, PermissionGroup.LOCATION),
-        setOf(PermissionGroup.CAMERA, PermissionGroup.MICROPHONE),
-        setOf(PermissionGroup.SMS, PermissionGroup.PHONE),
-        setOf(PermissionGroup.MICROPHONE, PermissionGroup.LOCATION)
-    )
-
     fun performCheck(): PermissionAbuseResult {
         val pm = context.packageManager
         val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -120,7 +111,7 @@ class PermissionAbuseCheck @Inject constructor(
 
             if (grantedGroups.isEmpty()) return@mapNotNull null
 
-            val (riskLevel, explanation) = assessRisk(grantedGroups.keys) { groups ->
+            val (riskLevel, explanation) = assessRisk(grantedGroups.keys.toSet()) { groups ->
                 localizedLabels(groups)
             }
             if (riskLevel == null || explanation == null) return@mapNotNull null
@@ -171,37 +162,39 @@ class PermissionAbuseCheck @Inject constructor(
         grantedGroups: Set<PermissionGroup>,
         labels: (Collection<PermissionGroup>) -> String
     ): Pair<RiskLevel?, CheckDetail?> {
-        // Critical: шпионские комбинации
-        for (combo in criticalCombinations) {
-            if (grantedGroups.containsAll(combo)) {
-                return RiskLevel.CRITICAL to CheckDetail(
-                    R.string.perm_risk_critical_combo,
-                    listOf(labels(combo))
-                )
-            }
-        }
+        val verdict = PermissionRiskPolicy.assess(grantedGroups.map { it.toPolicyGroup() }.toSet())
+            ?: return null to null
 
-        // High: доступ к СМС + что-то ещё
-        if (PermissionGroup.SMS in grantedGroups && grantedGroups.size >= 2) {
-            return RiskLevel.HIGH to CheckDetail(
-                R.string.perm_risk_sms_extra,
-                listOf(labels(grantedGroups))
-            )
+        val level = when (verdict.level) {
+            PermissionRiskPolicy.Level.CRITICAL -> RiskLevel.CRITICAL
+            PermissionRiskPolicy.Level.HIGH -> RiskLevel.HIGH
+            PermissionRiskPolicy.Level.MEDIUM -> RiskLevel.MEDIUM
         }
-
-        // Medium: одиночные чувствительные разрешения
-        if (PermissionGroup.LOCATION in grantedGroups && grantedGroups.size == 1) {
-            return RiskLevel.MEDIUM to CheckDetail(R.string.perm_risk_background_location)
+        val matched = grantedGroups.filter { it.toPolicyGroup() in verdict.matched }
+        val detail = when (verdict.reason) {
+            PermissionRiskPolicy.Reason.CRITICAL_COMBO ->
+                CheckDetail(R.string.perm_risk_critical_combo, listOf(labels(matched)))
+            PermissionRiskPolicy.Reason.SMS_PLUS_OTHER ->
+                CheckDetail(R.string.perm_risk_sms_extra, listOf(labels(grantedGroups)))
+            PermissionRiskPolicy.Reason.BACKGROUND_LOCATION ->
+                CheckDetail(R.string.perm_risk_background_location)
+            PermissionRiskPolicy.Reason.SENSITIVE_PAIR ->
+                CheckDetail(R.string.perm_risk_many_sensitive, listOf(labels(matched)))
+            PermissionRiskPolicy.Reason.MANY_SENSITIVE ->
+                CheckDetail(R.string.perm_risk_many_sensitive, listOf(labels(grantedGroups)))
         }
+        return level to detail
+    }
 
-        if (grantedGroups.size >= 3) {
-            return RiskLevel.HIGH to CheckDetail(
-                R.string.perm_risk_many_sensitive,
-                listOf(labels(grantedGroups))
-            )
-        }
-
-        return null to null
+    /** Соответствие групп разрешений чистым правилам риска (см. [PermissionRiskPolicy]). */
+    private fun PermissionGroup.toPolicyGroup(): PermissionRiskPolicy.Group = when (this) {
+        PermissionGroup.CAMERA -> PermissionRiskPolicy.Group.CAMERA
+        PermissionGroup.MICROPHONE -> PermissionRiskPolicy.Group.MICROPHONE
+        PermissionGroup.LOCATION -> PermissionRiskPolicy.Group.LOCATION
+        PermissionGroup.CONTACTS -> PermissionRiskPolicy.Group.CONTACTS
+        PermissionGroup.SMS -> PermissionRiskPolicy.Group.SMS
+        PermissionGroup.PHONE -> PermissionRiskPolicy.Group.PHONE
+        PermissionGroup.STORAGE -> PermissionRiskPolicy.Group.STORAGE
     }
 
     /** Локализованные названия групп через запятую. */
