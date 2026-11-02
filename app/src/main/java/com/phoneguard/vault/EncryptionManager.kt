@@ -92,17 +92,16 @@ class EncryptionManager @Inject constructor(
             runCatching { context.contentResolver.delete(inputUri, null, null) }
         }
 
+        val category = VaultItemKind.categoryOf(mimeType)
+
         VaultItem(
             fileName = fileName,
             fileSize = written,
             mimeType = mimeType,
             encryptionKeyAlias = masterKey.keyAlias,
-            category = when {
-                mimeType.startsWith("image/") -> VaultItemCategory.IMAGE
-                mimeType.startsWith("video/") -> VaultItemCategory.VIDEO
-                mimeType.startsWith("application/pdf") || mimeType.startsWith("text/") -> VaultItemCategory.DOCUMENT
-                else -> VaultItemCategory.OTHER
-            }
+            // `isImage` раньше не заполнялся вовсе: в базу всегда уходило `false`.
+            isImage = category == VaultItemCategory.IMAGE,
+            category = category
         )
     }
 
