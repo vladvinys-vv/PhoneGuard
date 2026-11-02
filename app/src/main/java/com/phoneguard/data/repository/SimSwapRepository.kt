@@ -2,6 +2,7 @@ package com.phoneguard.data.repository
 
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.model.SimSwapEvent
+import com.phoneguard.simswap.SimSwapEventPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -25,8 +26,8 @@ class SimSwapRepository @Inject constructor(
 
     suspend fun latest(): SimSwapEvent? = withContext(Dispatchers.IO) { dao.latest() }
 
-    /** Последнее событие, которое пользователь ещё не подтвердил. */
-    suspend fun latestUnconfirmed(): SimSwapEvent? = latest()?.takeIf { !it.isConfirmed }
+    /** Последнее событие, которое пользователь ещё не подтвердил (правило — в [SimSwapEventPolicy]). */
+    suspend fun latestUnconfirmed(): SimSwapEvent? = SimSwapEventPolicy.pending(latest())
 
     suspend fun record(event: SimSwapEvent): Long = withContext(Dispatchers.IO) { dao.insert(event) }
 
