@@ -9,6 +9,11 @@
 упоминания не всегда пробел — UI, Hilt-модули и сервисы тестируются иначе (Robolectric,
 ручные сценарии `docs/MANUAL_TESTING.md`).
 
+Второе число — **выполняемые** тесты. Часть тест-файлов в офлайн-прогоне не исполняется
+(MockK, Robolectric, Android-сервисы), и считать их покрытием — самообман: класс, который
+упомянут только там, на деле не проверяется ни разу. Поэтому карта печатает два числа:
+«упомянуты в тестах» и «из них в выполняемых тестах», а разницу показывает списком.
+
 Использование:
     python3 tools/test_coverage_map.py             # сводка по пакетам + список без тестов
     python3 tools/test_coverage_map.py --detail    # вывести все классы без упоминаний
@@ -48,6 +53,38 @@ def classes_by_package() -> dict[str, list[str]]:
     return result
 
 
+def runnable_test_files() -> tuple[list[Path], list[tuple[Path, str]]]:
+    """Тест-файлы, которые JVM-раннер действительно исполнит, и причины пропуска остальных.
+
+    Используется тот же отбор, что в `tools/jvm_unit_test.py` (нет Android/Robolectric/MockK),
+    поэтому числа карты и прогона не расходятся.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "jvm_unit_test", Path(__file__).resolve().with_name("jvm_unit_test.py")
+    )
+    if spec is None or spec.loader is None:  # pragma: no cover — сломанная установка
+        raise RuntimeError("не удалось загрузить tools/jvm_unit_test.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    index = module.class_index()
+    runnable: list[Path] = []
+    skipped: list[tuple[Path, str]] = []
+    for test in sorted(module.TEST.rglob("*Test.kt")):
+        reason = module.blocking_import(test)
+        if reason:
+            skipped.append((test, f"импорт {reason}"))
+            continue
+        _, reason = module.resolve_sources(test, index)
+        if reason:
+            skipped.append((test, reason))
+            continue
+        runnable.append(test)
+    return runnable, skipped
+
+
 def test_sources() -> str:
     return "\n".join(path.read_text(encoding="utf-8") for root in TESTS if root.exists() for path in root.rglob("*.kt"))
 
@@ -60,15 +97,26 @@ def main() -> int:
     sources = test_sources()
     packages = classes_by_package()
 
-    total = tested = 0
+    try:
+        runnable, skipped = runnable_test_files()
+        runnable_sources = "\n".join(path.read_text(encoding="utf-8") for path in runnable)
+        runnable_skipped_reason: str | None = None
+    except Exception as error:  # noqa: BLE001 — карта не должна падать из-за раннера
+        runnable_sources = ""
+        skipped = []
+        runnable_skipped_reason = str(error)
+
+    total = tested = tested_running = 0
     untested_testable: list[str] = []
     untested_android: list[str] = []
     rows: list[tuple[str, int, int]] = []
 
     for package, classes in sorted(packages.items()):
         covered = [c for c in classes if re.search(rf"\b{re.escape(c)}\b", sources)]
+        running = [c for c in covered if re.search(rf"\b{re.escape(c)}\b", runnable_sources)]
         total += len(classes)
         tested += len(covered)
+        tested_running += len(running)
         rows.append((package or ".", len(classes), len(covered)))
         for name in classes:
             if name in covered:
@@ -80,6 +128,12 @@ def main() -> int:
 
     print(f"классов в приложении: {total}, упомянуты в тестах: {tested} "
           f"({tested * 100 // max(total, 1)}%)")
+    if runnable_skipped_reason:
+        print(f"из них в выполняемых тестах: неизвестно ({runnable_skipped_reason})")
+    else:
+        print(f"из них в выполняемых тестах: {tested_running} "
+              f"({tested_running * 100 // max(total, 1)}%); "
+              f"тест-файлов выполняется {len(runnable)}, пропущено {len(skipped)}")
     print("\nпо пакетам (классов / с тестами):")
     for package, count, covered in sorted(rows, key=lambda row: (row[2] * 100 // max(row[1], 1), -row[1]))[:12]:
         print(f"  {package:28s} {count:3d} / {covered:3d}")
@@ -89,6 +143,20 @@ def main() -> int:
         print(f"  {name}")
     if not args.detail and len(untested_testable) > 15:
         print(f"  … ещё {len(untested_testable) - 15} (--detail)")
+
+    if not runnable_skipped_reason:
+        covered_by_skipped = sorted(
+            f"{package}.{name}" if package else name
+            for package, classes in packages.items()
+            for name in classes
+            if re.search(rf"\b{re.escape(name)}\b", sources)
+            and not re.search(rf"\b{re.escape(name)}\b", runnable_sources)
+        )
+        print(f"\nпокрыты только не выполняющимися тестами ({len(covered_by_skipped)}):")
+        for name in (covered_by_skipped if args.detail else covered_by_skipped[:10]):
+            print(f"  {name}")
+        if not args.detail and len(covered_by_skipped) > 10:
+            print(f"  … ещё {len(covered_by_skipped) - 10} (--detail)")
 
     print(f"\nAndroid-связанные без тестов ({len(untested_android)}): UI, Hilt-модули, сервисы — "
           "проверяются Robolectric-тестами и вручную (docs/MANUAL_TESTING.md)")

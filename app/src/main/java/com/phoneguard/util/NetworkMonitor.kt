@@ -33,7 +33,7 @@ class NetworkMonitor @Inject constructor(
             return@callbackFlow
         }
 
-        val tracker = NetworkAvailabilityTracker()
+        val tracker = NetworkAvailabilityTracker<Network>()
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {

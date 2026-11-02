@@ -219,6 +219,18 @@ abstract class Migration(val startVersion: Int, val endVersion: Int) {
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FIELD) annotation class Embedded(val prefix: String = "")
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Ignore
 ''',
+    "androidx/room/Migration.kt": '''package androidx.room.migration
+
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+/**
+ * Заглушка Migration: нужна, чтобы миграции схемы (и их конфигурацию) можно было
+ * проверить в JVM. Сам SQL исполняется в `tools/migration_check.py` на настоящем SQLite.
+ */
+abstract class Migration(val startVersion: Int, val endVersion: Int) {
+    abstract fun migrate(database: SupportSQLiteDatabase)
+}
+''',
     "androidx/sqlite/db/SupportSQLiteDatabase.kt": '''package androidx.sqlite.db
 
 /**
@@ -595,25 +607,47 @@ def resource_stub(sources: list[Path]) -> str | None:
     body.append("}")
     return "\n".join(body) + "\n"
 
-TEST_CLASS_DECL = re.compile(r"^[ \t]*(?:internal |private |public |open |abstract )*class (\w+)", re.M)
+# Только объявления верхнего уровня: вложенный вспомогательный класс (`private class RecordingDb`)
+# не является тест-классом, а раньше попадал в список — и прогон падал с
+# ClassNotFoundException, потому что вложенный класс называется Outer$Inner.
+TEST_CLASS_DECL = re.compile(r"^(?:internal |private |public |open |abstract )*class (\w+)", re.M)
+
+
+def class_body(source: str, declaration_start: int) -> str:
+    """Тело класса от `{` после объявления до парной закрывающей скобки.
+
+    Раньше «тело» отрезалось по началу следующего объявления: вложенный класс получал
+    аннотации внешнего, и раннер запускал не тот класс.
+    """
+    opening = source.find("{", declaration_start)
+    if opening < 0:
+        return ""
+    depth = 0
+    for index in range(opening, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opening:index + 1]
+    return source[opening:]
 
 
 def kotlin_classes_of(path: Path) -> list[str]:
     """Все тест-классы файла.
 
     Раньше брался только первый класс, поэтому второй класс в том же файле компилировался,
-    но **не исполнялся** — тесты «проходили», не запускаясь. Теперь собираем все классы,
-    в теле которых есть `@Test`.
+    но **не исполнялся** — тесты «проходили», не запускаясь. Теперь собираем все классы
+    верхнего уровня, в теле которых есть `@Test`.
     """
     source = path.read_text(encoding="utf-8")
     package = re.search(r"^package\s+([\w.]+)", source, re.M)
     if not package:
         return []
-    declarations = list(TEST_CLASS_DECL.finditer(source))
     names: list[str] = []
-    for index, declaration in enumerate(declarations):
-        end = declarations[index + 1].start() if index + 1 < len(declarations) else len(source)
-        if "@Test" in source[declaration.start():end]:
+    for declaration in TEST_CLASS_DECL.finditer(source):
+        if "@Test" in class_body(source, declaration.start()):
             names.append(f"{package.group(1)}.{declaration.group(1)}")
     return names
 
@@ -761,6 +795,32 @@ def compile_and_run(kotlinc: str, java: str, shim: Path, tests: list[Path], sour
     return True, run.stdout + run.stderr
 
 
+SELF_TEST_NESTED_HELPER = """package selftest
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class NestedHelperTest {
+
+    private class RecordingDb {
+        val statements = mutableListOf<String>()
+        fun exec(sql: String) { statements += sql }
+    }
+
+    @Test
+    fun helperIsUsable() {
+        val db = RecordingDb()
+        db.exec("CREATE TABLE t (id INTEGER)")
+        assertEquals(1, db.statements.size)
+    }
+
+    @Test
+    fun secondTestRunsToo() {
+        assertEquals(2, listOf(1, 2).size)
+    }
+}
+"""
+
 SELF_TEST_PASSING = """package selftest
 
 import org.junit.Assert.assertEquals
@@ -856,6 +916,9 @@ def self_test(kotlinc: str, java: str, shim: Path) -> int:
             ("ShimFailingTest", SELF_TEST_FAILING, 0, 1),
             # Два тест-класса в одном файле: раньше исполнялся только первый.
             ("TwoClassesTest", SELF_TEST_TWO_CLASSES, 3, 0),
+            # Вложенный вспомогательный класс объявлен ВЫШЕ тестов: раньше раннер считал
+            # тест-классом именно его и падал с ClassNotFoundException.
+            ("NestedHelperTest", SELF_TEST_NESTED_HELPER, 2, 0),
         ]
         for name, source, expected_passed, expected_failed in cases:
             test_file = work / f"{name}.kt"

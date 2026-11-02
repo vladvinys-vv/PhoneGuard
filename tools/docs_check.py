@@ -8,7 +8,9 @@
 Проверяется только то, что можно посчитать без Gradle и без компилятора:
 
 1. количество Kotlin-файлов, на которых работает компиляторная проверка;
-2. числа карты покрытия («N классов, M упомянуты в тестах»);
+2. числа карты покрытия («N классов, M упомянуты в тестах») и второе, честное число
+   («из них в выполняемых тестах: K») — класс, упомянутый только в пропущенном тест-файле,
+   покрытием не считается;
 3. согласованность утверждений «N тестов в M файлах» между документами
    (сам прогон делает `tools/jvm_unit_test.py`; здесь ловим расхождение текстов).
 
@@ -31,6 +33,7 @@ DOCS = [ROOT / "README.md", ROOT / "docs/DEVELOPMENT.md", ROOT / "docs/CHANGELOG
 KT_FILES_IN_LINE = re.compile(r"(\d+)\s+файл(?:ах|ов|а)?")
 COVERAGE_CLAIM = re.compile(r"(\d+)\s+класс(?:ов|а)?,\s*(\d+)\s+упомянут")
 COVERAGE_SHORT = re.compile(r"(\d+)\s+из\s+(\d+)")
+COVERAGE_RUNNING = re.compile(r"из них в выполняемых тестах:\s*(\d+)")
 TESTS_CLAIM = re.compile(r"(\d+)\s+тестов в\s+(\d+)\s+файлах")
 
 
@@ -42,16 +45,22 @@ def kotlin_files() -> int:
     return len(list((ROOT / "app/src").rglob("*.kt")))
 
 
-def coverage() -> tuple[int, int] | None:
+def coverage() -> tuple[int, int, int] | None:
     try:
         out = subprocess.run(
             [sys.executable, str(ROOT / "tools/test_coverage_map.py")],
-            capture_output=True, text=True, timeout=120, check=False,
+            capture_output=True, text=True, timeout=300, check=False,
         ).stdout
     except Exception:  # noqa: BLE001 — без карты проверяем остальное
         return None
     match = re.search(r"классов в приложении: (\d+), упомянуты в тестах: (\d+)", out)
-    return (int(match.group(1)), int(match.group(2))) if match else None
+    if not match:
+        return None
+    running = re.search(r"из них в выполняемых тестах: (\d+)", out)
+    # Если карта не смогла посчитать выполняемые тесты, второе число считаем равным первому
+    # и проверяем только первое утверждение (см. notes).
+    running_value = int(running.group(1)) if running else int(match.group(2))
+    return (int(match.group(1)), int(match.group(2)), running_value)
 
 
 def check() -> tuple[list[str], list[str]]:
@@ -79,7 +88,7 @@ def check() -> tuple[list[str], list[str]]:
     if map_numbers is None:
         notes.append("карта покрытия недоступна — числа «N классов» не проверялись")
     else:
-        classes, mentioned = map_numbers
+        classes, mentioned, running = map_numbers
         for path, text in texts.items():
             for match in COVERAGE_CLAIM.finditer(text):
                 got_classes, got_mentioned = int(match.group(1)), int(match.group(2))
@@ -89,10 +98,22 @@ def check() -> tuple[list[str], list[str]]:
                         f"{path.name}:{line}: указано {got_mentioned} из {got_classes} классов, "
                         f"фактически {mentioned} из {classes}"
                     )
+            for match in COVERAGE_RUNNING.finditer(text):
+                got = int(match.group(1))
+                line = text[:match.start()].count("\n") + 1
+                if got != running:
+                    errors.append(
+                        f"{path.name}:{line}: указано {got} классов в выполняемых тестах, "
+                        f"фактически {running}"
+                    )
             for match in COVERAGE_SHORT.finditer(text):
                 # «106 из 167» в скобках — тот же смысл, но только в контексте «упомянуты в тестах»
                 context = text[max(0, match.start() - 120):match.start()]
                 if "упомянут" not in context:
+                    continue
+                if "выполняем" in text[max(0, match.start() - 160):match.start()]:
+                    # «79 из 198» рядом со словом «выполняемых» — это второе число, его
+                    # проверяет COVERAGE_RUNNING по формату «из них в выполняемых тестах: N».
                     continue
                 got_mentioned, got_classes = int(match.group(1)), int(match.group(2))
                 line = text[:match.start()].count("\n") + 1

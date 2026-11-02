@@ -36,6 +36,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java"
 DATABASE = ROOT / "app/src/main/java/com/phoneguard/data/local/AppDatabase.kt"
+# Миграции вынесены из AppDatabase, чтобы их конфигурацию можно было проверить в JVM
+# (см. app/src/main/java/com/phoneguard/data/local/DatabaseMigrations.kt).
+MIGRATIONS = ROOT / "app/src/main/java/com/phoneguard/data/local/DatabaseMigrations.kt"
 
 MIGRATION_HEADER = re.compile(r"val MIGRATION_(\d+)_(\d+)\s*=\s*object\s*:\s*Migration\((\d+),\s*(\d+)\)")
 EXEC_SQL = re.compile(r'execSQL\(\s*(?:"""(?P<triple>.*?)"""|"(?P<single>[^"]*)")', re.S)
@@ -61,10 +64,11 @@ def read(path: Path) -> str:
 
 def migrations() -> tuple[dict[tuple[int, int], list[str]], str | None]:
     """{(from, to): [SQL, …]} и текст ошибки, если объявление не разобрано."""
-    text = read(DATABASE)
+    source = MIGRATIONS if MIGRATIONS.exists() else DATABASE
+    text = read(source)
     headers = list(MIGRATION_HEADER.finditer(text))
     if not headers:
-        return {}, "в AppDatabase.kt не найдено ни одной миграции"
+        return {}, f"в {source.name} не найдено ни одной миграции"
     result: dict[tuple[int, int], list[str]] = {}
     for index, header in enumerate(headers):
         end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
@@ -192,6 +196,10 @@ def check() -> tuple[list[str], list[str], list[str]]:
     text = read(DATABASE)
     version = database_version(text)
     latest = latest_version_constant(text)
+    if latest is None and MIGRATIONS.exists():
+        # Константа версии может жить в вынесенном файле миграций; в AppDatabase
+        # остаётся только ссылка `DatabaseMigrations.LATEST_VERSION`.
+        latest = latest_version_constant(read(MIGRATIONS))
     migration_map, problem = migrations()
     if problem:
         return [problem], [], []
