@@ -24,6 +24,7 @@ python3 tools/migration_check.py || failed=1
 
 step "static_audit.py"
 python3 tools/static_audit.py || failed=1
+python3 tools/static_audit.py --self-test || failed=1
 
 step "docs_check.py"
 # Цифры в README/docs против кода: «217 файлов», «106 из 167 классов» стареют молча.
