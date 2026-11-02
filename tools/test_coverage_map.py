@@ -152,11 +152,21 @@ def main() -> int:
             if re.search(rf"\b{re.escape(name)}\b", sources)
             and not re.search(rf"\b{re.escape(name)}\b", runnable_sources)
         )
+        # Разделяем по природе класса, а не по «жалко/не жалко»: ViewModel и экраны требуют
+        # Robolectric и в JVM не поедут никогда, а модель/логику можно оживить фейками.
+        robolectric = [name for name in covered_by_skipped
+                       if name.split(".")[0] == "ui" or name.startswith("ui.")]
+        revivable = [name for name in covered_by_skipped if name not in robolectric]
         print(f"\nпокрыты только не выполняющимися тестами ({len(covered_by_skipped)}):")
-        for name in (covered_by_skipped if args.detail else covered_by_skipped[:10]):
+        print(f"  только Robolectric/UI — {len(robolectric)}, оживить можно фейками — {len(revivable)}")
+        for name in (revivable if args.detail else revivable[:10]):
             print(f"  {name}")
-        if not args.detail and len(covered_by_skipped) > 10:
-            print(f"  … ещё {len(covered_by_skipped) - 10} (--detail)")
+        if not args.detail and len(revivable) > 10:
+            print(f"  … ещё {len(revivable) - 10} (--detail)")
+        if args.detail:
+            print("  --- только Robolectric ---")
+            for name in robolectric:
+                print(f"  {name}")
 
     print(f"\nAndroid-связанные без тестов ({len(untested_android)}): UI, Hilt-модули, сервисы — "
           "проверяются Robolectric-тестами и вручную (docs/MANUAL_TESTING.md)")

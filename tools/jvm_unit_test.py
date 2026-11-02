@@ -44,6 +44,8 @@ STUBBED_PREFIXES = (
     "android.content.pm.ApplicationInfo", "android.provider.Settings",
     "android.app.AppOpsManager", "dagger.hilt.android.qualifiers.ApplicationContext",
     "androidx.sqlite.db.SupportSQLiteDatabase",
+    "android.Manifest", "android.graphics.drawable.Drawable", "android.graphics.Canvas",
+    "android.graphics.ColorFilter", "android.graphics.PixelFormat",
 )
 
 # Импорты, которые без сети не разрешить даже заглушкой.
@@ -218,6 +220,74 @@ abstract class Migration(val startVersion: Int, val endVersion: Int) {
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.CLASS, AnnotationTarget.FIELD) annotation class Index(val value: Array<String> = [], val unique: Boolean = false, val name: String = "", val orders: IntArray = [])
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FIELD) annotation class Embedded(val prefix: String = "")
 @Retention(AnnotationRetention.RUNTIME) @Target(AnnotationTarget.FUNCTION) annotation class Ignore
+''',
+    # Drawable нужен модели PrivacyApp (иконка приложения). Настоящий Drawable рисует
+    # в Canvas, здесь достаточно типа: тесты проверяют логику прав, а не рисовку.
+    # Абстрактные методы повторяют реальный android.jar: иначе тест, который собирается
+    # с настоящим SDK, падает на «не реализован draw()», а в JVM-прогоне «проходит».
+    "android/graphics/drawable/Drawable.kt": '''package android.graphics.drawable
+
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+
+abstract class Drawable {
+    open val intrinsicWidth: Int get() = 0
+    open val intrinsicHeight: Int get() = 0
+    open fun setBounds(left: Int, top: Int, right: Int, bottom: Int) {}
+    abstract fun draw(canvas: Canvas)
+    abstract fun setAlpha(alpha: Int)
+    abstract fun setColorFilter(colorFilter: ColorFilter?)
+    @Deprecated("Deprecated in Java")
+    abstract fun getOpacity(): Int
+}
+''',
+    "android/graphics/Canvas.kt": '''package android.graphics
+
+class Canvas
+''',
+    "android/graphics/ColorFilter.kt": '''package android.graphics
+
+class ColorFilter
+''',
+    "android/graphics/PixelFormat.kt": '''package android.graphics
+
+object PixelFormat {
+    const val UNKNOWN: Int = 0
+    const val TRANSLUCENT: Int = -3
+    const val TRANSPARENT: Int = -2
+    const val OPAQUE: Int = -1
+}
+''',
+    # Разрешения: строковые константы платформы. Значения совпадают с android.jar —
+    # иначе тест «ожидаемые права категории» проверял бы не то, что в приложении.
+    "android/Manifest.kt": '''package android
+
+object Manifest {
+    object permission {
+        const val ACCESS_BACKGROUND_LOCATION: String = "android.permission.ACCESS_BACKGROUND_LOCATION"
+        const val ACCESS_COARSE_LOCATION: String = "android.permission.ACCESS_COARSE_LOCATION"
+        const val ACCESS_FINE_LOCATION: String = "android.permission.ACCESS_FINE_LOCATION"
+        const val CALL_PHONE: String = "android.permission.CALL_PHONE"
+        const val CAMERA: String = "android.permission.CAMERA"
+        const val FLASHLIGHT: String = "android.permission.FLASHLIGHT"
+        const val INTERNET: String = "android.permission.INTERNET"
+        const val POST_NOTIFICATIONS: String = "android.permission.POST_NOTIFICATIONS"
+        const val READ_CALENDAR: String = "android.permission.READ_CALENDAR"
+        const val READ_CALL_LOG: String = "android.permission.READ_CALL_LOG"
+        const val READ_CONTACTS: String = "android.permission.READ_CONTACTS"
+        const val READ_EXTERNAL_STORAGE: String = "android.permission.READ_EXTERNAL_STORAGE"
+        const val READ_PHONE_NUMBERS: String = "android.permission.READ_PHONE_NUMBERS"
+        const val READ_PHONE_STATE: String = "android.permission.READ_PHONE_STATE"
+        const val READ_SMS: String = "android.permission.READ_SMS"
+        const val RECEIVE_SMS: String = "android.permission.RECEIVE_SMS"
+        const val RECORD_AUDIO: String = "android.permission.RECORD_AUDIO"
+        const val SEND_SMS: String = "android.permission.SEND_SMS"
+        const val WRITE_CALENDAR: String = "android.permission.WRITE_CALENDAR"
+        const val WRITE_CALL_LOG: String = "android.permission.WRITE_CALL_LOG"
+        const val WRITE_CONTACTS: String = "android.permission.WRITE_CONTACTS"
+        const val WRITE_EXTERNAL_STORAGE: String = "android.permission.WRITE_EXTERNAL_STORAGE"
+    }
+}
 ''',
     "androidx/room/Migration.kt": '''package androidx.room.migration
 

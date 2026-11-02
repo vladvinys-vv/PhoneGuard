@@ -29,10 +29,6 @@ class DataRetentionManager @Inject constructor(
 
     companion object {
         private const val TAG = "DataRetentionManager"
-        private const val RETENTION_DAYS = 90L
-        // Все множители Long: иначе промежуточное 24*60*60*1000 (86 400 000) ещё
-        // влезает в Int, а любое увеличение срока — уже нет.
-        private const val RETENTION_MS = RETENTION_DAYS * 24L * 60L * 60L * 1000L
     }
 
     fun scheduleCleanup(scope: CoroutineScope) {
@@ -42,7 +38,7 @@ class DataRetentionManager @Inject constructor(
     }
 
     suspend fun cleanupOldLogs() {
-        val cutoff = System.currentTimeMillis() - RETENTION_MS
+        val cutoff = RetentionPolicy.cutoff(System.currentTimeMillis())
 
         appDatabase.blockedLogDao().deleteOlderThan(cutoff)
         appDatabase.firewallDao().deleteLogsOlderThan(cutoff)
@@ -71,26 +67,21 @@ class DataRetentionManager @Inject constructor(
 
     /**
      * Удаляет файл, только если он лежит внутри приватных каталогов приложения.
-     * `photoPath` приходит из БД, поэтому удалять по нему произвольный путь нельзя.
+     * Сама проверка — в чистой [RetentionPolicy.isOwnedByApp] (там же её тесты).
      */
     private fun deleteIfOwnedByApp(file: File): Boolean {
-        val roots = listOfNotNull(context.filesDir, context.cacheDir, context.getExternalFilesDir(null))
-        val target = runCatching { file.canonicalFile }.getOrNull() ?: return false
-        val owned = roots.any { root ->
-            val rootPath = runCatching { root.canonicalPath }.getOrNull() ?: return@any false
-            target.path.startsWith(rootPath + File.separator)
-        }
-        if (!owned) {
-            Log.w(TAG, "Refusing to delete file outside app storage: ${target.path}")
+        val roots = listOf(context.filesDir, context.cacheDir, context.getExternalFilesDir(null))
+        if (!RetentionPolicy.isOwnedByApp(file, roots)) {
+            Log.w(TAG, "Refusing to delete file outside app storage: ${file.path}")
             return false
         }
-        return target.delete()
+        return runCatching { file.canonicalFile.delete() }.getOrDefault(false)
     }
 
     private fun deleteStaleHoneypotDecoys(cutoff: Long) {
         val dir = File(context.filesDir, HoneypotManager.DIR_NAME)
         dir.listFiles()?.forEach { file ->
-            if (file.isFile && file.lastModified() in 1 until cutoff) {
+            if (file.isFile && RetentionPolicy.isStale(file.lastModified(), cutoff)) {
                 file.delete()
             }
         }
@@ -100,7 +91,7 @@ class DataRetentionManager @Inject constructor(
         val base = context.getExternalFilesDir(null) ?: return
         val dir = File(base, StealthCameraService.OUTPUT_DIR)
         dir.listFiles()?.forEach { file ->
-            if (file.isFile && file.lastModified() in 1 until cutoff) {
+            if (file.isFile && RetentionPolicy.isStale(file.lastModified(), cutoff)) {
                 file.delete()
             }
         }

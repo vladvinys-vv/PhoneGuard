@@ -36,14 +36,11 @@ class FirewallRulesManager @Inject constructor(
      * ссылкой, а читатели видят либо старый, либо новый полный набор.
      */
     @Volatile
-    private var rulesCache: Map<String, FirewallRule> = emptyMap()
-
-    @Volatile
-    private var uidPackageCache: Map<Int, Set<String>> = emptyMap()
+    private var index: FirewallRuleIndex = FirewallRuleIndex()
 
     suspend fun loadRules() {
         val rules = firewallRepository.allRules.first()
-        rulesCache = rules.associateBy { it.packageName }
+        index = index.withRules(rules)
     }
 
     fun loadInstalledApps(packageManager: PackageManager) {
@@ -55,21 +52,20 @@ class FirewallRulesManager @Inject constructor(
             @Suppress("DEPRECATION")
             packageManager.getInstalledApplications(0)
         }
-        uidPackageCache = installedApps
-            .groupBy { app -> app.uid }
-            .mapValues { (_, apps) -> apps.map { app -> app.packageName }.toSet() }
+        index = index.withUidPackages(
+            FirewallRuleIndex.groupByUid(installedApps.map { app -> app.uid to app.packageName })
+        )
     }
 
-    fun getRuleForPackage(packageName: String): FirewallRule? = rulesCache[packageName]
+    fun getRuleForPackage(packageName: String): FirewallRule? = index.ruleFor(packageName)
 
     /** Все пакеты, работающие под указанным UID (у приложений бывает общий UID). */
-    fun getPackageNamesForUid(uid: Int): List<String> =
-        uidPackageCache[uid]?.toList() ?: emptyList()
+    fun getPackageNamesForUid(uid: Int): List<String> = index.packagesForUid(uid)
 
     /** Первый пакет UID — для логов и событий вторжения. */
-    fun getPackageNameForUid(uid: Int): String? = uidPackageCache[uid]?.firstOrNull()
+    fun getPackageNameForUid(uid: Int): String? = index.firstPackageForUid(uid)
 
-    fun getRulesSnapshot(): Map<String, FirewallRule> = HashMap(rulesCache)
+    fun getRulesSnapshot(): Map<String, FirewallRule> = index.snapshot()
 
     /**
      * Пакеты, которые нужно полностью заблокировать в текущих условиях.
@@ -79,11 +75,7 @@ class FirewallRulesManager @Inject constructor(
      * Приложения, которым блокировка не нужна, в туннель не попадают вовсе и
      * работают через обычную сеть.
      */
-    fun blockedPackages(isOnWifi: Boolean): Set<String> = rulesCache.values
-        .asSequence()
-        .filter { rule -> shouldBlockAllTraffic(rule, isOnWifi) }
-        .map { it.packageName }
-        .toSet()
+    fun blockedPackages(isOnWifi: Boolean): Set<String> = index.blockedPackages(isOnWifi)
 
     /**
      * Возвращает true, если правило блокирует весь трафик приложения.
