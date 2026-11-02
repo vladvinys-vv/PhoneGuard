@@ -1672,6 +1672,76 @@ def check_nullable_flow_use() -> None:
             )
 
 
+CHANNEL_CONST_RE = re.compile(r'(?:const\s+)?val\s+(\w+)\s*(?::\s*String\s*)?=\s*"([^"]+)"')
+# Аргумент канала — либо строковый литерал, либо константа (`CHANNEL_ID`,
+# `Foo.CHANNEL_ID`); обе формы встречаются в природе.
+CHANNEL_USED_RE = re.compile(r'NotificationCompat\.Builder\([^,]+,\s*(?:"([^"]*)"|([\w.]+))')
+CHANNEL_SET_RE = re.compile(r'\.setChannelId\(\s*(?:"([^"]*)"|([\w.]+))\s*\)')
+# lookbehind `(?<!\w)` обязателен: иначе подстрока `NotificationChannel(` внутри
+# `createNotificationChannel(` даёт ложное «создание» канала.
+CHANNEL_CREATED_RE = re.compile(r'(?<!\w)NotificationChannel\(\s*(?:"([^"]*)"|([\w.]+))')
+CLASS_DECL_IN_FILE = re.compile(r'^\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:internal\s+|private\s+|public\s+|abstract\s+|open\s+|sealed\s+)*'
+                                r'(?:class|object)\s+(\w+)')
+
+
+def check_notification_channels() -> None:
+    """Канал, на который отправляется уведомление, должен где-то создаваться.
+
+    На Android 8+ уведомление в несуществующий канал просто не показывается — молча,
+    без исключения. Проверка ловит опечатку в имени канала и «канал, о котором забыли»
+    так же, как `check_notification_ids` ловит совпадающие id.
+    """
+    main = ROOT / 'app/src/main/java'
+    files = sorted(main.rglob('*.kt'))
+    constants: dict[Path, dict[str, str]] = {}
+    class_owner: dict[str, Path] = {}
+    for path in files:
+        text = path.read_text(encoding='utf-8')
+        # Значения каналов — строковые литералы, поэтому здесь `strip_comments`,
+        # а не `strip_code` (последний вырезает и строки).
+        constants[path] = dict(CHANNEL_CONST_RE.findall(strip_comments(text)))
+        for name in CLASS_DECL_IN_FILE.findall(strip_code(text)):
+            class_owner.setdefault(name, path)
+
+    def resolve(path: Path, token: str) -> str | None:
+        if '.' in token:
+            owner, _, name = token.rpartition('.')
+            owner_path = class_owner.get(owner)
+            if owner_path is None:
+                return None
+            return constants.get(owner_path, {}).get(name)
+        return constants.get(path, {}).get(token)
+
+    def value_of(path: Path, match: tuple[str, str]) -> str | None:
+        literal, token = match
+        return literal or resolve(path, token)
+
+    created: set[str] = set()
+    for path in files:
+        code = strip_comments(path.read_text(encoding='utf-8'))
+        for match in CHANNEL_CREATED_RE.findall(code):
+            value = value_of(path, match)
+            if value:
+                created.add(value)
+
+    used: dict[str, list[str]] = {}
+    for path in files:
+        code = strip_comments(path.read_text(encoding='utf-8'))
+        rel = str(path.relative_to(ROOT))
+        for regex in (CHANNEL_USED_RE, CHANNEL_SET_RE):
+            for match in regex.findall(code):
+                value = value_of(path, match)
+                if value:
+                    used.setdefault(value, []).append(f"{rel}: {match[0] or match[1]}")
+
+    for value, places in sorted(used.items()):
+        if value not in created:
+            ERRORS.append(
+                f"канал уведомлений '{value}' используется, но нигде не создаётся "
+                f"({'; '.join(sorted(set(places)))}) — на Android 8+ уведомление не покажется"
+            )
+
+
 def check_unreachable_screens() -> None:
     """`@Composable fun XxxScreen(...)`, который нигде не вызывается, — экран вне навигации.
 
@@ -1816,7 +1886,99 @@ def check_deep_links() -> None:
             )
 
 
+def self_test() -> int:
+    """Проверяет сами проверки на синтетических каталогах.
+
+    Оба «уведомительных» чекера уже ошибались: `strip_code` вырезает строковые литералы,
+    поэтому значения каналов не находились, а подстрока `NotificationChannel(` внутри
+    `createNotificationChannel(` давала ложное «канал создан». Синтетические примеры
+    фиксируют правильное поведение.
+    """
+    import tempfile
+
+    bad_channel = """package com.phoneguard.selftest
+object BadChannel {
+    private const val CHANNEL_ID = "ghost_channel"
+    fun build(context: android.content.Context) =
+        androidx.core.app.NotificationCompat.Builder(context, CHANNEL_ID).build()
+}
+"""
+    good_channel = """package com.phoneguard.selftest
+object GoodChannel {
+    const val CHANNEL_ID = "real_channel"
+    fun create(manager: android.app.NotificationManager) {
+        manager.createNotificationChannel(
+            android.app.NotificationChannel(CHANNEL_ID, "name", 1)
+        )
+    }
+    fun build(context: android.content.Context) =
+        androidx.core.app.NotificationCompat.Builder(context, CHANNEL_ID).build()
+}
+"""
+    id_a = """package com.phoneguard.selftest
+object A { private const val ALERT_NOTIFICATION_ID = 1001 }
+"""
+    id_b = """package com.phoneguard.selftest
+object B { private const val VPN_NOTIFICATION_ID = 1001 }
+"""
+    failures: list[str] = []
+    saved_root = globals()["ROOT"]
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pkg = root / "app/src/main/java/com/phoneguard/selftest"
+            pkg.mkdir(parents=True)
+
+            (pkg / "BadChannel.kt").write_text(bad_channel, encoding="utf-8")
+            (pkg / "GoodChannel.kt").write_text(good_channel, encoding="utf-8")
+            globals()["ROOT"] = root
+            ERRORS.clear()
+            check_notification_channels()
+            found = [e for e in ERRORS if "ghost_channel" in e]
+            false_alarm = [e for e in ERRORS if "real_channel" in e]
+            if len(found) != 1:
+                failures.append(f"канал без создания не найден ({ERRORS})")
+            if false_alarm:
+                failures.append(f"созданный канал помечен ошибкой ({false_alarm})")
+
+            # Канал, заданный строковым литералом, тоже должен проверяться.
+            (pkg / "LiteralChannel.kt").write_text(
+                'package com.phoneguard.selftest\n'
+                'object LiteralChannel {\n'
+                '    fun build(context: android.content.Context) =\n'
+                '        androidx.core.app.NotificationCompat.Builder(context, "literal_ghost")\n'
+                '}\n',
+                encoding="utf-8"
+            )
+            ERRORS.clear()
+            check_notification_channels()
+            if not [e for e in ERRORS if "literal_ghost" in e]:
+                failures.append(f"канал-литерал без создания не найден ({ERRORS})")
+
+            for name in ("A.kt", "B.kt"):
+                (pkg / name).unlink(missing_ok=True)
+            (pkg / "A.kt").write_text(id_a, encoding="utf-8")
+            (pkg / "B.kt").write_text(id_b, encoding="utf-8")
+            ERRORS.clear()
+            check_notification_ids()
+            if not [e for e in ERRORS if "1001" in e]:
+                failures.append(f"совпадающие id не найдены ({ERRORS})")
+    finally:
+        globals()["ROOT"] = saved_root
+        ERRORS.clear()
+
+    if failures:
+        for failure in failures:
+            print(f"static_audit --self-test: {failure}")
+        return 1
+    print("static_audit --self-test: ok (канал без создания, созданный канал, совпадающие id)")
+    return 0
+
+
 def main() -> int:
+    if "--self-test" in sys.argv:
+        return self_test()
+
     index, owners = collect_index()
     check_duplicates(owners)
     check_imports(index)
@@ -1852,6 +2014,7 @@ def main() -> int:
     check_gradle_wiring()
     check_member_calls()
     check_notification_ids()
+    check_notification_channels()
     check_nullable_flow_use()
     check_deep_links()
     check_unreachable_screens()
