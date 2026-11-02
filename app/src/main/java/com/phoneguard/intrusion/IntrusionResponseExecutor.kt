@@ -61,13 +61,31 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
         val autoEnabled = preferencesManager.isAutoIntrusionResponseEnabled.first()
 
         actions.forEach { action ->
+            // Информационные действия безусловны, активные — только при включённом
+            // автоответе. Правило живёт в IntrusionResponsePolicy (см. её KDoc: раньше
+            // один `return` отключал и предупреждение, и запись события).
+            if (!IntrusionResponsePolicy.shouldExecute(action.category(), autoEnabled)) return@forEach
             when (action) {
                 is IntrusionResponseAction.ShowWarning ->
                     showWarning(action.title, context.getString(action.messageRes))
                 IntrusionResponseAction.ExportLog -> exportLog(event)
-                else -> if (autoEnabled) executeActive(event, action)
+                else -> executeActive(event, action)
             }
         }
+    }
+
+    /** Соответствие действия политике; единственное место с этим маппингом. */
+    private fun IntrusionResponseAction.category(): IntrusionResponsePolicy.Category = when (this) {
+        is IntrusionResponseAction.ShowWarning -> IntrusionResponsePolicy.Category.WARNING
+        IntrusionResponseAction.ExportLog -> IntrusionResponsePolicy.Category.LOG_EXPORT
+        IntrusionResponseAction.LockVault -> IntrusionResponsePolicy.Category.LOCK_VAULT
+        is IntrusionResponseAction.BlockPackage -> IntrusionResponsePolicy.Category.BLOCK_PACKAGE
+        is IntrusionResponseAction.BlockNetwork -> IntrusionResponsePolicy.Category.BLOCK_NETWORK
+        IntrusionResponseAction.StartAlarm -> IntrusionResponsePolicy.Category.ALARM
+        IntrusionResponseAction.CapturePhoto -> IntrusionResponsePolicy.Category.PHOTO
+        is IntrusionResponseAction.NotifyTrustedContacts ->
+            IntrusionResponsePolicy.Category.NOTIFY_CONTACTS
+        is IntrusionResponseAction.CreateHoneypot -> IntrusionResponsePolicy.Category.HONEYPOT
     }
 
     private suspend fun executeActive(event: IntrusionEvent, action: IntrusionResponseAction) {

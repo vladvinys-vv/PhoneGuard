@@ -35,16 +35,15 @@ class FileSystemScanCheck @Inject constructor(
             // все файлы и ищем APK, разложенные вне Download (типичная маскировка).
             val allFiles = queryMediaStore(MediaStore.Files.getContentUri("external"))
             totalScanned += allFiles.size
-            allFiles.filter { it.extension.equals("apk", ignoreCase = true) }.forEach { file ->
-                if (!isInsideDownloads(file.path)) {
-                    suspiciousFiles.add(
-                        SuspiciousFile(
-                            file.path,
-                            context.getString(R.string.file_scan_reason_apk_outside_downloads),
-                            2
-                        )
+            // «APK вне Download» — правило в MediaStoreFilePolicy (проверяется тестами).
+            allFiles.filter { MediaStoreFilePolicy.isSuspiciousApk(it.path) }.forEach { file ->
+                suspiciousFiles.add(
+                    SuspiciousFile(
+                        file.path,
+                        context.getString(R.string.file_scan_reason_apk_outside_downloads),
+                        2
                     )
-                }
+                )
             }
             details.add(context.getString(R.string.file_scan_start_dcim))
             val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
@@ -122,13 +121,11 @@ class FileSystemScanCheck @Inject constructor(
 
                 while (c.moveToNext()) {
                     val path: String = if (isScoped) {
-                        val relPath = c.getString(relPathIndex) ?: ""
-                        val displayName = c.getString(displayNameIndex) ?: ""
-                        if (relPath.isNotBlank() && displayName.isNotBlank()) {
-                            "${Environment.getExternalStorageDirectory()}/$relPath$displayName"
-                        } else {
-                            continue
-                        }
+                        MediaStoreFilePolicy.scopedPath(
+                            externalRoot = Environment.getExternalStorageDirectory().absolutePath,
+                            relativePath = c.getString(relPathIndex),
+                            displayName = c.getString(displayNameIndex)
+                        ) ?: continue
                     } else {
                         c.getString(dataIndex) ?: continue
                     }
@@ -138,10 +135,6 @@ class FileSystemScanCheck @Inject constructor(
         } catch (_: Exception) {}
         return files
     }
-
-    /** Лежит ли файл в публичном каталоге Download (или Downloads). */
-    private fun isInsideDownloads(path: String): Boolean =
-        FileSystemHeuristics.isInsideDownloads(path)
 
     private fun findNomediaDirectories(dir: File, depth: Int = 0): List<File> {
         if (depth > MAX_DIRECTORY_DEPTH) return emptyList()
@@ -157,9 +150,7 @@ class FileSystemScanCheck @Inject constructor(
         return result
     }
 
-    private data class MediaFile(val path: String) {
-        val extension: String get() = File(path).extension
-    }
+    private data class MediaFile(val path: String)
 
     private companion object {
         /** Ограничение рекурсии: защита от циклов символических ссылок. */

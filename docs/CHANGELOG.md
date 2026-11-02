@@ -3,6 +3,28 @@
 ## [Unreleased] — интеграции и исправления
 
 ### Fixed
+- **Правила «кто из Device Admin подозрителен» нельзя было проверить тестом.** Цепочка
+  `return@mapNotNull` внутри `DeviceAdminAbuseCheck` смешивала порядок проверок (`свои права → известный
+  MDM → системный → приложение удалено → подозрительное имя → сторонний`) с `PackageManager` и строками
+  ресурсов. Вынесено в чистый `DeviceAdminRiskPolicy` (`Verdict`, `KNOWN_LEGIT`, `SUSPICIOUS_PATTERNS`,
+  `isSuspiciousName`, `assess`, `isReportable`), 9 выполняемых JVM-тестов фиксируют порядок: своё
+  приложение важнее списка легитимных, а «приложение удалено» — подозрительного имени. Тест отдельно
+  фиксирует **известное ограничение шаблонов**: `anti theft` и `anti-theft` не распознаются, потому что
+  шаблон записан точкой (`anti.theft`).
+- **Причина попадания «спрятанного» приложения в отчёт жила в `when` внутри чека.** Вынесено в чистый
+  `HiddenAppRiskPolicy` (`Reason`, `reason`, `isReportable`): приоритет «имя + разрешения» →
+  «только имя» → «только разрешения», а приложение без обоих признаков в отчёт не попадает.
+  5 JVM-тестов.
+- **Информационные действия реакции на вторжение зависели от настройки.** Правило «предупреждение и
+  выгрузка лога выполняются всегда, остальные — только при включённом автоответе» теперь в чистом
+  `IntrusionResponsePolicy` (`Category`, `ALWAYS_ON`, `isInformational`, `shouldExecute`), а
+  `AndroidIntrusionResponseExecutor` только сопоставляет действие с категорией. Регресс того бага
+  (один `return` отключал и предупреждение, и запись события) ловится 3 тестами.
+- **Путь из `MediaStore` собирался конкатенацией.** `"$root/$relPath$displayName"` давал склеенный путь,
+  если `RELATIVE_PATH` приходил без завершающего `/`, и путь в корне хранилища при пустом `RELATIVE_PATH`.
+  Вынесено в чистый `MediaStoreFilePolicy` (`scopedPath`, `isApk`, `isSuspiciousApk`): нормализация
+  слэшей, пропуск записей без пути/имени, расширение APK без учёта регистра, «APK вне Download» —
+  одной функцией. 8 выполняемых JVM-тестов.
 - **Приложение не компилировалось: `SmsSender` вызывал метод экземпляра через имя класса.**
   `PhoneNumberNormalizer.toValidE164(candidate)` — это член экземпляра (`PhoneNumberNormalizer` создаётся с
   `Context`), поэтому `kotlinc` падает с `unresolved reference 'toValidE164'`. Проверено реальным
@@ -396,7 +418,7 @@
   `IntrusionDetectorTest` (+2: порядок и улики сигналов, пустой вход) и новый
   `ThreatIntelModelsTest` (+4: какие вердикты блокируют трафик, что попадает в `unknown`) и
   `PhishingHeuristicsTest` (+9: ссылки, ключевые слова, голые домены, ложные срабатывания).
-  Всего в JVM-прогоне теперь **445 тестов в 48 файлах**.
+  Всего в JVM-прогоне теперь **470 тестов в 52 файлах**.
 - **Заглушки, которые втащили в прогон ещё три файла тестов:** `android.provider.Settings`
   (+ `ContentResolver`), `android.content.pm.PackageManager`/`PackageInfo`/`ApplicationInfo`,
   `android.app.AppOpsManager` с `Context.getSystemService`, `dagger.hilt.android.qualifiers
@@ -419,12 +441,12 @@
   реализация: `static_audit.py` больше не дублирует regex-версию, а вызывает этот модуль. Добавлен
   в `./tools/check_all.sh`, в job `static-checks` GitHub Actions и в `codemagic.yaml`.
 - **`tools/test_coverage_map.py` — карта тестового покрытия без Gradle.** Показывает, какие
-  классы вообще упомянуты в тестах (сейчас 133 из 191), и отдельно — «логика без тестов» против
+  классы вообще упомянуты в тестах (сейчас 137 из 195), и отдельно — «логика без тестов» против
   «UI/Hilt/сервисы, которые проверяются Robolectric и вручную». Честно названо картой, а не
   процентом покрытия: упоминание класса не доказывает покрытие ветвей.
 - **`tools/jvm_unit_test.py` — реальный прогон тестов без Gradle.** `kotlinc` + шим `org.junit`
   (аннотации, `Assert`, раннер на reflection) компилируют и **выполняют** тесты чистой логики
-  там, где нет Google Maven: в песочнице так проходят 445 тестов в 48 файлах. Заглушки
+  там, где нет Google Maven: в песочнице так проходят 470 тестов в 52 файлах. Заглушки
   `androidx.room`/`androidx.annotation`/`javax.inject`/`android.util.Log`/`android.os.Build`/
   `android.util.Base64`/`android.content.Context`, авто-генерация заглушки `R` и разворачивание
   `import org.junit.Assert.*` втаскивают под прогон модели, конвертеры, хеширование PIN, разбор улик
@@ -478,7 +500,7 @@
 - **`docs/CI_WEBHOOKS.md`:** таблица «входящий trigger / исходящий notify», схема payload, проверка
   подписи на Python/Node, настройка Codemagic и GitHub, локальный сценарий проверки.
 - **`tools/kotlin_frontend_check.py` — проверка настоящим компилятором.** Запускает `kotlinc 2.1`
-  на всех 270 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
+  на всех 278 файлах (`main` + `test` + `androidTest`) без Android SDK и отбрасывает диагностики,
   вызванные отсутствующими библиотеками (`-Xrender-internal-diagnostic-names` + список ожидаемых
   имён с пояснениями). Найдено и исправлено 7 ошибок компиляции, которые не видел регексп-аудит
   (см. Fixed). Без `kotlinc` скрипт завершается с кодом 0 и подсказкой, как его получить.
