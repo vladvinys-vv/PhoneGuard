@@ -677,4 +677,6 @@
     <string name="sms_suspicious_text">Message from %1$s looks like phishing: a link plus pressure wording</string>
     <string name="sim_swap_channel_name">SIM card change</string>
     <string name="sim_swap_channel_description">Questions about a new SIM and SIM-swap warnings</string>
+    <string name="intrusion_warning_channel_name">Intrusion warnings</string>
+    <string name="intrusion_warning_channel_description">Alerts about suspicious activity on the device</string>
 </resources>

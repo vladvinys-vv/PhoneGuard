@@ -59,14 +59,19 @@ class IntrusionWarningActivity : Activity() {
         const val EXTRA_TITLE = "title"
         const val EXTRA_MESSAGE = "message"
 
-        fun start(context: Context, title: String, message: String) {
+        /**
+         * Пытается показать экран предупреждения.
+         *
+         * @return `true`, если экран удалось открыть. `false` — вызывающий обязан использовать
+         *   другой канал: явный интент не спасает, если активити отключена политикой устройства.
+         */
+        fun start(context: Context, title: String, message: String): Boolean {
             val intent = Intent(context, IntrusionWarningActivity::class.java).apply {
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_MESSAGE, message)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
-            // Явный интент, но активити может быть отключена политикой устройства.
-            IntentUtils.open(context, intent)
+            return IntentUtils.open(context, intent)
         }
     }
 }
