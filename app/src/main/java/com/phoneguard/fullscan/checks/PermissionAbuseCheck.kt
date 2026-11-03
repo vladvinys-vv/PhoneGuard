@@ -171,17 +171,23 @@ class PermissionAbuseCheck @Inject constructor(
             PermissionRiskPolicy.Level.MEDIUM -> RiskLevel.MEDIUM
         }
         val matched = grantedGroups.filter { it.toPolicyGroup() in verdict.matched }
-        val detail = when (verdict.reason) {
-            PermissionRiskPolicy.Reason.CRITICAL_COMBO ->
-                CheckDetail(R.string.perm_risk_critical_combo, listOf(labels(matched)))
-            PermissionRiskPolicy.Reason.SMS_PLUS_OTHER ->
-                CheckDetail(R.string.perm_risk_sms_extra, listOf(labels(grantedGroups)))
-            PermissionRiskPolicy.Reason.BACKGROUND_LOCATION ->
+        // Какой шаблон и какие группы подставлять — в чистом [PermissionAbusePolicy]
+        // (там же тесты: ошибка здесь незаметна, объяснение просто становится неточным).
+        val plan = PermissionAbusePolicy.plan(verdict.reason)
+        val groups = when (plan.scope) {
+            PermissionAbusePolicy.Scope.MATCHED -> matched
+            PermissionAbusePolicy.Scope.ALL -> grantedGroups
+            PermissionAbusePolicy.Scope.NONE -> emptyList()
+        }
+        val detail = when (plan.template) {
+            PermissionAbusePolicy.Template.CRITICAL_COMBO ->
+                CheckDetail(R.string.perm_risk_critical_combo, listOf(labels(groups)))
+            PermissionAbusePolicy.Template.SMS_EXTRA ->
+                CheckDetail(R.string.perm_risk_sms_extra, listOf(labels(groups)))
+            PermissionAbusePolicy.Template.BACKGROUND_LOCATION ->
                 CheckDetail(R.string.perm_risk_background_location)
-            PermissionRiskPolicy.Reason.SENSITIVE_PAIR ->
-                CheckDetail(R.string.perm_risk_many_sensitive, listOf(labels(matched)))
-            PermissionRiskPolicy.Reason.MANY_SENSITIVE ->
-                CheckDetail(R.string.perm_risk_many_sensitive, listOf(labels(grantedGroups)))
+            PermissionAbusePolicy.Template.MANY_SENSITIVE ->
+                CheckDetail(R.string.perm_risk_many_sensitive, listOf(labels(groups)))
         }
         return level to detail
     }
