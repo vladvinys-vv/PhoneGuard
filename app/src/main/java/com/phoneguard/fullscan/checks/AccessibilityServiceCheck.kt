@@ -72,13 +72,16 @@ class AccessibilityServiceCheck @Inject constructor(
                 SuspiciousAccessibilityService(
                     packageName = pkg,
                     appName = appName ?: context.getString(R.string.accessibility_unknown_app_name),
-                    riskReason = when {
-                        matchedPattern != null -> context.getString(
+                    // Порядок причин — в чистом [AccessibilityRiskPolicy] (там же тесты).
+                    riskReason = when (AccessibilityRiskPolicy.reasonFor(matchedPattern, appName)) {
+                        AccessibilityRiskReason.SUSPICIOUS_NAME -> context.getString(
                             R.string.accessibility_reason_suspicious_name,
                             matchedPattern
                         )
-                        appName == null -> context.getString(R.string.accessibility_reason_removed_app)
-                        else -> context.getString(R.string.accessibility_reason_third_party)
+                        AccessibilityRiskReason.REMOVED_APP ->
+                            context.getString(R.string.accessibility_reason_removed_app)
+                        AccessibilityRiskReason.THIRD_PARTY ->
+                            context.getString(R.string.accessibility_reason_third_party)
                     }
                 )
             }
