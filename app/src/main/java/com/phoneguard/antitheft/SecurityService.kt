@@ -23,6 +23,15 @@ import kotlinx.coroutines.flow.first
 interface SecurityService {
     suspend fun isLostModeActive(): Flow<Boolean>
     suspend fun activateLostMode()
+
+    /**
+     * Только сирена: без режима потери.
+     *
+     * Нужна реакции на вторжение: посторонний трогает телефон — звук нужен, а состояние
+     * «телефон потерян» (оно сохраняется в настройках и переживает перезапуск) — нет.
+     */
+    suspend fun soundAlarm()
+
     suspend fun stopAlarm()
     suspend fun sendLocationToContacts()
     suspend fun getTrustedContacts(): List<String>
@@ -82,7 +91,6 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
         // Сначала настройки: если процесс убьют сразу после старта тревоги, режим потери
         // всё равно останется включённым.
         preferencesManager.setLostModeActive(true)
-        preferencesManager.setRemoteAlarmEnabled(true)
         val alarmStarted = startAlarm()
         synchronized(this) {
             lostMode = LostModePolicy.onActivate(lostMode, alarmStarted)
@@ -126,6 +134,16 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
         return alarmPlayer != null
     }
 
+    override suspend fun soundAlarm() {
+        restoreStateIfNeeded()
+        val alarmStarted = startAlarm()
+        if (!alarmStarted) return
+        synchronized(this) {
+            lostMode = LostModePolicy.onIntrusionAlarm(lostMode)
+            _lostModeActive.value = lostMode.lostModeActive
+        }
+    }
+
     override suspend fun stopAlarm() {
         releaseAlarm()
         synchronized(this) {
@@ -134,7 +152,6 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
             stateRestored = true
         }
         preferencesManager.setLostModeActive(false)
-        preferencesManager.setRemoteAlarmEnabled(false)
     }
 
     /** Останавливает и освобождает плеер и вибрацию; состояние меняется отдельно, под блокировкой. */
