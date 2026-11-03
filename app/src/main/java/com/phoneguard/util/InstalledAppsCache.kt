@@ -14,28 +14,26 @@ import javax.inject.Singleton
 class InstalledAppsCache @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    @Volatile
-    private var cachedApps: List<ApplicationInfo>? = null
-    @Volatile
-    private var cacheTimestamp: Long = 0L
-    private val cacheValidityMs = TimeUnit.HOURS.toMillis(24)
+    /**
+     * Срок жизни кэша и его содержимое — в [TtlCache]: там значение и метка времени
+     * публикуются одной ссылкой, поэтому читатель не увидит «новый список со старой меткой».
+     */
+    private val cache = TtlCache<List<ApplicationInfo>>(CACHE_VALIDITY_MS)
 
     suspend fun getInstalledApps(): List<ApplicationInfo> = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        val cached = cachedApps
-        if (cached != null && (now - cacheTimestamp) < cacheValidityMs) {
-            return@withContext cached
-        }
+        cache.getOrNull()?.let { return@withContext it }
 
         val pm = context.packageManager
         val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        cachedApps = apps
-        cacheTimestamp = now
+        cache.put(apps)
         apps
     }
 
     fun invalidateCache() {
-        cachedApps = null
-        cacheTimestamp = 0
+        cache.invalidate()
+    }
+
+    private companion object {
+        val CACHE_VALIDITY_MS = TimeUnit.HOURS.toMillis(24)
     }
 }

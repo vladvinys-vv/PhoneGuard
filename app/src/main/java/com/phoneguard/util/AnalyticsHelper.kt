@@ -23,8 +23,8 @@ class AnalyticsHelper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    /** Счётчики текущей сессии — полезны для отладки, никуда не передаются. */
-    private val counters = mutableMapOf<String, Int>()
+    /** Счётчики текущей сессии — полезны для отладки, никуда не передаются (см. [SessionCounters]). */
+    private val counters = SessionCounters()
 
     fun logEvent(eventName: String, params: Map<String, Any> = emptyMap()) {
         record(eventName, params)
@@ -50,10 +50,13 @@ class AnalyticsHelper @Inject constructor(
     }
 
     /** Количество событий с таким именем за текущую сессию. */
-    fun sessionCount(eventName: String): Int = synchronized(counters) { counters[eventName] ?: 0 }
+    fun sessionCount(eventName: String): Int = counters.count(eventName)
+
+    /** Снимок всех счётчиков сессии (копия) — для отладочных экранов и тестов. */
+    fun sessionSnapshot(): Map<String, Int> = counters.snapshot()
 
     private fun record(eventName: String, params: Map<String, Any>) {
-        synchronized(counters) { counters[eventName] = (counters[eventName] ?: 0) + 1 }
+        counters.record(eventName)
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "event=$eventName params=$params (local only)")
         }

@@ -37,3 +37,5 @@ app/src/test/java/com/phoneguard/fullscan/checks/PermissionAbuseCheckTest.kt: pe
 app/src/test/java/com/phoneguard/fullscan/checks/RootDetectionCheckTest.kt: performCheck
 # verifyPin: suspend в PreferencesManager, SecurityUtils.verifyPin() — обычная.
 app/src/test/java/com/phoneguard/util/SecurityUtilsTest.kt: verifyPin
+# record: suspend есть у SimSwapRepository.record(), SessionCounters.record() — обычная.
+app/src/test/java/com/phoneguard/util/SessionCountersTest.kt: record
