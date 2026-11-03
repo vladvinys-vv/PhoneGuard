@@ -25,7 +25,7 @@ class BatteryOptimizationHelper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    fun isBatteryLow(): Boolean = getBatteryLevel() <= LOW_BATTERY_THRESHOLD
+    fun isBatteryLow(): Boolean = BatteryPolicy.isLow(getBatteryLevel())
 
     fun isCharging(): Boolean {
         val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -37,16 +37,15 @@ class BatteryOptimizationHelper @Inject constructor(
     /** Уровень заряда в процентах; если прочитать нельзя — считаем, что заряд полный. */
     fun getBatteryLevel(): Int {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-            ?: return UNKNOWN_BATTERY_LEVEL
+            ?: return BatteryPolicy.UNKNOWN_BATTERY_LEVEL
         val capacity = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-        return if (capacity in 0..MAX_BATTERY_LEVEL) capacity else UNKNOWN_BATTERY_LEVEL
+        // Int.MIN_VALUE и прочие «мусорные» значения → «неизвестно» (= полный заряд).
+        return BatteryPolicy.sanitizeLevel(capacity)
     }
 
-    fun getAdaptiveScanInterval(): Long = when {
-        isBatteryLow() -> 12L * 60L * 60L * 1000L
-        !isCharging() -> 6L * 60L * 60L * 1000L
-        else -> 3L * 60L * 60L * 1000L
-    }
+    /** Пороги и интервалы — в чистом [BatteryPolicy] (там же тесты). */
+    fun getAdaptiveScanInterval(): Long =
+        BatteryPolicy.scanInterval(getBatteryLevel(), isCharging())
 
     /**
      * Интервал кадров детектора «подглядывающего».
@@ -56,22 +55,9 @@ class BatteryOptimizationHelper @Inject constructor(
      */
     fun getAdaptiveShoulderSurferInterval(): Long {
         val level = getBatteryLevel()
-        return when {
-            level <= CRITICAL_BATTERY_LEVEL -> 10_000L
-            isCharging() -> 1_500L
-            level <= LOW_BATTERY_THRESHOLD -> 6_000L
-            level <= HALF_BATTERY_LEVEL -> 4_000L
-            else -> 2_500L
-        }
-    }
-
-    private companion object {
-        const val LOW_BATTERY_THRESHOLD = 15
-        const val CRITICAL_BATTERY_LEVEL = 10
-        const val HALF_BATTERY_LEVEL = 50
-        const val MAX_BATTERY_LEVEL = 100
-
-        /** Значение-заглушка, когда API не отдал уровень заряда. */
-        const val UNKNOWN_BATTERY_LEVEL = MAX_BATTERY_LEVEL
+        // Статус зарядки нужен только вне критической ветки: `registerReceiver` не бесплатный,
+        // а при заряде ≤ 10 % ответ от него всё равно не используется.
+        val charging = level > BatteryPolicy.CRITICAL_BATTERY_LEVEL && isCharging()
+        return BatteryPolicy.shoulderSurferInterval(level, charging)
     }
 }
