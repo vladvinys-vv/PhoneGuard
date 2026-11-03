@@ -670,4 +670,6 @@
     <string name="sms_suspicious_text">Nachricht von %1$s sieht nach Phishing aus: Link und Druckformulierungen</string>
     <string name="sim_swap_channel_name">SIM-Kartenwechsel</string>
     <string name="sim_swap_channel_description">Rückfragen zum SIM-Wechsel und Warnungen vor SIM-Tausch</string>
+    <string name="intrusion_warning_channel_name">Eindringlingswarnungen</string>
+    <string name="intrusion_warning_channel_description">Hinweise auf verdächtige Aktivität auf dem Gerät</string>
 </resources>

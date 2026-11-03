@@ -21,7 +21,8 @@ class NotificationIdsTest {
         "BLOCKED_SMS" to NotificationIds.BLOCKED_SMS,
         "SIM_SWAP" to NotificationIds.SIM_SWAP,
         "SMS_ALARM" to NotificationIds.SMS_ALARM,
-        "STEALTH_CAMERA" to NotificationIds.STEALTH_CAMERA
+        "STEALTH_CAMERA" to NotificationIds.STEALTH_CAMERA,
+        "INTRUSION_WARNING" to NotificationIds.INTRUSION_WARNING
     )
 
     @Test

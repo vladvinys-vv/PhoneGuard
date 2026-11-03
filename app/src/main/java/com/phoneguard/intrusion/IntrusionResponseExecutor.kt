@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Context
 import android.util.Log
 import android.content.Intent
+import android.app.ActivityManager
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.phoneguard.R
@@ -160,9 +162,42 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
         }
     }
 
+    /**
+     * Показывает предупреждение тем каналом, который на этом API реально работает.
+     *
+     * Раньше здесь был безусловный `startActivity`: с Android 10 система молча блокирует
+     * запуск активити из фона, поэтому предупреждение о вторжении не видел никто
+     * (правило выбора — в [IntrusionWarningDeliveryPolicy]).
+     */
     private fun showWarning(title: String, message: String) {
-        IntrusionWarningActivity.start(context, title, message)
+        val delivery = IntrusionWarningDeliveryPolicy.choose(
+            sdkInt = Build.VERSION.SDK_INT,
+            appInForeground = isAppInForeground()
+        )
+        when (delivery) {
+            WarningDelivery.ACTIVITY -> {
+                // Если экран открыть не удалось (активити отключена политикой устройства),
+                // уведомление — единственный оставшийся канал.
+                if (!IntrusionWarningActivity.start(context, title, message)) {
+                    IntrusionWarningNotifier.notify(context, title, message)
+                }
+            }
+            WarningDelivery.NOTIFICATION -> IntrusionWarningNotifier.notify(context, title, message)
+        }
     }
+
+    /**
+     * На переднем ли плане приложение.
+     *
+     * `getMyMemoryState` не требует разрешений и работает для собственного процесса; ошибку
+     * чтения трактуем как «в фоне» — уведомление покажется в любом случае, а фоновая активити
+     * на новых версиях всё равно не откроется.
+     */
+    private fun isAppInForeground(): Boolean = runCatching {
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        info.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }.getOrDefault(false)
 
     /**
      * Создаёт файлы-приманки и запускает наблюдатель за каталогом.
