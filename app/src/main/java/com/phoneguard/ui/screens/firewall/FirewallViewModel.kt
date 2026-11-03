@@ -11,7 +11,9 @@ import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.firewall.PhoneGuardVpnService
 import com.phoneguard.model.FirewallRule
+import com.phoneguard.model.blocksAllTraffic
 import com.phoneguard.util.InstalledAppsCache
+import com.phoneguard.util.NetworkTypeResolver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -178,20 +180,20 @@ class FirewallViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Есть ли правила, которым нужен туннель прямо сейчас.
+     *
+     * Матрица — та же [blocksAllTraffic], что применяет сервис: раньше она была скопирована
+     * сюда вручную, и любая правка в одном месте расходилась с другим (туннель поднимался
+     * «впустую» или не поднимался, когда правила требуют блокировки). Тип сети считает
+     * `NetworkTypeResolver` — по сетям без транспорта `VPN`, иначе при своём туннеле
+     * `activeNetwork` всегда «не Wi-Fi».
+     */
     private suspend fun hasBlockingRules(): Boolean {
         val rules = repository.allRules.first()
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-        val network = cm?.activeNetwork
-        val onWifi = cm?.getNetworkCapabilities(network)
-            ?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ?: false
-        return rules.any { rule ->
-            rule.blockAll ||
-                !rule.allowByDefault ||
-                (onWifi && rule.blockWifi) ||
-                (!onWifi && rule.blockMobile) ||
-                (rule.allowWifiOnly && !onWifi) ||
-                (rule.allowMobileOnly && onWifi)
-        }
+        val onWifi = NetworkTypeResolver.isOnWifi(cm)
+        return rules.any { rule -> rule.blocksAllTraffic(onWifi) }
     }
 
     fun stopVpn() {

@@ -27,6 +27,7 @@ import com.phoneguard.intrusion.IntrusionRepository
 import com.phoneguard.intrusion.IntrusionSeverity
 import com.phoneguard.intrusion.IntrusionType
 import com.phoneguard.model.FirewallLog
+import com.phoneguard.util.NetworkTypeResolver
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -108,6 +109,18 @@ class PhoneGuardVpnService : VpnService() {
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastWifiState: Boolean? = null
+
+    /**
+     * Тип сети для правил фаервола на текущий момент.
+     *
+     * `@Volatile`: обновляется при смене сети, а читается на каждом пакете. Раньше на каждом
+     * пакете заново спрашивали `ConnectivityManager`, и ответ всегда был `false`: активная сеть
+     * при поднятом туннеле — это собственный VPN (транспорт `VPN`, а не `WIFI`), поэтому правила
+     * Wi-Fi не срабатывали никогда. Теперь тип сети считает `NetworkTypeResolver` по сетям без
+     * транспорта `VPN`, а горячий путь читает закэшированное значение.
+     */
+    @Volatile
+    private var onWifiNow: Boolean = false
 
     /**
      * Счётчик заблокированных пакетов (для уведомления).
@@ -219,7 +232,7 @@ class PhoneGuardVpnService : VpnService() {
                 rulesManager.loadRules()
                 rulesManager.loadInstalledApps(packageManager)
 
-                val onWifi = isOnWifi()
+                val onWifi = refreshNetworkType()
                 lastWifiState = onWifi
                 val blockedPackages = rulesManager.blockedPackages(onWifi)
 
@@ -391,7 +404,7 @@ class PhoneGuardVpnService : VpnService() {
         val packageName = uid?.let { owner ->
             rulesManager.getPackageNamesForUid(owner).firstOrNull { pkg ->
                 val rule = rulesManager.getRuleForPackage(pkg)
-                rule != null && rulesManager.shouldBlockAllTraffic(rule, isOnWifi())
+                rule != null && rulesManager.shouldBlockAllTraffic(rule, onWifiNow)
             }
         } ?: uid?.let { rulesManager.getPackageNameForUid(it) }
 
@@ -409,7 +422,7 @@ class PhoneGuardVpnService : VpnService() {
         // В журнале — «человеческое» время; окна ограничителя считаются отдельно,
         // по монотонным часам.
         val now = System.currentTimeMillis()
-        val connectionType = if (isOnWifi()) FirewallLog.ConnectionType.WIFI
+        val connectionType = if (onWifiNow) FirewallLog.ConnectionType.WIFI
         else FirewallLog.ConnectionType.MOBILE
 
         val log = FirewallLog(
@@ -536,15 +549,18 @@ class PhoneGuardVpnService : VpnService() {
         return SYSTEM_PACKAGE_PREFIXES.any { packageName.startsWith(it) }
     }
 
-    private fun isOnWifi(): Boolean {
-        return try {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val network = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(network) ?: return false
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-        } catch (_: Exception) {
-            false
-        }
+    /**
+     * Перечитывает тип сети и запоминает результат для «горячего» пути обработки пакетов.
+     *
+     * Возвращает `true`, если к правилам сейчас применяется набор Wi-Fi.
+     */
+    private fun refreshNetworkType(): Boolean {
+        val connectivityManager = runCatching {
+            getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        }.getOrNull()
+        val onWifi = NetworkTypeResolver.isOnWifi(connectivityManager)
+        onWifiNow = onWifi
+        return onWifi
     }
 
     /**
@@ -581,7 +597,7 @@ class PhoneGuardVpnService : VpnService() {
 
     private fun onNetworkChanged() {
         vpnScope.launch {
-            val onWifi = isOnWifi()
+            val onWifi = refreshNetworkType()
             if (onWifi == lastWifiState) return@launch
             lastWifiState = onWifi
             Log.d(TAG, "Network type changed (wifi=$onWifi), rebuilding tunnel")
