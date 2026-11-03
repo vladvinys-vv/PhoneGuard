@@ -105,6 +105,46 @@ class LostModePolicyTest {
         assertEquals(LostModeState.inactive(), LostModePolicy.onRestore(stopped.lostModeActive))
     }
 
+    // --- тревога от вторжения (без режима потери) ---------------------------
+
+    @Test
+    fun intrusionAlarmSoundsWithoutEnteringLostMode() {
+        // Посторонний трогает телефон: сирена нужна, а «телефон потерян» — нет.
+        val state = LostModePolicy.onIntrusionAlarm(LostModeState.inactive())
+        assertFalse("вторжение не должно включать режим потери", state.lostModeActive)
+        assertTrue(state.alarmPlaying)
+    }
+
+    @Test
+    fun intrusionAlarmKeepsAlreadyActiveLostMode() {
+        val lost = LostModeState(lostModeActive = true, alarmPlaying = false)
+        val state = LostModePolicy.onIntrusionAlarm(lost)
+        assertTrue(state.lostModeActive)
+        assertTrue(state.alarmPlaying)
+    }
+
+    @Test
+    fun intrusionAlarmIsIdempotent() {
+        val once = LostModePolicy.onIntrusionAlarm(LostModeState.inactive())
+        val twice = LostModePolicy.onIntrusionAlarm(once)
+        assertEquals(once, twice)
+    }
+
+    @Test
+    fun stopAlarmAlsoSilencesIntrusionAlarm() {
+        val intrusion = LostModePolicy.onIntrusionAlarm(LostModeState.inactive())
+        assertEquals(LostModeState.inactive(), LostModePolicy.onStopAlarm(intrusion))
+    }
+
+    @Test
+    fun intrusionAlarmDoesNotSurviveProcessRestart() {
+        // Сирена живёт только пока жив процесс: после перезапуска восстанавливается
+        // сохранённый режим потери, а не «тревога играет».
+        val intrusion = LostModePolicy.onIntrusionAlarm(LostModeState.inactive())
+        val restored = LostModePolicy.onRestore(intrusion.lostModeActive)
+        assertEquals(LostModeState.inactive(), restored)
+    }
+
     @Test
     fun restoreDoesNotResurrectAlarmForActiveMode() {
         // Отдельная формулировка того же правила: восстановление никогда не утверждает,

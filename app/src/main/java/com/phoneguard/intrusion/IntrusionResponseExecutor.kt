@@ -15,6 +15,7 @@ import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.model.FirewallRule
 import com.phoneguard.ui.IntrusionWarningActivity
+import com.phoneguard.util.LogRedaction
 import com.phoneguard.util.SmsSender
 import com.phoneguard.vault.VaultSession
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -98,8 +99,10 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
             // пользователь в этот момент пользуется. Блокировка экрана осталась за
             // удалённой SMS-командой `LOCK`.
             IntrusionResponseAction.LockVault -> vaultSession.lock()
+            // Только сирена: `activateLostMode()` пометил бы устройство «потерянным»
+            // навсегда (флаг сохраняется и переживает перезапуск) из-за одного вторжения.
             IntrusionResponseAction.StartAlarm ->
-                if (preferencesManager.isIntrusionAlarmEnabled.first()) securityService.activateLostMode()
+                if (preferencesManager.isIntrusionAlarmEnabled.first()) securityService.soundAlarm()
             IntrusionResponseAction.CapturePhoto ->
                 if (preferencesManager.isIntrusionPhotoEnabled.first()) capturePhoto(event.id)
             is IntrusionResponseAction.NotifyTrustedContacts ->
@@ -243,7 +246,9 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
                 put("evidence", JSONObject(event.evidence))
                 put("uid", event.uid)
                 put("packageName", event.packageName)
-                put("ipAddress", event.ipAddress)
+                // Выгрузка лежит в `cacheDir`, но её отдают в поддержку: адрес третьей
+                // стороны маскируется так же, как в журнале фаервола.
+                put("ipAddress", LogRedaction.maskIp(event.ipAddress))
                 put("photoPath", event.photoPath)
             }
             file.writeText(json.toString(2))
