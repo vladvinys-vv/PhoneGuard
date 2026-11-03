@@ -53,7 +53,11 @@ class EncryptionManager @Inject constructor(
      * см. `res/xml/file_paths.xml`.
      */
     private val previewDir by lazy {
-        File(context.cacheDir, PREVIEW_DIR_NAME).apply { mkdirs() }
+        File(context.cacheDir, PREVIEW_DIR_NAME).apply {
+            mkdirs()
+            // Копии прошлой сессии: приложение могли убить до того, как сработала уборка.
+            prunePreviewDir(keepName = null)
+        }
     }
 
     suspend fun encryptFileToVault(
@@ -99,8 +103,9 @@ class EncryptionManager @Inject constructor(
     /**
      * Расшифровывает файл во временный файл внутри [previewDir].
      *
-     * Предыдущий предпросмотр удаляется: в кэше никогда не лежит больше одного
-     * открытого файла, и он не переживает перезапуск в большом количестве копий.
+     * В кэше держится ограниченное число копий ([VaultPreviewPolicy.MAX_PREVIEW_FILES]),
+     * старые удаляются при каждой расшифровке, а копии прошлых сессий подчищаются при
+     * первом обращении к каталогу предпросмотра.
      */
     fun decryptFileFromVault(item: VaultItem): File? {
         // Имя файла приходит из БД: без проверки путь вида `../../databases/…`
@@ -111,19 +116,33 @@ class EncryptionManager @Inject constructor(
             masterKey,
             EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
         ).build()
-        // Удаляем только устаревшие копии: файл, открытый во внешнем просмотрщике
-        // секунду назад, удалять нельзя — просмотрщик получит «файл исчез».
-        val staleBefore = System.currentTimeMillis() - PREVIEW_MAX_AGE_MS
-        previewDir.listFiles()?.forEach { stale -> if (stale.lastModified() < staleBefore) stale.delete() }
         val outputFile = File.createTempFile("decrypted_", ".tmp", previewDir)
         return try {
             encryptedFile.openFileInput().use { input ->
                 outputFile.outputStream().use { output -> input.copyTo(output) }
             }
+            // Уборка — после записи: только что созданную копию просмотрщик уже мог открыть,
+            // удалять её нельзя (правила — в чистом [VaultPreviewPolicy]).
+            prunePreviewDir(keepName = outputFile.name)
             outputFile
         } catch (e: Exception) {
             outputFile.delete()
             throw e
+        }
+    }
+
+    /**
+     * Оставляет в кэше предпросмотра ограниченное число свежих копий.
+     *
+     * @param keepName копия, которую нельзя удалять (только что расшифрованная), или `null`
+     */
+    private fun prunePreviewDir(keepName: String?) {
+        val entries = previewDir.listFiles()
+            ?.map { file -> VaultPreviewPolicy.Entry(file.name, file.lastModified()) }
+            .orEmpty()
+        val now = System.currentTimeMillis()
+        VaultPreviewPolicy.toDelete(entries, now, keepName).forEach { entry ->
+            runCatching { File(previewDir, entry.name).delete() }
         }
     }
 
@@ -210,8 +229,8 @@ class EncryptionManager @Inject constructor(
          */
         const val MAX_FILE_SIZE_BYTES = 50L * 1024 * 1024
 
-        /** Сколько расшифрованная копия живёт в кэше предпросмотра. */
-        const val PREVIEW_MAX_AGE_MS = 10 * 60 * 1000L
+        /** Сколько расшифрованная копия живёт в кэше предпросмотра (см. [VaultPreviewPolicy]). */
+        const val PREVIEW_MAX_AGE_MS = VaultPreviewPolicy.PREVIEW_MAX_AGE_MS
 
         /** Должно совпадать с `<cache-path>` в `res/xml/file_paths.xml`. */
         const val PREVIEW_DIR_NAME = "vault_preview"
