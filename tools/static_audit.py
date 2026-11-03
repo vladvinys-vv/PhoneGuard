@@ -496,6 +496,10 @@ def check_dao_calls() -> None:
 CLASS_DECL_RE = re.compile(r'^(?:@\w+(?:\([^)]*\))?\s*)*(?:public |internal |private |protected |abstract |open |sealed |data |enum |annotation |value |inline )*(class|interface|object)\s+(\w+)', re.M)
 CTOR_PROP_RE = re.compile(r'(?:private\s+|internal\s+)?val\s+(\w+)\s*:\s*([\w.]+)')
 FUN_NAME_RE = re.compile(r'\bfun\s+(?:<[^>]+>\s*)?(?:[\w.]+\.)?(\w+)\s*\(')
+# Функции-расширения: `fun FirewallRule.blocksAllTraffic(...)` объявлены не в файле класса,
+# поэтому без этого набора вызов `rule.blocksAllTraffic(...)` считался обращением к
+# несуществующему методу (ложная ошибка на совершенно корректном коде).
+EXT_FUN_RE = re.compile(r'\bfun\s+(?:<[^>]+>\s*)?([\w.]+)\.(\w+)\s*\(')
 
 # Имена, которые приходят из stdlib/корутин и не объявляются в проекте.
 BUILTIN_MEMBERS = {
@@ -517,8 +521,21 @@ def check_member_calls() -> None:
             if kind == 'object':
                 continue
             members.setdefault(name, set()).update(FUN_NAME_RE.findall(code))
+
     if not members:
         return
+
+    # Функции-расширения принадлежат типу-получателю: `model/FirewallRulePolicy.kt` объявляет
+    # `fun FirewallRule.blocksAllTraffic()`, и `rule.blocksAllTraffic()` — корректный вызов.
+    # Учитываются только получатели, объявленные **в проекте**: иначе `android.content.Context`
+    # из `fun android.content.Context.findActivity()` сделал бы `Context` «своим типом»
+    # и все вызовы `context.getSystemService()` превратились бы в ложные ошибки.
+    for path in files:
+        code = strip_code(path.read_text(encoding='utf-8'))
+        for receiver, name in EXT_FUN_RE.findall(code):
+            if '.' in receiver or receiver not in members:
+                continue
+            members[receiver].add(name)
 
     for path in files:
         text = path.read_text(encoding='utf-8')
@@ -2140,6 +2157,41 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
                 failures.append(f"ложное срабатывание: companion/object ({ERRORS})")
             globals()["SRC_SETS"] = saved_sets
 
+            # Функции-расширения — члены типа-получателя, но получатель должен быть типом проекта.
+            ext_dir = root / "app/src/main/java/com/phoneguard/selftest_ext"
+            ext_dir.mkdir(parents=True, exist_ok=True)
+            (ext_dir / "Policy.kt").write_text(
+                "package com.phoneguard.selftest_ext\n"
+                "class Rule { fun own() = 1 }\n"
+                "fun Rule.extensionFun(): Int = own()\n"
+                "fun android.content.Context.findActivity() = Unit\n",
+                encoding="utf-8"
+            )
+            (ext_dir / "Use.kt").write_text(
+                "package com.phoneguard.selftest_ext\n"
+                "class Use(val rule: Rule, val context: android.content.Context) {\n"
+                "    fun okExtension() = rule.extensionFun()\n"
+                "    fun okForeign() = context.findActivity()\n"
+                "    fun badMember() = rule.ghost()\n"
+                "}\n",
+                encoding="utf-8"
+            )
+            globals()["SRC_SETS"] = [root / "app/src/main/java"]
+            # Ошибки предыдущих проверок сохраняем: ниже по коду из этого же списка
+            # читаются результаты `check_constructor_arity` и проверки именованных аргументов.
+            saved_errors = list(ERRORS)
+            ERRORS.clear()
+            check_member_calls()
+            if not any("rule.ghost" in e for e in ERRORS):
+                failures.append(f"несуществующий член не найден ({ERRORS})")
+            if any("extensionFun" in e for e in ERRORS):
+                failures.append(f"функция-расширение проекта не признана членом ({ERRORS})")
+            if any("findActivity" in e or "Context" in e for e in ERRORS):
+                failures.append(f"android.content.Context принят за тип проекта ({ERRORS})")
+            globals()["SRC_SETS"] = saved_sets
+            ERRORS.clear()
+            ERRORS.extend(saved_errors)
+
             arity_errors = [e for e in ERRORS if "передано 3 арг" in e]
             named_errors = [e for e in ERRORS if "таких параметров нет: c" in e]
             false_positives = [
@@ -2163,7 +2215,7 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
     print(
         "static_audit --self-test: ok (канал без создания, созданный канал, совпадающие id, "
         "арность конструктора, неизвестный именованный параметр, одноимённые классы, "
-        "метод экземпляра через имя класса)"
+        "метод экземпляра через имя класса, функция-расширение как член проекта)"
     )
     return 0
 
