@@ -47,6 +47,15 @@ class PreferencesManager(private val context: Context) {
         private val KEY_DEVICE_ADMIN_ENABLED = booleanPreferencesKey("device_admin_enabled")
         private val KEY_PHOTO_ON_FAILED_ATTEMPTS = booleanPreferencesKey("photo_on_failed_attempts")
         private val KEY_REMOTE_ALARM_ENABLED = booleanPreferencesKey("remote_alarm_enabled")
+
+        /**
+         * Включён ли режим потери (анти-кража).
+         *
+         * Отдельный ключ от [KEY_REMOTE_ALARM_ENABLED]: тревога (`MediaPlayer`) живёт только
+         * пока жив процесс, а «телефон украден» — это состояние, которое обязано пережить
+         * перезапуск (см. `antitheft/LostModePolicy.kt`).
+         */
+        private val KEY_LOST_MODE_ACTIVE = booleanPreferencesKey("lost_mode_active")
         private val KEY_IS_PRO = booleanPreferencesKey("is_pro")
         // Чек всего телефона
         private val KEY_DEVICE_AUDIT_SCORE = intPreferencesKey("device_audit_score")
@@ -199,6 +208,13 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setRemoteAlarmEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_REMOTE_ALARM_ENABLED] = enabled }
+    }
+
+    // Lost mode (анти-кража): сохраняется, чтобы состояние не терялось при перезапуске процесса.
+    val lostModeActive: Flow<Boolean> = context.dataStore.data.map { it[KEY_LOST_MODE_ACTIVE] ?: false }
+
+    suspend fun setLostModeActive(active: Boolean) {
+        context.dataStore.edit { it[KEY_LOST_MODE_ACTIVE] = active }
     }
 
     // Pro status

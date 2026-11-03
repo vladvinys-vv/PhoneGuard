@@ -52,31 +52,65 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
 ) : SecurityService {
 
     private val _lostModeActive = MutableStateFlow(false)
+
+    /**
+     * Состояние анти-кражи под одной блокировкой.
+     *
+     * Меняется из разных потоков: SMS-приёмник (команды), экран анти-кражи, обработчик подмены
+     * SIM. Раньше `startAlarm()` был `@Synchronized`, а `stopAlarm()` — нет, поэтому остановка
+     * могла освободить плеер, который в этот момент создавался, или оставить «залипший» флаг.
+     */
+    private var lostMode = LostModeState.inactive()
+    private var stateRestored = false
+
     private var alarmPlayer: MediaPlayer? = null
     private var alarmVibrator: Vibrator? = null
 
-    override suspend fun isLostModeActive(): Flow<Boolean> = _lostModeActive
-
-    override suspend fun activateLostMode() {
-        _lostModeActive.value = true
-        startAlarm()
-        preferencesManager.setRemoteAlarmEnabled(true)
+    /**
+     * Состояние режима потери.
+     *
+     * Подтягивает сохранённое значение при первом обращении: после перезапуска процесса
+     * `MutableStateFlow` сбрасывался в `false`, хотя телефон всё ещё «потерян» (настройка
+     * `remote_alarm_enabled` при этом оставалась включённой — состояние противоречило само себе).
+     */
+    override suspend fun isLostModeActive(): Flow<Boolean> {
+        restoreStateIfNeeded()
+        return _lostModeActive
     }
 
+    override suspend fun activateLostMode() {
+        // Сначала настройки: если процесс убьют сразу после старта тревоги, режим потери
+        // всё равно останется включённым.
+        preferencesManager.setLostModeActive(true)
+        preferencesManager.setRemoteAlarmEnabled(true)
+        val alarmStarted = startAlarm()
+        synchronized(this) {
+            lostMode = LostModePolicy.onActivate(lostMode, alarmStarted)
+            _lostModeActive.value = lostMode.lostModeActive
+            stateRestored = true
+        }
+    }
+
+    /**
+     * Запускает тревогу (звук и вибрацию) и сообщает, играет ли она.
+     *
+     * Идемпотентна: повторный вызов переиспользует уже играющий плеер — иначе тревоги
+     * наслаивались бы друг на друга и держали аудиофокус.
+     */
     @Synchronized
-    private fun startAlarm() {
+    private fun startAlarm(): Boolean {
         if (alarmPlayer == null) {
-            runCatching {
+            alarmPlayer = runCatching {
                 val ringtone = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                val player = MediaPlayer.create(context, ringtone) ?: return@runCatching
-                player.isLooping = true
-                player.start()
-                alarmPlayer = player
-            }
+                MediaPlayer.create(context, ringtone)?.also { player ->
+                    player.isLooping = true
+                    player.start()
+                }
+            }.getOrNull()
         }
 
         if (alarmVibrator == null) {
-            runCatching {
+            alarmVibrator = runCatching {
                 val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                     manager?.defaultVibrator
@@ -85,19 +119,49 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
                     (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
                 }
                 vibrator?.vibrate(longArrayOf(0, 500, 1000), 0)
-                alarmVibrator = vibrator
-            }
+                vibrator
+            }.getOrNull()
         }
+
+        return alarmPlayer != null
     }
 
     override suspend fun stopAlarm() {
+        releaseAlarm()
+        synchronized(this) {
+            lostMode = LostModePolicy.onStopAlarm(lostMode)
+            _lostModeActive.value = lostMode.lostModeActive
+            stateRestored = true
+        }
+        preferencesManager.setLostModeActive(false)
+        preferencesManager.setRemoteAlarmEnabled(false)
+    }
+
+    /** Останавливает и освобождает плеер и вибрацию; состояние меняется отдельно, под блокировкой. */
+    @Synchronized
+    private fun releaseAlarm() {
         runCatching { alarmPlayer?.stop() }
         runCatching { alarmPlayer?.release() }
         alarmPlayer = null
         runCatching { alarmVibrator?.cancel() }
         alarmVibrator = null
-        preferencesManager.setRemoteAlarmEnabled(false)
-        _lostModeActive.value = false
+    }
+
+    /**
+     * Подтягивает сохранённый режим потери при первом обращении к состоянию.
+     *
+     * Тревога при этом **не** включается: плеера после перезапуска нет, а «тихий» старт
+     * приложения не должен включать сирену (правило — в [LostModePolicy.onRestore]).
+     */
+    private suspend fun restoreStateIfNeeded() {
+        if (stateRestored) return
+        val saved = runCatching { preferencesManager.lostModeActive.first() }.getOrDefault(false)
+        synchronized(this) {
+            if (stateRestored) return
+            lostMode = LostModePolicy.onRestore(saved)
+            _lostModeActive.value = lostMode.lostModeActive
+            stateRestored = true
+        }
     }
 
     /**
