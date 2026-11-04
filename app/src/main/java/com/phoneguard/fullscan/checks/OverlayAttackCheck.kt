@@ -7,7 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.phoneguard.R
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.util.Locale
+import com.phoneguard.util.NamePatternMatcher
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -108,29 +108,14 @@ class OverlayAttackCheck @Inject constructor(
         )
 
         /**
-         * Приводит имя к «слитному» виду: `chat.head`, `chat head`, `chat_head` и `ChatHead`
-         * должны совпадать, ведь разделители в названиях пишут кто как.
+         * Первый совпавший признак имени пакета/приложения (видимость для тестов).
          *
          * Раньше сравнение шло простым `contains(pattern)`, поэтому шаблоны с точкой и дефисом
          * (`chat.head`, `pop-up`, `screen.filter`) не находили **ни одного** реального имени:
          * приложение `com.x.chathead` с ярлыком `ChatHead` проходило проверку как безопасное.
+         * Теперь сравнение одно на весь проект — [NamePatternMatcher].
          */
-        private fun normalize(value: String): String =
-            // Locale.ROOT, а не Locale.getDefault(): в турецкой локали `I` превращается
-            // в `ı`, и сравнение с шаблоном из строчных ASCII-букв перестаёт совпадать —
-            // результат проверки зависел бы от языка системы.
-            value.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
-
-        /** Первый совпавший признак имени пакета/приложения (видимость для тестов). */
-        fun matchingPattern(packageName: String, appLabel: String): String? {
-            val packageNameNormalized = normalize(packageName)
-            val appLabelNormalized = normalize(appLabel)
-            return SUSPICIOUS_OVERLAY_PATTERNS.firstOrNull { pattern ->
-                val needle = normalize(pattern)
-                needle.isNotEmpty() &&
-                    (packageNameNormalized.contains(needle) ||
-                        appLabelNormalized.contains(needle))
-            }
-        }
+        fun matchingPattern(packageName: String, appLabel: String): String? =
+            NamePatternMatcher.firstMatch(packageName, appLabel, SUSPICIOUS_OVERLAY_PATTERNS)
     }
 }

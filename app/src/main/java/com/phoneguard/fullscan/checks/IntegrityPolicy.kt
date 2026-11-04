@@ -47,10 +47,26 @@ object IntegrityPolicy {
     fun isVerifiedBootUnsafe(state: String?): Boolean =
         state == "orange" || state == "yellow"
 
+    /**
+     * Теги `Build.TAGS`, означающие не-пользовательский образ.
+     *
+     * Сравнение по целому тегу, а не подстрокой: `Build.TAGS` — это список через запятую
+     * (`release-keys`, `test-keys,eng`), поэтому `avengers-keys` отладочной сборкой не является,
+     * а вот голый тег `eng` (инженерный образ) — является. Раньше голый `eng` распознавала
+     * только root-проверка (искала подстроку), а проверка целостности — нет: два отчёта об
+     * одном устройстве расходились.
+     */
+    fun hasTestKeys(tags: String): Boolean =
+        tags.split(',', ' ', '\t').any { tag ->
+            val value = tag.trim()
+            value.equals("test-keys", ignoreCase = true) ||
+                value.equals("dev-keys", ignoreCase = true) ||
+                value.equals("eng", ignoreCase = true)
+        }
+
     /** Признаки не-release сборки в `Build.TAGS`/`Build.FINGERPRINT`. */
     fun hasDebugBuildMarks(tags: String, fingerprint: String): Boolean =
-        tags.contains("test-keys", ignoreCase = true) ||
-            tags.contains("dev-keys", ignoreCase = true) ||
+        hasTestKeys(tags) ||
             fingerprint.contains("userdebug", ignoreCase = true) ||
             fingerprint.contains("eng.", ignoreCase = true)
 

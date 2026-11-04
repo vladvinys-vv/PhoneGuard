@@ -98,10 +98,19 @@ class DeviceAdminRiskPolicyTest {
         assertTrue(DeviceAdminRiskPolicy.isSuspiciousName("com.example.TOOL", "Device ADMIN"))
         assertTrue(DeviceAdminRiskPolicy.isSuspiciousName("com.example.anti.theft.app", "Helper"))
         assertFalse(DeviceAdminRiskPolicy.isSuspiciousName("com.example.calc", "Calculator"))
-        // Известное ограничение текущих шаблонов: «anti theft» и «anti-theft» через
-        // дефис/пробел не распознаются — там шаблон записан точкой (`anti.theft`).
-        // Поведение не меняем без отдельного решения: это влияние на детект.
-        assertFalse(DeviceAdminRiskPolicy.isSuspiciousName("com.example.tool", "ANTI-THEFT"))
+        // Бывший пропуск: шаблон `anti.theft` не находил ярлык «ANTI-THEFT» через дефис,
+        // и приложение-слежка, назвавшееся «анти-воровством», попадало в отчёт как обычный
+        // сторонний администратор. Теперь сравнение идёт по словам (NamePatternMatcher).
+        assertTrue(DeviceAdminRiskPolicy.isSuspiciousName("com.example.tool", "ANTI-THEFT"))
+        assertTrue(DeviceAdminRiskPolicy.isSuspiciousName("com.example.tool", "Anti Theft"))
+        assertTrue(DeviceAdminRiskPolicy.isSuspiciousName("com.example.tool", "AntiTheft"))
+        // Обратная сторона: короткие общие слова больше не ищутся подстрокой.
+        assertFalse(DeviceAdminRiskPolicy.isSuspiciousName("com.example.badminton", "Badminton"))
+        assertFalse(DeviceAdminRiskPolicy.isSuspiciousName("com.wallet.blockchain", "Blockchain"))
+        assertFalse(DeviceAdminRiskPolicy.isSuspiciousName("com.example.clocks", "Clocks"))
+        // Составные слова, начинающиеся с шаблона, по-прежнему находка.
+        assertTrue(DeviceAdminRiskPolicy.isSuspiciousName("com.evil.adminservice", "Helper"))
+        assertTrue(DeviceAdminRiskPolicy.isSuspiciousName("com.example.app", "App Lock"))
     }
 
     @Test

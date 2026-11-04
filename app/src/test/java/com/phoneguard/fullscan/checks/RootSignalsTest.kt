@@ -91,10 +91,25 @@ class RootSignalsTest {
 
     @Test
     fun engineeringTagIsNotMatchedInsideAnotherWord() {
-        // Подстрока «eng» встречается в «avengers-keys»: важно, что реальные теги
-        // сборки перечисляются через запятую и не содержат таких слов, но правило
-        // должно оставаться предсказуемым — оно ищет подстроку, и это осознанно.
-        assertTrue(RootSignals.hasTestKeys("avengers-keys"))
+        // Раньше здесь искалась подстрока «eng», и тег «avengers-keys» объявлялся
+        // отладочной сборкой. Теперь сравнение идёт по целым тегам: постороннее слово
+        // находкой не считается, а голый тег «eng» (инженерный образ) — считается.
+        assertFalse(RootSignals.hasTestKeys("avengers-keys"))
+        assertTrue(RootSignals.hasTestKeys("release-keys,eng"))
+        assertTrue(RootSignals.hasTestKeys("eng,test-keys"))
+    }
+
+    @Test
+    fun debugBuildRuleAgreesWithIntegrityPolicy() {
+        // Два отчёта об одном устройстве не должны расходиться: раньше root-проверка
+        // считала образ с тегом «eng» отладочным, а проверка целостности — нет.
+        for (tags in listOf("eng", "test-keys", "dev-keys", "release-keys", "release-keys, eng", "avengers-keys")) {
+            assertEquals(
+                "теги: $tags",
+                IntegrityPolicy.hasTestKeys(tags),
+                RootSignals.hasTestKeys(tags)
+            )
+        }
     }
 
     @Test

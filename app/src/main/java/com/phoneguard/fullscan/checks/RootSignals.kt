@@ -35,9 +35,6 @@ internal object RootSignals {
         "com.chelpus.lackypatch"
     )
 
-    /** Теги сборки, указывающие на не-пользовательский (отладочный/инженерный) образ. */
-    val TEST_KEYS_TAGS = listOf("test-keys", "dev-keys", "eng")
-
     /**
      * Маркеры перезаписанного системного раздела.
      *
@@ -53,9 +50,16 @@ internal object RootSignals {
     /** Сколько независимых индикаторов делают устройство «рутованным». */
     const val ROOTED_THRESHOLD = 3
 
-    /** Есть ли в тегах сборки признак не-пользовательского образа. */
+    /**
+     * Есть ли в тегах сборки признак не-пользовательского образа.
+     *
+     * Сравнение по целым тегам (`release-keys,eng` → да, `avengers-keys` → нет) и **то же
+     * самое правило**, что в [IntegrityPolicy.hasTestKeys]: раньше здесь искали подстроку
+     * «eng», а в проверке целостности — только `test-keys`/`dev-keys`, поэтому образ с тегом
+     * `eng` считался отладочным в одном отчёте и нормальным в другом.
+     */
     fun hasTestKeys(buildTags: String?): Boolean =
-        TEST_KEYS_TAGS.any { tag -> buildTags?.contains(tag, ignoreCase = true) == true }
+        buildTags != null && IntegrityPolicy.hasTestKeys(buildTags)
 
     data class Verdict(
         val isRooted: Boolean,
