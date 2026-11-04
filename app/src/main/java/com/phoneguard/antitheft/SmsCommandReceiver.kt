@@ -9,12 +9,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioManager
-import android.media.Ringtone
-import android.media.RingtoneManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.provider.Telephony
@@ -56,6 +51,9 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
     @Inject
     lateinit var locationProvider: LocationProvider
+
+    @Inject
+    lateinit var securityService: SecurityService
 
     override fun onReceive(context: Context, intent: Intent) {
         if (Telephony.Sms.Intents.SMS_RECEIVED_ACTION != intent.action) return
@@ -119,7 +117,7 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
         when (parsed?.action) {
             SmsRemoteCommand.Action.LOCK -> lockDevice(context, sender)
-            SmsRemoteCommand.Action.ALARM -> triggerAlarm(context)
+            SmsRemoteCommand.Action.ALARM -> securityService.soundSirenFor(ALARM_DURATION_MS)
             SmsRemoteCommand.Action.LOCATION -> sendLocation(context, sender)
             SmsRemoteCommand.Action.WIPE -> wipeDevice(context, sender)
             SmsRemoteCommand.Action.PHOTO -> takeStealthPhoto(context, sender)
@@ -137,29 +135,6 @@ class SmsCommandReceiver : BroadcastReceiver() {
             sendSms(context, sender, context.getString(R.string.sms_reply_device_locked))
         } else {
             sendSms(context, sender, context.getString(R.string.sms_reply_lock_unavailable))
-        }
-    }
-
-    private fun triggerAlarm(context: Context) {
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.setStreamVolume(
-                AudioManager.STREAM_ALARM,
-                audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
-                0
-            )
-
-            val ringtone: Ringtone = RingtoneManager.getRingtone(
-                context,
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ) ?: return
-            ringtone.play()
-
-            Handler(Looper.getMainLooper()).postDelayed({ ringtone.stop() }, ALARM_DURATION_MS)
-        } catch (e: SecurityException) {
-            // На Android 15+ изменение громкости сторонним приложением запрещено —
-            // сигнал всё равно проигрываем.
-            Log.w(TAG, "Cannot raise alarm volume", e)
         }
     }
 

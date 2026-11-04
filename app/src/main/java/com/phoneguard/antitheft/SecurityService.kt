@@ -19,6 +19,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 interface SecurityService {
     suspend fun isLostModeActive(): Flow<Boolean>
@@ -33,6 +34,15 @@ interface SecurityService {
     suspend fun soundAlarm()
 
     suspend fun stopAlarm()
+
+    /**
+     * Сирена на [durationMs] миллисекунд, без режима потери.
+     *
+     * Для удалённой команды `ALARM`: она должна звучать и в беззвучном режиме (поэтому
+     * `USAGE_ALARM`, а не рингтон звонка), не наслаиваться на тревогу режима потери и не
+     * выключать этот режим, когда отзвучит.
+     */
+    suspend fun soundSirenFor(durationMs: Long)
     suspend fun sendLocationToContacts()
     suspend fun getTrustedContacts(): List<String>
 }
@@ -76,6 +86,18 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
     private var alarmVibrator: Vibrator? = null
 
     /**
+     * Область для отложенного выключения сирены.
+     *
+     * Своя, а не область приёмника: `goAsync()` даёт около десяти секунд, а команда `ALARM`
+     * звучит минуту. Если бы таймер жил в области приёмника, `pendingResult.finish()` ждал бы
+     * окончания звука, и система убила бы процесс по таймауту broadcast.
+     */
+    private val sirenScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default
+    )
+    private var sirenJob: kotlinx.coroutines.Job? = null
+
+    /**
      * Состояние режима потери.
      *
      * Подтягивает сохранённое значение при первом обращении: после перезапуска процесса
@@ -110,9 +132,22 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
         if (alarmPlayer == null) {
             alarmPlayer = runCatching {
                 val ringtone = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                MediaPlayer.create(context, ringtone)?.also { player ->
-                    player.isLooping = true
-                    player.start()
+                // USAGE_ALARM, а не `MediaPlayer.create`: тот играет как медиа, и в беззвучном
+                // режиме (или под «Не беспокоить») тревоги просто не слышно — ровно тогда,
+                // когда она нужна. Заодно поднимаем громкость канала будильника: на Android 15+
+                // система может это запретить, поэтому в try/catch.
+                raiseAlarmVolume()
+                MediaPlayer().apply {
+                    setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    setDataSource(context, ringtone)
+                    isLooping = true
+                    prepare()
+                    start()
                 }
             }.getOrNull()
         }
@@ -134,6 +169,20 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
         return alarmPlayer != null
     }
 
+    /**
+     * Максимальная громкость канала будильника.
+     *
+     * На Android 15+ стороннему приложению менять громкость запрещено (`SecurityException`) —
+     * звук всё равно играет, поэтому исключение здесь не имеет значения.
+     */
+    private fun raiseAlarmVolume() {
+        runCatching {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val max = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(android.media.AudioManager.STREAM_ALARM, max, 0)
+        }
+    }
+
     override suspend fun soundAlarm() {
         restoreStateIfNeeded()
         val alarmStarted = startAlarm()
@@ -141,6 +190,25 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
         synchronized(this) {
             lostMode = LostModePolicy.onIntrusionAlarm(lostMode)
             _lostModeActive.value = lostMode.lostModeActive
+        }
+    }
+
+    override suspend fun soundSirenFor(durationMs: Long) {
+        if (durationMs <= 0L) return
+        val alarmStarted = startAlarm()
+        if (!alarmStarted) return
+        synchronized(this) {
+            lostMode = LostModePolicy.onIntrusionAlarm(lostMode)
+            _lostModeActive.value = lostMode.lostModeActive
+        }
+        sirenJob?.cancel()
+        sirenJob = sirenScope.launch {
+            kotlinx.coroutines.delay(durationMs)
+            releaseAlarm()
+            synchronized(this@AntiTheftSecurityServiceImpl) {
+                lostMode = LostModePolicy.onSirenSilenced(lostMode)
+                _lostModeActive.value = lostMode.lostModeActive
+            }
         }
     }
 

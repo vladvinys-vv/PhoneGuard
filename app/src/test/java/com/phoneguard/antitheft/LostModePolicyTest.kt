@@ -146,6 +146,40 @@ class LostModePolicyTest {
     }
 
     @Test
+    fun sirenSilenceKeepsLostMode() {
+        // SMS-команда `ALARM` звучит ограниченное время и не должна выключать режим потери:
+        // раньше она играла отдельным Ringtone и режима не касалась вовсе.
+        val state = LostModeState(lostModeActive = true, alarmPlaying = true)
+        val silenced = LostModePolicy.onSirenSilenced(state)
+        assertEquals(LostModeState(lostModeActive = true, alarmPlaying = false), silenced)
+    }
+
+    @Test
+    fun sirenSilenceIsIdempotentAndSafeWhenInactive() {
+        val inactive = LostModeState.inactive()
+        assertEquals(inactive, LostModePolicy.onSirenSilenced(inactive))
+        val once = LostModePolicy.onSirenSilenced(LostModeState(lostModeActive = true, alarmPlaying = true))
+        assertEquals(once, LostModePolicy.onSirenSilenced(once))
+    }
+
+    @Test
+    fun sirenSilenceDoesNotClearIntrusionAlarmStateOfLostMode() {
+        // Сирена вторжения приходит при выключенном режиме потери: после её затухания
+        // состояние должно остаться «не потерян».
+        val intrusion = LostModePolicy.onIntrusionAlarm(LostModeState.inactive())
+        val silenced = LostModePolicy.onSirenSilenced(intrusion)
+        assertEquals(LostModeState.inactive(), silenced)
+    }
+
+    @Test
+    fun sirenSilenceDiffersFromStopAlarm() {
+        // Разные решения не должны слипнуться: stopAlarm снимает режим потери, тишина — нет.
+        val state = LostModeState(lostModeActive = true, alarmPlaying = true)
+        assertEquals(LostModeState.inactive(), LostModePolicy.onStopAlarm(state))
+        assertTrue(LostModePolicy.onSirenSilenced(state).lostModeActive)
+    }
+
+    @Test
     fun restoreDoesNotResurrectAlarmForActiveMode() {
         // Отдельная формулировка того же правила: восстановление никогда не утверждает,
         // что тревога играет, даже если режим потери включён.

@@ -17,6 +17,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -79,7 +80,14 @@ class SmsSpamReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             try {
-                processMessages(context, parts)
+                // Бюджет приёмника ограничен: система даёт около десяти секунд, после чего
+                // убивает процесс. Раньше `processMessages` (Room + эвристика ссылок) вызывался
+                // без ограничения, и зависший запрос означал «SMS не доставлено и фильтр не
+                // сработал» без единой строки в журнале.
+                val finished = withTimeoutOrNull(RECEIVER_BUDGET_MS) {
+                    processMessages(context, parts)
+                }
+                if (finished == null) Log.w(TAG, "SMS spam filter timed out")
             } catch (e: Exception) {
                 // Падение фильтра не должно мешать доставке SMS.
                 Log.w(TAG, "SMS spam filter failed", e)
@@ -175,5 +183,13 @@ class SmsSpamReceiver : BroadcastReceiver() {
 
     private companion object {
         const val TAG = "SmsSpamReceiver"
+
+        /**
+         * Бюджет обработки одного SMS.
+         *
+         * `goAsync()` даёт приёмнику около десяти секунд; берём с запасом, чтобы успеть
+         * записать предупреждение в журнал и вызвать `finish()`, а не быть убитыми.
+         */
+        const val RECEIVER_BUDGET_MS = 8_000L
     }
 }
