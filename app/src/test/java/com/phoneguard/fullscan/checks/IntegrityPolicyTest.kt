@@ -66,6 +66,12 @@ class IntegrityPolicyTest {
         assertTrue(IntegrityPolicy.hasDebugBuildMarks("dev-keys", ""))
         assertTrue(IntegrityPolicy.hasDebugBuildMarks("release-keys", "vendor/phone/phone:11/RQ2/userdebug/123"))
         assertTrue(IntegrityPolicy.hasDebugBuildMarks("release-keys", "vendor/phone/phone:11/eng.build/123"))
+        // Голый тег `eng` — инженерный образ. Раньше его распознавала только root-проверка
+        // (искала подстроку «eng»), поэтому отчёты об одном устройстве расходились.
+        assertTrue(IntegrityPolicy.hasDebugBuildMarks("eng", ""))
+        assertTrue(IntegrityPolicy.hasDebugBuildMarks("release-keys, eng", ""))
+        // Постороннее слово с «eng» внутри — не отладочная сборка.
+        assertFalse(IntegrityPolicy.hasDebugBuildMarks("avengers-keys", ""))
         assertFalse(IntegrityPolicy.hasDebugBuildMarks("release-keys", "google/redfin/redfin:11/RQ3/release-keys"))
         assertTrue(
             IntegrityPolicy.isCompromised(setOf(IntegrityPolicy.Signal.DEBUG_BUILD))

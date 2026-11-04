@@ -1,4 +1,5 @@
 package com.phoneguard.fullscan.checks
+import com.phoneguard.util.NamePatternMatcher
 
 /**
  * Правила «этот Device Admin подозрителен» без Android API.
@@ -51,11 +52,15 @@ object DeviceAdminRiskPolicy {
         "anti.theft", "spy"
     )
 
+    /**
+     * Похожи ли имя пакета и/или ярлык на инструмент слежки или «анти-воровства».
+     *
+     * Сравнение — через [NamePatternMatcher], а не `contains`: шаблон `anti.theft` должен
+     * находить ярлык `ANTI-THEFT` (раньше не находил — известный пропуск), а `admin` не должен
+     * находить `badminton`, `lock` — `blockchain`.
+     */
     fun isSuspiciousName(packageName: String, appName: String?): Boolean =
-        SUSPICIOUS_PATTERNS.any { pattern ->
-            packageName.contains(pattern, ignoreCase = true) ||
-                (appName?.contains(pattern, ignoreCase = true) == true)
-        }
+        NamePatternMatcher.firstMatch(packageName, appName, SUSPICIOUS_PATTERNS) != null
 
     /**
      * @param packageName пакет активного администратора

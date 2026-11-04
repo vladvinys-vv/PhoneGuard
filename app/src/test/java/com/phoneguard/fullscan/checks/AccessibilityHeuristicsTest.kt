@@ -20,9 +20,16 @@ class AccessibilityHeuristicsTest {
 
     @Test
     fun dottedKeywordsAreDetected() {
+        // Шаблоны записаны по-разному (`auto.click`, `accessibility.click`), а в названиях
+        // разделители ставят кто как. Сравнение идёт по словам, поэтому все три формы
+        // попадают в одну проверку; в отчёт идёт первый совпавший шаблон списка.
         assertEquals(
-            "auto.click",
+            "autoclick",
             AccessibilityHeuristics.matchingPattern("com.example.auto.click.pro", null)
+        )
+        assertEquals(
+            "autoclick",
+            AccessibilityHeuristics.matchingPattern("com.x.autoclickpro", "Auto Clicker")
         )
         assertEquals(
             "accessibility.click",

@@ -1,6 +1,6 @@
 package com.phoneguard.fullscan.checks
 
-import java.util.Locale
+import com.phoneguard.util.NamePatternMatcher
 
 /**
  * Признаки «инструмента перехвата» среди включённых служб доступности.
@@ -21,17 +21,13 @@ internal object AccessibilityHeuristics {
     /**
      * Первый совпавший признак (видимость для тестов).
      *
-     * Сравнение идёт через `lowercase(Locale.ROOT)`, а не через сравнение регистра с
-     * неявной локалью: результат не должен зависеть от языка системы и от версии
-     * платформы (это закреплено тестом, который переключает локаль на турецкую).
+     * Сравнение идёт через [NamePatternMatcher]: имя и шаблон режутся на слова, поэтому
+     * `auto.click` находит `AutoClicker`, а `keylog` не находится в постороннем слове.
+     * Регистр приводится через `Locale.ROOT`, а не через неявную локаль: результат не должен
+     * зависеть от языка системы (закреплено тестом, который переключает локаль на турецкую).
      *
      * @param appLabel ярлык приложения; `null` — приложение удалено
      */
-    fun matchingPattern(packageName: String, appLabel: String?): String? {
-        val pkg = packageName.lowercase(Locale.ROOT)
-        val label = appLabel?.lowercase(Locale.ROOT)
-        return SUSPICIOUS_PATTERNS.firstOrNull { pattern ->
-            pkg.contains(pattern) || label?.contains(pattern) == true
-        }
-    }
+    fun matchingPattern(packageName: String, appLabel: String?): String? =
+        NamePatternMatcher.firstMatch(packageName, appLabel, SUSPICIOUS_PATTERNS)
 }
