@@ -63,6 +63,9 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
 
     private val honeypotReportGate = HoneypotReportGate()
 
+    /** Антидребезг активных реакций: одно событие — одна сирена, одно SMS, одно фото. */
+    private val reactionGate = IntrusionReactionGate()
+
     @Volatile
     private var honeypotObserver: HoneypotObserver? = null
 
@@ -77,19 +80,66 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
      * вторжения. Теперь настройка управляет только активными действиями (блокировка,
      * тревога, фото, SMS, приманки, сейф).
      */
+    /**
+     * Настройки реакции, снятые **один раз** на событие.
+     *
+     * Раньше `executeActive` читал `isIntrusionAlarmEnabled`, `isIntrusionPhotoEnabled`,
+     * `isIntrusionSmsEnabled`, `isIntrusionHoneypotEnabled` и `isIntrusionBlockNetworkEnabled`
+     * по одному разу на каждое действие: до шести обращений к DataStore на событие, каждое в
+     * своей точке приостановки. При серии событий план выполнялся по «плавающим» настройкам —
+     * половина реакций могла примениться со старым значением.
+     */
+    private data class ReactionSettings(
+        val autoResponse: Boolean,
+        val alarm: Boolean,
+        val photo: Boolean,
+        val sms: Boolean,
+        val honeypot: Boolean,
+        val blockNetwork: Boolean
+    )
+
+    private suspend fun loadSettings(): ReactionSettings = ReactionSettings(
+        autoResponse = preferencesManager.isAutoIntrusionResponseEnabled.first(),
+        alarm = preferencesManager.isIntrusionAlarmEnabled.first(),
+        photo = preferencesManager.isIntrusionPhotoEnabled.first(),
+        sms = preferencesManager.isIntrusionSmsEnabled.first(),
+        honeypot = preferencesManager.isIntrusionHoneypotEnabled.first(),
+        blockNetwork = preferencesManager.isIntrusionBlockNetworkEnabled.first()
+    )
+
     override suspend fun execute(event: IntrusionEvent, actions: List<IntrusionResponseAction>) {
-        val autoEnabled = preferencesManager.isAutoIntrusionResponseEnabled.first()
+        val settings = loadSettings()
 
         actions.forEach { action ->
+            val category = action.category()
             // Информационные действия безусловны, активные — только при включённом
             // автоответе. Правило живёт в IntrusionResponsePolicy (см. её KDoc: раньше
             // один `return` отключал и предупреждение, и запись события).
-            if (!IntrusionResponsePolicy.shouldExecute(action.category(), autoEnabled)) return@forEach
-            when (action) {
-                is IntrusionResponseAction.ShowWarning ->
-                    showWarning(action.title, context.getString(action.messageRes))
-                IntrusionResponseAction.ExportLog -> exportLog(event)
-                else -> executeActive(event, action)
+            if (!IntrusionResponsePolicy.shouldExecute(category, settings.autoResponse)) return@forEach
+
+            // Серия одинаковых событий не должна давать серию одинаковых активных реакций
+            // (пять правил фаервола, пять SMS, пять запусков камеры).
+            if (IntrusionReactionGate.shouldGate(category) &&
+                !reactionGate.shouldRun(
+                    IntrusionReactionGate.keyFor(event, action),
+                    SystemClock.elapsedRealtime()
+                )
+            ) {
+                Log.d(TAG, "Reaction $category for ${event.type} suppressed as repeat")
+                return@forEach
+            }
+
+            try {
+                when (action) {
+                    is IntrusionResponseAction.ShowWarning ->
+                        showWarning(action.title, context.getString(action.messageRes))
+                    IntrusionResponseAction.ExportLog -> exportLog(event)
+                    else -> executeActive(event, action, settings)
+                }
+            } catch (e: Exception) {
+                // Одно упавшее действие раньше отменяло весь остаток плана: падение
+                // `blockPackage` оставляло пользователя без предупреждения и без фото.
+                Log.w(TAG, "Intrusion action ${IntrusionReactionGate.actionName(action)} failed", e)
             }
         }
     }
@@ -108,11 +158,15 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
         is IntrusionResponseAction.CreateHoneypot -> IntrusionResponsePolicy.Category.HONEYPOT
     }
 
-    private suspend fun executeActive(event: IntrusionEvent, action: IntrusionResponseAction) {
+    private suspend fun executeActive(
+        event: IntrusionEvent,
+        action: IntrusionResponseAction,
+        settings: ReactionSettings
+    ) {
         when (action) {
             is IntrusionResponseAction.BlockPackage -> blockPackage(action.packageName)
             is IntrusionResponseAction.BlockNetwork ->
-                if (preferencesManager.isIntrusionBlockNetworkEnabled.first()) blockNetwork(action.packageName)
+                if (settings.blockNetwork) blockNetwork(action.packageName)
             // Запираем сейф PhoneGuard, а не экран всего устройства: `lockNow()` требовал
             // прав администратора (иначе молча ничего не делал) и гасил телефон, которым
             // пользователь в этот момент пользуется. Блокировка экрана осталась за
@@ -121,15 +175,13 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
             // Только сирена: `activateLostMode()` пометил бы устройство «потерянным»
             // навсегда (флаг сохраняется и переживает перезапуск) из-за одного вторжения.
             IntrusionResponseAction.StartAlarm ->
-                if (preferencesManager.isIntrusionAlarmEnabled.first()) securityService.soundAlarm()
+                if (settings.alarm) securityService.soundAlarm()
             IntrusionResponseAction.CapturePhoto ->
-                if (preferencesManager.isIntrusionPhotoEnabled.first()) capturePhoto(event.id)
+                if (settings.photo) capturePhoto(event.id)
             is IntrusionResponseAction.NotifyTrustedContacts ->
-                if (preferencesManager.isIntrusionSmsEnabled.first()) {
-                    notifyTrustedContacts(context.getString(action.messageRes))
-                }
+                if (settings.sms) notifyTrustedContacts(context.getString(action.messageRes))
             is IntrusionResponseAction.CreateHoneypot ->
-                if (preferencesManager.isIntrusionHoneypotEnabled.first()) createHoneypot(action.name, event)
+                if (settings.honeypot) createHoneypot(action.name, event)
             is IntrusionResponseAction.ShowWarning,
             IntrusionResponseAction.ExportLog -> Unit
         }
@@ -149,27 +201,48 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
     }
 
     private suspend fun blockNetwork(packageName: String?) {
-        val target = packageName ?: return
+        val target = packageName ?: run {
+            Log.w(TAG, "Network block requested without package name")
+            return
+        }
         blockPackage(target)
     }
 
     private fun capturePhoto(eventId: Long) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            // Раньше это был молчаливый `return`: снаружи «фото сделано» и «нет разрешения»
+            // выглядели одинаково, и понять, почему в журнале нет снимка, было нельзя.
+            Log.w(TAG, "Camera permission missing, photo skipped for event $eventId")
+            return
+        }
         val intent = Intent(context, StealthCameraService::class.java).apply {
             action = StealthCameraService.ACTION_TAKE_PHOTO
             putExtra(StealthCameraService.EXTRA_EVENT_ID, eventId)
         }
         try {
             context.startForegroundService(intent)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // Android 12+ запрещает запуск foreground-сервиса из фона.
+            Log.w(TAG, "Cannot start stealth camera for event $eventId", e)
+        }
     }
 
     private suspend fun notifyTrustedContacts(message: String) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "SMS permission missing, trusted contacts not notified")
+            return
+        }
         val contacts = securityService.getTrustedContacts()
         val recipients = contacts.ifEmpty {
             val backup = preferencesManager.backupNumber.first()
             if (backup.isNullOrBlank()) emptyList() else listOf(backup)
+        }
+        if (recipients.isEmpty()) {
+            Log.w(TAG, "No trusted contact and no backup number, intrusion SMS skipped")
         }
         // Раньше здесь стоял `SmsManager.getDefault()` + `sendTextMessage()` без
         // разбиения: длинное предупреждение обрезалось, а «опасное» сообщение с
