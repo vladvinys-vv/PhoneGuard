@@ -8,6 +8,7 @@ import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.data.settings.SettingsRepository
+import com.phoneguard.intrusion.IntrusionResponseExecutor
 import com.phoneguard.threatintel.ThreatIntelRepository
 import com.phoneguard.worker.ScheduledFullScanWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,7 +34,8 @@ class SettingsViewModel @Inject constructor(
     private val appDatabase: AppDatabase,
     private val firewallRepository: FirewallRepository,
     private val workManager: WorkManager,
-    private val threatIntelRepository: ThreatIntelRepository
+    private val threatIntelRepository: ThreatIntelRepository,
+    private val intrusionResponseExecutor: IntrusionResponseExecutor
 ) : ViewModel() {
 
     val isDarkTheme: StateFlow<Boolean> = preferencesManager.isDarkTheme
@@ -130,7 +132,18 @@ class SettingsViewModel @Inject constructor(
     fun setIntrusionPhoto(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionPhotoEnabled(enabled) }
     fun setIntrusionSms(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionSmsEnabled(enabled) }
     fun setIntrusionBlockNetwork(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionBlockNetworkEnabled(enabled) }
-    fun setIntrusionHoneypot(enabled: Boolean) = viewModelScope.launch { preferencesManager.setIntrusionHoneypotEnabled(enabled) }
+    /**
+     * Приманки: настройка и **наблюдатель**.
+     *
+     * Выключение раньше меняло только флаг: `FileObserver` продолжал работать, и доступы
+     * к файлам-приманкам всё равно писались в базу инцидентов и показывались уведомлениями.
+     * Теперь наблюдатель приводится к настройке (см. `HoneypotLifecyclePolicy`).
+     */
+    fun setIntrusionHoneypot(enabled: Boolean) = viewModelScope.launch {
+        preferencesManager.setIntrusionHoneypotEnabled(enabled)
+        runCatching { intrusionResponseExecutor.syncHoneypotState() }
+            .onFailure { Log.w(TAG, "Cannot apply honeypot setting", it) }
+    }
 
     fun setThreatIntelEnabled(enabled: Boolean) = viewModelScope.launch {
         preferencesManager.setThreatIntelEnabled(enabled)
