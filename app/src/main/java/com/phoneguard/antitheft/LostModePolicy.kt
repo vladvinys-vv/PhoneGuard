@@ -83,4 +83,21 @@ internal object LostModePolicy {
      */
     fun onSirenSilenced(state: LostModeState): LostModeState =
         state.copy(alarmPlaying = false)
+
+    /**
+     * Восстановление после **загрузки устройства**, а не после старта процесса.
+     *
+     * Разница принципиальная. [onRestore] описывает «приложение запустили»: тихий старт не
+     * должен включать сирену. Перезагрузка — это ровно тот шаг, которым вор выключает звук:
+     * режим потери сохраняется в настройках (значит, телефон всё ещё «потерян»), а сирена
+     * после включения не возобновлялась никогда — защита отключалась одной кнопкой питания.
+     *
+     * @param alarmStarted удалось ли действительно создать плеер: «врём про тревогу» нельзя,
+     *   поэтому `alarmPlaying` выставляется только по факту.
+     */
+    fun onDeviceBoot(savedLostModeActive: Boolean, alarmStarted: Boolean): LostModeState =
+        LostModeState(
+            lostModeActive = savedLostModeActive,
+            alarmPlaying = savedLostModeActive && alarmStarted
+        )
 }

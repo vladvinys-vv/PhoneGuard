@@ -194,8 +194,6 @@ class SimSwapDetector(
         repository.latestUnconfirmed()
     }
 
-    suspend fun hasUnconfirmed(): Boolean = preferencesManager.isSimSwapUnconfirmed.first()
-
     private suspend fun getLastKnownImsi(): String? = withContext(IO) {
         preferencesManager.lastKnownImsi.first().ifEmpty { null }
     }

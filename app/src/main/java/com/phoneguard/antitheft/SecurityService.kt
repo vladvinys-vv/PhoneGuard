@@ -43,6 +43,14 @@ interface SecurityService {
      * выключать этот режим, когда отзвучит.
      */
     suspend fun soundSirenFor(durationMs: Long)
+
+    /**
+     * Возобновляет защиту после загрузки устройства или обновления приложения.
+     *
+     * Если режим потери сохранён в настройках, сирена включается снова: перезагрузка —
+     * самый простой способ её выключить, и раньше он работал.
+     */
+    suspend fun resumeAfterBoot()
     suspend fun sendLocationToContacts()
     suspend fun getTrustedContacts(): List<String>
 }
@@ -209,6 +217,17 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
                 lostMode = LostModePolicy.onSirenSilenced(lostMode)
                 _lostModeActive.value = lostMode.lostModeActive
             }
+        }
+    }
+
+    override suspend fun resumeAfterBoot() {
+        restoreStateIfNeeded()
+        val saved = preferencesManager.lostModeActive.first()
+        val alarmStarted = if (saved) startAlarm() else false
+        synchronized(this) {
+            lostMode = LostModePolicy.onDeviceBoot(saved, alarmStarted)
+            _lostModeActive.value = lostMode.lostModeActive
+            stateRestored = true
         }
     }
 

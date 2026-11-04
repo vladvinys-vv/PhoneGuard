@@ -146,6 +146,52 @@ class LostModePolicyTest {
     }
 
     @Test
+    fun deviceBootResumesSavedLostModeAlarm() {
+        // Перезагрузка — самый простой способ выключить сирену: режим потери остаётся
+        // в настройках, а звук раньше не возобновлялся никогда.
+        assertEquals(
+            LostModeState(lostModeActive = true, alarmPlaying = true),
+            LostModePolicy.onDeviceBoot(savedLostModeActive = true, alarmStarted = true)
+        )
+    }
+
+    @Test
+    fun deviceBootDoesNotClaimAlarmWhenPlayerFailed() {
+        // «Врём про тревогу» нельзя: если плеер не создался, состояние это признаёт.
+        assertEquals(
+            LostModeState(lostModeActive = true, alarmPlaying = false),
+            LostModePolicy.onDeviceBoot(savedLostModeActive = true, alarmStarted = false)
+        )
+    }
+
+    @Test
+    fun deviceBootWithoutSavedLostModeStaysSilent() {
+        assertEquals(
+            LostModeState.inactive(),
+            LostModePolicy.onDeviceBoot(savedLostModeActive = false, alarmStarted = false)
+        )
+        // Даже если плеер почему-то создался, без режима потери тревога не объявляется.
+        assertEquals(
+            LostModeState.inactive(),
+            LostModePolicy.onDeviceBoot(savedLostModeActive = false, alarmStarted = true)
+        )
+    }
+
+    @Test
+    fun deviceBootDiffersFromPlainProcessRestore() {
+        // onRestore описывает «приложение запустили» — тихий старт. onDeviceBoot описывает
+        // загрузку телефона — защита возобновляется.
+        assertFalse(LostModePolicy.onRestore(savedLostModeActive = true).alarmPlaying)
+        assertTrue(LostModePolicy.onDeviceBoot(savedLostModeActive = true, alarmStarted = true).alarmPlaying)
+    }
+
+    @Test
+    fun alarmAfterBootCanStillBeStopped() {
+        val resumed = LostModePolicy.onDeviceBoot(savedLostModeActive = true, alarmStarted = true)
+        assertEquals(LostModeState.inactive(), LostModePolicy.onStopAlarm(resumed))
+    }
+
+    @Test
     fun sirenSilenceKeepsLostMode() {
         // SMS-команда `ALARM` звучит ограниченное время и не должна выключать режим потери:
         // раньше она играла отдельным Ringtone и режима не касалась вовсе.
