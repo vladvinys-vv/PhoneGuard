@@ -36,7 +36,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.io.FileInputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import javax.inject.Inject
@@ -103,7 +102,19 @@ class PhoneGuardVpnService : VpnService() {
     @Inject
     lateinit var intrusionRepository: IntrusionRepository
 
-    private var vpnInterface: ParcelFileDescriptor? = null
+    /**
+     * **Единственный владелец** файлового дескриптора туннеля.
+     *
+     * `ParcelFileDescriptor.AutoCloseInputStream` закрывает дескриптор вместе с потоком, поэтому
+     * `vpnInterface.close()` больше нигде не вызывается. Раньше дескриптор закрывали **двое**:
+     * цикл чтения — закрывая `FileInputStream(iface.fileDescriptor)`, и сервис — вызывая
+     * `vpnInterface?.close()` в `stopVpn()`/`restartTunnel()`. Второе закрытие идёт по номеру,
+     * который к тому моменту мог быть выдан другому сокету: это порча чужого дескриптора, а не
+     * безобидный лишний вызов.
+     */
+    @Volatile
+    private var tunnelInputStream: java.io.InputStream? = null
+
     private var vpnJob: Job? = null
     private val vpnScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -149,20 +160,39 @@ class PhoneGuardVpnService : VpnService() {
         createNotificationChannel()
     }
 
+    /**
+     * Разбор команды — в чистом [VpnLifecyclePolicy].
+     *
+     * Была дыра: сервис стартует как `START_STICKY`, поэтому после убийства процесса система
+     * перезапускала его с пустым интентом, а ветка `else` не запускала туннель и **не
+     * завершала сервис** — он висел без уведомления, хотя `startForegroundService` требует
+     * `startForeground()` в первые пять секунд.
+     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return when (intent?.action) {
-            ACTION_CONNECT -> {
+        val command = VpnLifecyclePolicy.commandOf(intent?.action, ACTION_CONNECT, ACTION_DISCONNECT)
+        return when (VpnLifecyclePolicy.reaction(command, tunnelActive = tunnelInputStream != null)) {
+            VpnLifecyclePolicy.Reaction.START_TUNNEL -> {
                 // Сервис запускается через startForegroundService — уведомление
                 // обязательно показать в первые 5 секунд.
                 startForegroundSafe()
                 startVpn()
                 START_STICKY
             }
-            ACTION_DISCONNECT -> {
+            VpnLifecyclePolicy.Reaction.KEEP_TUNNEL -> {
+                // Туннель уже работает (или его пересоздала система): уведомление могло
+                // пропасть вместе с процессом, поэтому показываем его снова.
+                startForegroundSafe()
+                START_STICKY
+            }
+            VpnLifecyclePolicy.Reaction.STOP_TUNNEL -> {
                 stopVpn()
                 START_NOT_STICKY
             }
-            else -> START_NOT_STICKY
+            VpnLifecyclePolicy.Reaction.STOP_SERVICE -> {
+                Log.w(TAG, "VPN started without a command (system restart?) — stopping")
+                stopSelfSafely()
+                START_NOT_STICKY
+            }
         }
     }
 
@@ -222,7 +252,7 @@ class PhoneGuardVpnService : VpnService() {
     }
 
     private fun startVpn() {
-        if (vpnInterface != null) {
+        if (tunnelInputStream != null) {
             Log.d(TAG, "VPN already running")
             return
         }
@@ -275,11 +305,21 @@ class PhoneGuardVpnService : VpnService() {
                     return@launch
                 }
 
-                vpnInterface = iface
+                // Поток создаётся сразу: он владеет дескриптором, и `iface.close()` ниже
+                // вызывается только если создать поток не удалось (иначе — двойное закрытие).
+                val input = runCatching { ParcelFileDescriptor.AutoCloseInputStream(iface) }.getOrNull()
+                if (input == null) {
+                    runCatching { iface.close() }
+                    Log.e(TAG, "Cannot open tunnel stream")
+                    stopSelfSafely()
+                    return@launch
+                }
+
+                tunnelInputStream = input
                 Log.d(TAG, "VPN started for $added app(s), wifi=$onWifi")
                 startForegroundSafe()
                 registerNetworkCallback()
-                runVpnLoop(iface)
+                runVpnLoop(input)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start VPN", e)
                 stopSelfSafely()
@@ -301,8 +341,8 @@ class PhoneGuardVpnService : VpnService() {
         rateLimiter.reset()
         unregisterNetworkCallback()
         vpnJob?.cancel()
-        vpnInterface?.close()
-        vpnInterface = null
+        // Закрытие потока разблокирует висящий `read` и закрывает дескриптор ровно один раз.
+        closeTunnel()
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {
@@ -320,12 +360,11 @@ class PhoneGuardVpnService : VpnService() {
      * coroutine body»). Вызывается из `vpnScope.launch`, блокирующий `read`
      * висит на IO-диспетчере и разблокируется закрытием дескриптора.
      */
-    private suspend fun runVpnLoop(iface: ParcelFileDescriptor) {
-        val input = FileInputStream(iface.fileDescriptor)
+    private suspend fun runVpnLoop(input: java.io.InputStream) {
         val buffer = ByteArray(TUN_MTU)
 
         try {
-            while (vpnScope.isActive && vpnInterface === iface) {
+            while (vpnScope.isActive && tunnelInputStream === input) {
                 val bytesRead = try {
                     input.read(buffer)
                 } catch (e: Exception) {
@@ -341,15 +380,15 @@ class PhoneGuardVpnService : VpnService() {
                 }
             }
         } finally {
-            runCatching { input.close() }
             Log.d(TAG, "VPN loop ended")
             // Цикл закончился сам (EOF/ошибка чтения), а сервис остался бы
             // foreground-сервисом с «активным» уведомлением: заблокированные
             // приложения уже ходят в сеть мимо туннеля, а повторный CONNECT
-            // упирался бы в проверку `vpnInterface != null` и ничего не делал.
+            // упирался бы в проверку «туннель уже есть» и ничего не делал.
             // Поэтому состояние сбрасываем и останавливаемся.
-            if (vpnInterface === iface) {
-                vpnInterface = null
+            val wasCurrent = tunnelInputStream === input
+            closeTunnel()
+            if (wasCurrent) {
                 if (vpnScope.isActive) {
                     vpnScope.launch { stopVpn() }
                 } else {
@@ -612,10 +651,24 @@ class PhoneGuardVpnService : VpnService() {
     }
 
     private fun restartTunnel() {
+        // Старый цикл отменяем и **дожидаемся** освобождения дескриптора до создания нового:
+        // `cancel()` асинхронный, иначе два цикла короткое время жили бы одновременно.
         vpnJob?.cancel()
-        runCatching { vpnInterface?.close() }
-        vpnInterface = null
+        closeTunnel()
+        vpnJob = null
         startVpn()
+    }
+
+    /**
+     * Закрывает туннель ровно один раз.
+     *
+     * Владелец дескриптора — поток (`AutoCloseInputStream`); отдельного `iface.close()` нет,
+     * поэтому повторный вызов безопасен и не может закрыть чужой дескриптор с тем же номером.
+     */
+    @Synchronized
+    private fun closeTunnel() {
+        runCatching { tunnelInputStream?.close() }
+        tunnelInputStream = null
     }
 
     override fun onRevoke() {
@@ -626,7 +679,12 @@ class PhoneGuardVpnService : VpnService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        stopVpn()
+        // `stopVpn()` не годится: он делает `stopForeground`/`stopSelf()` из уже умирающего
+        // сервиса. Здесь достаточно освободить ресурсы.
+        rateLimiter.reset()
+        unregisterNetworkCallback()
+        vpnJob?.cancel()
+        closeTunnel()
         vpnScope.cancel()
     }
 }
