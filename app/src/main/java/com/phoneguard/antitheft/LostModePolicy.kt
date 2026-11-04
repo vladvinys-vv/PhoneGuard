@@ -72,4 +72,15 @@ internal object LostModePolicy {
      * — отдельное продуктовое решение, не молчаливое изменение поведения.
      */
     fun onStopAlarm(state: LostModeState): LostModeState = LostModeState.inactive()
+
+    /**
+     * Сирена отзвучала сама (SMS-команда `ALARM` звучит ограниченное время).
+     *
+     * Гасится **только звук**: режим потери этим путём не выключается никогда. Раньше
+     * `ALARM` по SMS играл отдельным `Ringtone` и режима потери не касался вовсе; при переводе
+     * команды на общий плеер вызов `onStopAlarm` молча снял бы режим потери, которого никто
+     * не отменял (флаг сохраняется в настройках и переживает перезапуск).
+     */
+    fun onSirenSilenced(state: LostModeState): LostModeState =
+        state.copy(alarmPlaying = false)
 }
