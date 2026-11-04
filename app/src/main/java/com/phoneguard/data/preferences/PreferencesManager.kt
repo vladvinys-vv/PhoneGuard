@@ -70,7 +70,6 @@ class PreferencesManager(private val context: Context) {
         private val KEY_LAST_KNOWN_IMSI = stringPreferencesKey("last_known_imsi")
         private val KEY_SIM_SWAP_CONFIRMED = booleanPreferencesKey("sim_swap_confirmed")
         private val KEY_SIM_SWAP_UNCONFIRMED = booleanPreferencesKey("sim_swap_unconfirmed")
-        private val KEY_SENSITIVE_APPS_GUARD_ENABLED = booleanPreferencesKey("sensitive_apps_guard_enabled")
 
         // Intrusion response
         private val KEY_AUTO_INTRUSION_RESPONSE = booleanPreferencesKey("auto_intrusion_response")
@@ -255,7 +254,7 @@ class PreferencesManager(private val context: Context) {
     val lastKnownImsi: Flow<String> = context.dataStore.data.map { it[KEY_LAST_KNOWN_IMSI] ?: "" }
     val isSimSwapConfirmed: Flow<Boolean> = context.dataStore.data.map { it[KEY_SIM_SWAP_CONFIRMED] ?: true }
     val isSimSwapUnconfirmed: Flow<Boolean> = context.dataStore.data.map { it[KEY_SIM_SWAP_UNCONFIRMED] ?: false }
-    val isSensitiveAppsGuardEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_SENSITIVE_APPS_GUARD_ENABLED] ?: true }
+
 
     suspend fun setLastKnownImsi(imsi: String) {
         context.dataStore.edit { it[KEY_LAST_KNOWN_IMSI] = imsi }
@@ -267,10 +266,6 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setSimSwapUnconfirmed(unconfirmed: Boolean) {
         context.dataStore.edit { it[KEY_SIM_SWAP_UNCONFIRMED] = unconfirmed }
-    }
-
-    suspend fun setSensitiveAppsGuardEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_SENSITIVE_APPS_GUARD_ENABLED] = enabled }
     }
 
     // Shoulder Surfer

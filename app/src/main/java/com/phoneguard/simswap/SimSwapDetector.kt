@@ -117,7 +117,6 @@ class SimSwapDetector(
         // План действий — в чистом SimSwapConfirmPolicy (см. её KDoc).
         val plan = SimSwapConfirmPolicy.plan(SimSwapConfirmPolicy.Choice.CONFIRM, latest != null)
         applyConfirmation(plan, latest)
-        disableSensitiveAppsGuard()
     }
 
     suspend fun rejectCurrentSimSwap() {
@@ -220,15 +219,6 @@ class SimSwapDetector(
         } catch (e: Exception) {
             Triple(null, null, null)
         }
-    }
-
-    suspend fun enableSensitiveAppsGuard() {
-        if (!preferencesManager.isSensitiveAppsGuardEnabled.first()) return
-        // Guard will be handled via accessibility observer in existing app lock flows
-    }
-
-    private fun disableSensitiveAppsGuard() {
-        // noop post confirm
     }
 
     companion object {

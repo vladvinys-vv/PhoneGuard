@@ -10,6 +10,7 @@ import com.phoneguard.data.repository.FirewallRepository
 import com.phoneguard.data.settings.SettingsRepository
 import com.phoneguard.intrusion.IntrusionResponseExecutor
 import com.phoneguard.threatintel.ThreatIntelRepository
+import com.phoneguard.worker.ScanSchedulePolicy
 import com.phoneguard.worker.ScheduledFullScanWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,13 +119,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Периодическое сканирование: настройка и фактическая работа идут вместе.
+     *
+     * Раньше флаг сохранялся до постановки работы: если планировщик отказывал, интерфейс
+     * показывал «включено», а сканирование не приходило никогда. Теперь неудача возвращает
+     * настройку назад (правило — в чистом `ScanSchedulePolicy`).
+     */
     fun setScheduledScan(enabled: Boolean) = viewModelScope.launch {
-        preferencesManager.setScheduledScanEnabled(enabled)
-        if (enabled) {
-            schedulePeriodicScan()
-        } else {
-            cancelPeriodicScan()
-        }
+        val schedulingFailed = runCatching {
+            if (enabled) schedulePeriodicScan() else cancelPeriodicScan()
+        }.onFailure { Log.w(TAG, "Cannot change scheduled scan state", it) }.isFailure
+
+        val applied = !ScanSchedulePolicy.shouldRevert(enabled, schedulingFailed)
+        preferencesManager.setScheduledScanEnabled(applied)
+        if (schedulingFailed) Log.w(TAG, "Scheduled scan setting reverted: scheduler refused")
     }
 
     fun setAutoIntrusionResponse(enabled: Boolean) = viewModelScope.launch { preferencesManager.setAutoIntrusionResponseEnabled(enabled) }

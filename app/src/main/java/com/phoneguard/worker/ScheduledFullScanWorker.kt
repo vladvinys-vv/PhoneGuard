@@ -11,20 +11,33 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
 import androidx.work.NetworkType
+import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.fullscan.FullScanOrchestrator
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
 @HiltWorker
 class ScheduledFullScanWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
-    private val fullScanOrchestrator: FullScanOrchestrator
+    private val fullScanOrchestrator: FullScanOrchestrator,
+    private val preferencesManager: PreferencesManager
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
+        // Настройка проверяется на каждом запуске, а не только при постановке работы:
+        // работа могла быть поставлена до выключения, восстановлена планировщиком или
+        // остаться от прошлой версии. Полное сканирование устройства вопреки явно
+        // выключенной настройке — это и есть расхождение «обещание ↔ поведение».
+        val enabled = runCatching { preferencesManager.isScheduledScanEnabled.first() }
+            .getOrDefault(false)
+        if (ScanSchedulePolicy.verdict(enabled) == ScanSchedulePolicy.Verdict.SKIP_SETTING_DISABLED) {
+            Log.d(TAG, "Периодическое сканирование выключено в настройках — пропускаем запуск")
+            return Result.success()
+        }
         return try {
             fullScanOrchestrator.runFullScan().collect { }
             Result.success()
