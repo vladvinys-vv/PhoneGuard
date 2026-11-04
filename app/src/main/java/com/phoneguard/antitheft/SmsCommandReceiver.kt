@@ -15,6 +15,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.provider.Telephony
 import android.telephony.TelephonyManager
@@ -81,6 +82,17 @@ class SmsCommandReceiver : BroadcastReceiver() {
     }
 
     private suspend fun processCommand(context: Context, command: String, sender: String) {
+        // Одно и то же SMS приходит дважды: оператор повторяет доставку без подтверждения,
+        // часть прошивок отдаёт и `SMS_RECEIVED`, и `SMS_DELIVER`. Без этой проверки каждая
+        // повторная доставка — второе выполнение команды (вторая тревога, второй кадр,
+        // повторный LOCATION и лишние SMS владельцу). Правило — в чистом
+        // [SmsCommandDedupeGate], время — монотонное.
+        val fingerprint = "$sender|${command.trim()}"
+        if (!dedupeGate.shouldProcess(fingerprint, SystemClock.elapsedRealtime())) {
+            Log.d(TAG, "Duplicate SMS command ignored")
+            return
+        }
+
         val parsed = SmsRemoteCommand.parse(command)
         // PIN проверяется только когда команда вообще найдена (как и раньше).
         val pinValid = parsed?.let { preferencesManager.verifyPin(it.pin) } ?: false
@@ -296,6 +308,12 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
         /** Канал уведомлений о попытках подбора PIN по SMS. */
         private const val ALERT_CHANNEL_ID = "sms_command_channel"
-        private const val ALERT_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SMS_ALARM
+        private const val ALERT_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SMS_COMMAND_REJECTED
+
+        /**
+         * Антидубликат на процесс: `BroadcastReceiver` создаётся заново на каждый бродкаст,
+         * поэтому карта повторов обязана жить в `companion object`.
+         */
+        private val dedupeGate = SmsCommandDedupeGate()
     }
 }
