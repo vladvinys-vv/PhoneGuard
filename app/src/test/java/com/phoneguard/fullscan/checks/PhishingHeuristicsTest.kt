@@ -72,6 +72,105 @@ class PhishingHeuristicsTest {
     }
 
     @Test
+    fun `obfuscated dots are unmasked`() {
+        // Так пишут половину фишинговых SMS именно для обхода фильтров: `[.]`, `(.)`, `{.}`.
+        assertTrue(
+            PhishingHeuristics.isSuspicious("Ваша карта заблокирована, детали: sberbank-online[.]ru")
+        )
+        assertEquals(
+            listOf("sberbank-online.ru"),
+            PhishingHeuristics.extractLinks("зайдите на sberbank-online[.]ru сейчас")
+        )
+        assertEquals(
+            listOf("paypal.com"),
+            PhishingHeuristics.extractLinks("подтвердите: paypal(.)com")
+        )
+        assertEquals(listOf("bank.de"), PhishingHeuristics.extractLinks("bank{dot}de"))
+    }
+
+    @Test
+    fun `obfuscated scheme is unmasked`() {
+        // `hxxp://` — «безопасное» написание ссылки в спаме и чатах.
+        assertTrue(PhishingHeuristics.isSuspicious("Срочно: hxxp://sberbank-online.ru/login"))
+        assertEquals(
+            listOf("http://sberbank-online.ru/login"),
+            PhishingHeuristics.extractLinks("hxxp://sberbank-online.ru/login")
+        )
+        assertEquals(listOf("https://a.example"), PhishingHeuristics.extractLinks("hxxps://a.example"))
+    }
+
+    @Test
+    fun `dot surrounded by spaces still forms a host`() {
+        assertTrue(PhishingHeuristics.isSuspicious("Ваш счёт заблокирован: sberbank . ru"))
+        assertEquals(listOf("sberbank.ru"), PhishingHeuristics.extractLinks("зайдите на sberbank . ru"))
+    }
+
+    @Test
+    fun `new top level domains are links`() {
+        // Раньше зоны были перечислены руками: `.icu`, `.app`, `.link`, `.рф` не считались ссылкой,
+        // поэтому голый домен в свежей зоне проходил как «сообщение без ссылки».
+        assertEquals(listOf("sberbank-online.icu"), PhishingHeuristics.extractLinks("зайдите на sberbank-online.icu"))
+        assertEquals(listOf("evil.app"), PhishingHeuristics.extractLinks("ссылка: evil.app"))
+        assertEquals(listOf("яндекс.рф"), PhishingHeuristics.extractLinks("зайдите на яндекс.рф"))
+    }
+
+    @Test
+    fun `file names are not links`() {
+        // Имя файла похоже на домен, но ссылкой не является.
+        assertTrue(PhishingHeuristics.extractLinks("отчёт.pdf и photo.jpg").isEmpty())
+        assertTrue(PhishingHeuristics.extractLinks("index.html, script.js, data.json").isEmpty())
+    }
+
+    @Test
+    fun `homoglyph host is suspicious without keywords`() {
+        // Кириллическая «а» в «аpple.com» — сама по себе атака, «давящее» слово не нужно.
+        assertTrue(PhishingHeuristics.isSuspicious("Заходите на аpple.com"))
+        assertTrue(PhishingHeuristics.hasMixedAlphabetHost("https://аpple.com/path"))
+        assertFalse(PhishingHeuristics.hasMixedAlphabetHost("https://apple.com/path"))
+        // Легитимный кириллический домен целиком кириллический — не находка.
+        assertFalse(PhishingHeuristics.hasMixedAlphabetHost("https://яндекс.рф"))
+        assertFalse(PhishingHeuristics.isSuspicious("Заходите на яндекс.рф"))
+    }
+
+    @Test
+    fun `keywords are matched as words not substrings`() {
+        // Бывшие ложные срабатывания: `код` в «кодексе», `карта` в «картоне».
+        assertFalse(PhishingHeuristics.hasPhishingKeyword("Пришлите кодекс и картон"))
+        assertFalse(PhishingHeuristics.isSuspicious("Пришлите кодекс и картон: https://example.com"))
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Пришлите код подтверждения"))
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Ваша карта заблокирована"))
+    }
+
+    @Test
+    fun `keyword stems cover word forms`() {
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Подтверждено: перевод"))
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Аккаунт заблокирован"))
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Перейдите по ссылке"))
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Bitte bestätigen Sie jetzt"))
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Ihr Konto wurde gesperrt"))
+    }
+
+    @Test
+    fun `keyword phrases are matched across separators`() {
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("Please Click-Here to win"))
+        assertTrue(PhishingHeuristics.hasPhishingKeyword("click here"))
+        assertFalse(PhishingHeuristics.hasPhishingKeyword("click the button here"))
+    }
+
+    @Test
+    fun `text without keywords and homoglyphs stays clean`() {
+        assertFalse(PhishingHeuristics.hasPhishingKeyword("Привет, как дела?"))
+        assertFalse(PhishingHeuristics.isSuspicious("Смотрите https://example.com/news и всё"))
+    }
+
+    @Test
+    fun `empty message has nothing to find`() {
+        assertFalse(PhishingHeuristics.isSuspicious(""))
+        assertFalse(PhishingHeuristics.hasPhishingKeyword(""))
+        assertTrue(PhishingHeuristics.extractLinks("").isEmpty())
+    }
+
+    @Test
     fun `ordinary sentences do not become links`() {
         // Аббревиатуры и «сокращения» без домена не должны превращаться в ссылки.
         assertTrue(PhishingHeuristics.extractLinks("т.е. это не ссылка").isEmpty())
