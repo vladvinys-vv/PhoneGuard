@@ -36,13 +36,26 @@ class ShoulderSurferService : LifecycleService() {
     @Inject
     lateinit var batteryOptimizationHelper: BatteryOptimizationHelper
 
+    @Inject
+    lateinit var preferencesManager: com.phoneguard.data.preferences.PreferencesManager
+
     private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var analysisJob: Job? = null
+
+    /** Привязанный анализатор: нужен, чтобы снять его при остановке. */
+    private var boundAnalysis: ImageAnalysis? = null
     private var lastDetectionTime = 0L
     private var lastAlertTime = 0L
     private var adaptiveIntervalMs = 2000L
 
-    private val faceDetector by lazy {
+    /**
+     * Делегат вынесен отдельно, чтобы `onDestroy` мог проверить `isInitialized()`.
+     *
+     * Раньше там стоял `faceDetector.close()`: `by lazy` **создавал** детектор прямо в
+     * `onDestroy`, даже если сервис ни разу не анализировал кадр (камера недоступна, сразу
+     * выключили) — лишняя инициализация ML Kit на выходе.
+     */
+    private val faceDetectorDelegate = lazy {
         FaceDetection.getClient(
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
@@ -55,10 +68,10 @@ class ShoulderSurferService : LifecycleService() {
         )
     }
 
+    private val faceDetector by faceDetectorDelegate
+
     companion object {
         private const val TAG = "ShoulderSurfer"
-        /** Минимальный интервал между предупреждениями «кто-то смотрит в экран». */
-        private const val MIN_ALERT_INTERVAL_MS = 30_000L
 
         private const val CHANNEL_ID = "shoulder_surfer_channel"
         private const val NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SHOULDER_SURFER_FOREGROUND
@@ -194,19 +207,26 @@ class ShoulderSurferService : LifecycleService() {
                     cameraSelector,
                     imageAnalyzer
                 )
+                boundAnalysis = imageAnalyzer
 
                 Log.d(TAG, "Camera bound for shoulder surfer detection, interval=${adaptiveIntervalMs}ms")
-            } catch (e: SecurityException) {
-                Log.e(TAG, "Camera permission denied, stopping service", e)
-                stopSelf()
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start camera", e)
+                // Нет разрешения, нет фронтальной камеры, камера занята другим приложением —
+                // во всех случаях детектора не будет. Раньше сервис оставался «активным»:
+                // висело постоянное уведомление и включённый переключатель, а кадры не
+                // анализировались вообще. Врать в интерфейсе хуже, чем выключиться.
+                Log.e(TAG, "Camera unavailable, stopping detection", e)
+                disableFeatureAndStop()
             }
         }
     }
 
     private fun stopDetection() {
         analysisJob?.cancel()
+        // Анализатор снимаем до `unbindAll()`: иначе в очереди камеры остаются кадры,
+        // которые после остановки сервиса продолжают вызывать `analyzeImage`.
+        runCatching { boundAnalysis?.clearAnalyzer() }
+        boundAnalysis = null
         // Раньше здесь стоял `ProcessCameraProvider.getInstance(this).get()` прямо в
         // main-потоке: если провайдер камеры ещё инициализировался (а останавливать
         // слежку могут сразу после старта), главный поток ждал — вплоть до ANR.
@@ -227,7 +247,7 @@ class ShoulderSurferService : LifecycleService() {
     }
 
     private fun analyzeImage(imageProxy: ImageProxy) {
-        // Интервалы — по монотонным часам (см. ниже про MIN_ALERT_INTERVAL_MS).
+        // Интервалы — по монотонным часам (правила — в ShoulderSurferDetectionPolicy).
         val currentTime = SystemClock.elapsedRealtime()
         if (currentTime - lastDetectionTime < adaptiveIntervalMs) {
             imageProxy.close()
@@ -263,25 +283,21 @@ class ShoulderSurferService : LifecycleService() {
         if (faces.isEmpty()) return
 
         for (face in faces) {
-            val pitch = face.headEulerAngleX
-            val yaw = face.headEulerAngleY
-
-            val isFacingScreen = pitch in -20f..20f && yaw in -30f..30f
-
-            if (isFacingScreen) {
-                val leftEyeOpen = face.leftEyeOpenProbability ?: 1.0f
-                val rightEyeOpen = face.rightEyeOpenProbability ?: 1.0f
-                val eyesOpen = leftEyeOpen > 0.3f && rightEyeOpen > 0.3f
-
-                if (eyesOpen) {
-                    onSurferDetected(face)
-                    return
-                }
+            // Пороги — в [ShoulderSurferDetectionPolicy] (там же их тесты).
+            val suspicious = ShoulderSurferDetectionPolicy.isSuspiciousFace(
+                pitchDegrees = face.headEulerAngleX,
+                yawDegrees = face.headEulerAngleY,
+                leftEyeProbability = face.leftEyeOpenProbability,
+                rightEyeProbability = face.rightEyeOpenProbability
+            )
+            if (suspicious) {
+                onSurferDetected()
+                return
             }
         }
     }
 
-    private fun onSurferDetected(face: com.google.mlkit.vision.face.Face) {
+    private fun onSurferDetected() {
         Log.w(TAG, "Potential shoulder surfer detected!")
         notifySurferDetected()
     }
@@ -290,7 +306,7 @@ class ShoulderSurferService : LifecycleService() {
         // Раньше уведомление приходило на каждый кадр с лицом (раз в ~2 секунды) —
         // телефон буквально «пищал» постоянно. Теперь не чаще раза в 30 секунд.
         val now = SystemClock.elapsedRealtime()
-        if (now - lastAlertTime < MIN_ALERT_INTERVAL_MS) return
+        if (!ShoulderSurferDetectionPolicy.shouldAlert(now, lastAlertTime)) return
         lastAlertTime = now
 
         val intent = packageManager.getLaunchIntentForPackage(packageName)
@@ -318,10 +334,28 @@ class ShoulderSurferService : LifecycleService() {
         manager.notify(ALERT_NOTIFICATION_ID, notification)
     }
 
+    /**
+     * Камера недоступна: гасим сервис и снимаем флаг функции.
+     *
+     * Флаг обязателен: экран настроек показывает переключатель из настроек, и без сброса
+     * пользователь видел «включено» у неработающего детектора.
+     */
+    private fun disableFeatureAndStop() {
+        lifecycleScope.launch {
+            runCatching { preferencesManager.setShoulderSurferEnabled(false) }
+                .onFailure { Log.w(TAG, "Cannot disable shoulder surfer setting", it) }
+        }
+        stopDetection()
+        stopSelf()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         stopDetection()
         cameraExecutor.shutdown()
-        faceDetector.close()
+        // Детектор закрываем только если он реально создавался (см. faceDetectorDelegate).
+        if (faceDetectorDelegate.isInitialized()) {
+            runCatching { faceDetector.close() }
+        }
     }
 }
