@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import com.phoneguard.R
 import com.phoneguard.data.local.IntrusionEventDao
+import com.phoneguard.util.RetryBackoffPolicy
 import com.phoneguard.util.SmsSender
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -26,6 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -120,38 +122,72 @@ class StealthCameraService : LifecycleService() {
         }
         val photoFile = File(outputDir, "stealth_${System.currentTimeMillis()}.jpg")
 
-        val provider = awaitCameraProvider() ?: run {
-            Log.w(TAG, "Camera provider unavailable")
-            return
-        }
-        val imageCapture = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
+        var failures = 0
+        while (true) {
+            val provider = awaitCameraProvider()
+            if (provider == null) {
+                // Провайдер не поднялся за таймаут: камера занята или ещё инициализируется —
+                // ошибка временная, повторяем по правилам RetryBackoffPolicy.
+                Log.w(TAG, "Camera provider unavailable (${failures + 1}/${RetryBackoffPolicy.MAX_ATTEMPTS})")
+                val decision = RetryBackoffPolicy.decide(failures, RetryBackoffPolicy.FailureKind.TRANSIENT)
+                if (!decision.shouldRetry) {
+                    notifyCaptureFailure(sender)
+                    return
+                }
+                failures++
+                delay(decision.delayMs)
+                continue
+            }
 
-        val bound = bindCamera(provider, imageCapture)
-        if (!bound) {
-            Log.w(TAG, "No usable camera")
-            return
-        }
+            val imageCapture = ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .build()
 
-        val saved = captureToFile(imageCapture, photoFile)
-        provider.unbindAll()
+            if (!bindCamera(provider, imageCapture)) {
+                // Ни одна камера не подошла — повтор не поможет никогда.
+                Log.w(TAG, "No usable camera")
+                provider.unbindAll()
+                notifyCaptureFailure(sender)
+                return
+            }
 
-        if (!saved) {
+            val saved = captureToFile(imageCapture, photoFile)
+            provider.unbindAll()
+
+            if (saved) {
+                eventId?.let { id ->
+                    runCatching { intrusionEventDao.updatePhotoPath(id, photoFile.absolutePath) }
+                        .onFailure { Log.w(TAG, "Cannot attach photo to event $id", it) }
+                }
+
+                // Подтверждение отправляем только если фото действительно сохранено.
+                sender?.let { destination ->
+                    sendSms(destination, getString(R.string.stealth_photo_sent, photoFile.name))
+                }
+                return
+            }
+
             photoFile.delete()
-            Log.w(TAG, "Photo was not saved")
-            return
+            Log.w(TAG, "Photo was not saved (${failures + 1}/${RetryBackoffPolicy.MAX_ATTEMPTS})")
+            val decision = RetryBackoffPolicy.decide(failures, RetryBackoffPolicy.FailureKind.TRANSIENT)
+            if (!decision.shouldRetry) {
+                notifyCaptureFailure(sender)
+                return
+            }
+            failures++
+            delay(decision.delayMs)
         }
+    }
 
-        eventId?.let { id ->
-            runCatching { intrusionEventDao.updatePhotoPath(id, photoFile.absolutePath) }
-                .onFailure { Log.w(TAG, "Cannot attach photo to event $id", it) }
-        }
-
-        // Подтверждение отправляем только если фото действительно сохранено.
-        sender?.let { destination ->
-            sendSms(destination, getString(R.string.stealth_photo_sent, photoFile.name))
-        }
+    /**
+     * Сообщает отправителю команды, что снять не удалось.
+     *
+     * Раньше провал оставался только в logcat: пользователь, отправивший `#PG:PIN:PHOTO`,
+     * не получал ответа и не знал, что камера не сработала.
+     */
+    private fun notifyCaptureFailure(sender: String?) {
+        val destination = sender ?: return
+        sendSms(destination, getString(R.string.sms_reply_photo_failed))
     }
 
     /**

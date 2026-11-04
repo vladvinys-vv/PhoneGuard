@@ -22,8 +22,10 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.phoneguard.R
 import com.phoneguard.util.BatteryOptimizationHelper
+import com.phoneguard.util.RetryBackoffPolicy
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ExecutorService
@@ -187,38 +189,68 @@ class ShoulderSurferService : LifecycleService() {
         adaptiveIntervalMs = batteryOptimizationHelper.getAdaptiveShoulderSurferInterval()
 
         analysisJob = lifecycleScope.launch {
-            try {
-                val cameraProvider = withContext(Dispatchers.IO) {
-                    ProcessCameraProvider.getInstance(this@ShoulderSurferService).get()
+            var failures = 0
+            while (true) {
+                try {
+                    bindCamera()
+                    Log.d(TAG, "Camera bound for shoulder surfer detection, interval=${adaptiveIntervalMs}ms")
+                    return@launch
+                } catch (e: Exception) {
+                    val kind = classifyCameraFailure(e)
+                    val decision = RetryBackoffPolicy.decide(failures, kind)
+                    Log.w(
+                        TAG,
+                        "Camera bind failed (${failures + 1}/${RetryBackoffPolicy.MAX_ATTEMPTS}, $kind)",
+                        e
+                    )
+                    if (!decision.shouldRetry) {
+                        // Повторять бессмысленно (нет разрешения/камеры) или попытки кончились.
+                        // Раньше сервис оставался «активным» с нерабочей камерой: висело
+                        // постоянное уведомление и включённый переключатель. Врать в интерфейсе
+                        // хуже, чем выключиться.
+                        disableFeatureAndStop()
+                        return@launch
+                    }
+                    failures++
+                    delay(decision.delayMs)
                 }
-
-                val imageAnalyzer = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setTargetResolution(android.util.Size(320, 240))
-                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
-                    .build()
-                    .also { it.setAnalyzer(cameraExecutor, ::analyzeImage) }
-
-                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
-                    this@ShoulderSurferService,
-                    cameraSelector,
-                    imageAnalyzer
-                )
-                boundAnalysis = imageAnalyzer
-
-                Log.d(TAG, "Camera bound for shoulder surfer detection, interval=${adaptiveIntervalMs}ms")
-            } catch (e: Exception) {
-                // Нет разрешения, нет фронтальной камеры, камера занята другим приложением —
-                // во всех случаях детектора не будет. Раньше сервис оставался «активным»:
-                // висело постоянное уведомление и включённый переключатель, а кадры не
-                // анализировались вообще. Врать в интерфейсе хуже, чем выключиться.
-                Log.e(TAG, "Camera unavailable, stopping detection", e)
-                disableFeatureAndStop()
             }
         }
+    }
+
+    /** Собственно привязка камеры; вынесена, чтобы повторять её в цикле. */
+    private suspend fun bindCamera() {
+        val cameraProvider = withContext(Dispatchers.IO) {
+            ProcessCameraProvider.getInstance(this@ShoulderSurferService).get()
+        }
+
+        val imageAnalyzer = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setTargetResolution(android.util.Size(320, 240))
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+            .build()
+            .also { it.setAnalyzer(cameraExecutor, ::analyzeImage) }
+
+        cameraProvider.unbindAll()
+        cameraProvider.bindToLifecycle(
+            this@ShoulderSurferService,
+            CameraSelector.DEFAULT_FRONT_CAMERA,
+            imageAnalyzer
+        )
+        boundAnalysis = imageAnalyzer
+    }
+
+    /**
+     * Повторять ли попытку.
+     *
+     * `SecurityException` — нет разрешения, `IllegalArgumentException` — нет фронтальной камеры:
+     * повтор не поможет никогда (правило — в [RetryBackoffPolicy]). Остальное (камера занята,
+     * провайдер не готов) проходит само.
+     */
+    private fun classifyCameraFailure(error: Exception): RetryBackoffPolicy.FailureKind = when (error) {
+        is SecurityException -> RetryBackoffPolicy.FailureKind.PERMANENT
+        is IllegalArgumentException -> RetryBackoffPolicy.FailureKind.PERMANENT
+        else -> RetryBackoffPolicy.FailureKind.TRANSIENT
     }
 
     private fun stopDetection() {
