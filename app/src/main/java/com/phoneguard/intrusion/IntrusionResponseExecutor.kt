@@ -33,6 +33,14 @@ import org.json.JSONObject
 
 interface IntrusionResponseExecutor {
     suspend fun execute(event: IntrusionEvent, actions: List<IntrusionResponseAction>)
+
+    /**
+     * Приводит наблюдателя за приманками к текущей настройке защиты.
+     *
+     * Вызывается при каждом изменении настройки: выключенная защита не должна продолжать
+     * писать события (правило — в [HoneypotLifecyclePolicy]).
+     */
+    suspend fun syncHoneypotState()
 }
 
 @Singleton
@@ -45,8 +53,17 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
     private val vaultSession: VaultSession
 ) : IntrusionResponseExecutor {
 
-    private val honeypotScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /**
+     * Scope наблюдателя создаётся лениво и обнуляется при остановке: отменённый
+     * `CoroutineScope` переиспользовать нельзя, а после повторного включения защиты
+     * наблюдатель должен снова работать.
+     */
+    @Volatile
+    private var honeypotScope: CoroutineScope? = null
+
     private val honeypotReportGate = HoneypotReportGate()
+
+    @Volatile
     private var honeypotObserver: HoneypotObserver? = null
 
     /**
@@ -207,50 +224,91 @@ class AndroidIntrusionResponseExecutor @Inject constructor(
      * событие [IntrusionType.HONEYPOT_ACCESSED], и пользователь получает
      * предупреждение.
      */
-    private fun createHoneypot(name: String, event: IntrusionEvent) {
+    private suspend fun createHoneypot(name: String, event: IntrusionEvent) {
         // Единственный источник правды по приманкам — HoneypotManager: здесь раньше
         // была своя копия логики, которая писала «PhoneGuard honeypot <id>» и тем
-        // самым выдавала приманку вредоносному ПО.
-        val dir = File(context.filesDir, HoneypotManager.DIR_NAME)
-        if (!dir.exists()) dir.mkdirs()
+        // самым выдавала приманку вредоносному ПО. Каталог и его создание — тоже его
+        // забота, дублировать `mkdirs()` здесь больше не нужно.
         // Маркерный файл `<$name>.marker` больше не создаётся: он не подходил под
         // маску приманок, из-за чего не попадал ни в наблюдение (`isDecoyAccess`),
         // ни в уборку каталога и просто мусорил в filesDir. Приманки создаёт
         // HoneypotManager, он же отвечает за их имена и ротацию.
         val created = HoneypotManager().createDecoys(context, event)
         Log.d(TAG, "Honeypot '$name': создано приманок ${created.size} для события ${event.id}")
-        ensureHoneypotObserver(dir)
+        syncHoneypotState()
+    }
+
+    /**
+     * Приводит наблюдателя к настройке: включено — работает, выключено — молчит.
+     *
+     * Раньше наблюдатель запускался один раз и жил до смерти процесса: пользователь выключал
+     * приманки в настройках, а события продолжали писаться в базу и показываться уведомлениями.
+     */
+    override suspend fun syncHoneypotState() {
+        val enabled = runCatching { preferencesManager.isIntrusionHoneypotEnabled.first() }
+            .getOrDefault(true)
+        when (HoneypotLifecyclePolicy.decide(enabled, honeypotObserver != null)) {
+            HoneypotLifecycleAction.START -> startHoneypotObserver()
+            HoneypotLifecycleAction.STOP -> stopHoneypotObserver()
+            HoneypotLifecycleAction.NONE -> Unit
+        }
     }
 
     @Synchronized
-    private fun ensureHoneypotObserver(dir: File) {
+    private fun startHoneypotObserver() {
         if (honeypotObserver != null) return
+        val dir = File(context.filesDir, HoneypotManager.DIR_NAME)
+        if (!dir.exists()) dir.mkdirs()
+
         val manager = HoneypotManager()
         val observer = HoneypotObserver(dir) { path ->
             // Колбэк приходит не из main-потока: всё, что нужно сделать — в IO.
-            honeypotScope.launch {
-                if (!manager.isDecoyAccess(path)) return@launch
-                // Собственные записи приманок тоже видны наблюдателю: события о
-                // файлах, изменённых только что, и повторные события по тому же
-                // пути игнорируем, иначе получаем ложные тревоги и цикл.
-                if (!shouldReportHoneypotAccess(path)) return@launch
-                val decoyEvent = IntrusionEvent(
-                    type = IntrusionType.HONEYPOT_ACCESSED,
-                    severity = IntrusionSeverity.HIGH,
-                    evidence = mapOf("path" to path)
-                )
-                runCatching { intrusionEventDao.insert(decoyEvent.toEntity()) }
-                showWarning(
-                    context.getString(R.string.honeypot_accessed_title),
-                    context.getString(
-                        R.string.honeypot_accessed_text,
-                        File(path).name
-                    )
-                )
-            }
+            honeypotScopeRef().launch { handleDecoyAccess(path, manager) }
         }
         observer.start()
         honeypotObserver = observer
+    }
+
+    @Synchronized
+    private fun stopHoneypotObserver() {
+        honeypotObserver?.stop()
+        honeypotObserver = null
+        honeypotScope?.cancel()
+        honeypotScope = null
+    }
+
+    @Synchronized
+    private fun honeypotScopeRef(): CoroutineScope =
+        honeypotScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO).also { honeypotScope = it }
+
+    /**
+     * Реакция на доступ к файлу-приманке.
+     *
+     * Настройка проверяется заново: событие из очереди `inotify` может прийти уже после
+     * выключения защиты, и тогда наблюдатель останавливается прямо здесь.
+     */
+    private suspend fun handleDecoyAccess(path: String, manager: HoneypotManager) {
+        val enabled = runCatching { preferencesManager.isIntrusionHoneypotEnabled.first() }
+            .getOrDefault(false)
+        if (!HoneypotLifecyclePolicy.shouldReportAccess(enabled, manager.isDecoyAccess(path))) {
+            if (!enabled) stopHoneypotObserver()
+            return
+        }
+        // Собственные записи приманок тоже видны наблюдателю: события о
+        // файлах, изменённых только что, и повторные события по тому же
+        // пути игнорируем, иначе получаем ложные тревоги и цикл.
+        if (!shouldReportHoneypotAccess(path)) return
+
+        val decoyEvent = IntrusionEvent(
+            type = IntrusionType.HONEYPOT_ACCESSED,
+            severity = IntrusionSeverity.HIGH,
+            evidence = mapOf("path" to path)
+        )
+        runCatching { intrusionEventDao.insert(decoyEvent.toEntity()) }
+        showWarning(
+            context.getString(R.string.honeypot_accessed_title),
+            context.getString(R.string.honeypot_accessed_text, File(path).name)
+        )
     }
 
     /**
