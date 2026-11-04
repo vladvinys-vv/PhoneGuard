@@ -1,8 +1,11 @@
 package com.phoneguard.threatintel
 
+import android.os.SystemClock
 import android.util.Log
 import com.phoneguard.data.preferences.PreferencesManager
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,8 +38,18 @@ class ThreatIntelRepository @Inject constructor(
     @Volatile
     private var openPhishHosts: Set<String> = emptySet()
 
+    /**
+     * Момент, раньше которого фид заново не запрашивается (монотонные часы).
+     *
+     * Раньше здесь было «время последней загрузки», а решение принималось сравнением с TTL
+     * **вне блокировки**: несколько параллельных проверок видели устаревший фид и каждая
+     * тянула его заново (до 8 МБ трафика). Теперь есть и явный «когда можно», и блокировка.
+     */
     @Volatile
-    private var openPhishFetchedAt: Long = 0L
+    private var nextFeedAttemptElapsed: Long = 0L
+
+    /** Single-flight: пока один поток грузит фид, остальные ждут его результат. */
+    private val feedMutex = Mutex()
 
     /** Включена ли сетевая проверка пользователем. */
     suspend fun isEnabled(): Boolean = preferencesManager.isThreatIntelEnabled.first()
@@ -91,23 +104,54 @@ class ThreatIntelRepository @Inject constructor(
     fun clearCache() {
         synchronized(hostCache) { hostCache.clear() }
         openPhishHosts = emptySet()
-        openPhishFetchedAt = 0L
+        nextFeedAttemptElapsed = 0L
     }
 
+    /**
+     * Фид OpenPhish с single-flight-загрузкой.
+     *
+     * Быстрый путь (фид свежий) не берёт блокировку; медленный — берёт и **перепроверяет**
+     * условие: пока поток ждал, фид мог загрузить кто-то другой, и второй запрос на 8 МБ
+     * никому не нужен.
+     */
     private suspend fun openPhishHosts(): Set<String> {
-        val now = System.currentTimeMillis()
-        if (now - openPhishFetchedAt < OPENPHISH_TTL_MS) return openPhishHosts
-
-        val hosts = client.fetchOpenPhishHosts()
-        if (hosts.isNotEmpty()) {
-            openPhishHosts = hosts
-            openPhishFetchedAt = now
-            Log.d(TAG, "OpenPhish feed loaded: ${hosts.size} hosts")
-        } else {
-            // Не кэшируем пустой ответ как «успех», чтобы не залипнуть на 6 часов без данных.
-            openPhishFetchedAt = now - OPENPHISH_TTL_MS + EMPTY_FEED_RETRY_MS
+        if (ThreatFeedRefreshPolicy.decide(SystemClock.elapsedRealtime(), nextFeedAttemptElapsed) ==
+            ThreatFeedRefreshPolicy.Decision.WAIT
+        ) {
+            return openPhishHosts
         }
-        return openPhishHosts
+
+        return feedMutex.withLock {
+            val now = SystemClock.elapsedRealtime()
+            if (ThreatFeedRefreshPolicy.decide(now, nextFeedAttemptElapsed) ==
+                ThreatFeedRefreshPolicy.Decision.WAIT
+            ) {
+                return@withLock openPhishHosts
+            }
+
+            val hosts = runCatching { client.fetchOpenPhishHosts() }.getOrNull()
+            when {
+                hosts == null -> {
+                    // Ошибка сети: короткая пауза, старый фид остаётся в работе.
+                    nextFeedAttemptElapsed =
+                        ThreatFeedRefreshPolicy.nextAttemptAfterFailure(SystemClock.elapsedRealtime())
+                    Log.w(TAG, "OpenPhish feed request failed")
+                }
+                hosts.isNotEmpty() -> {
+                    openPhishHosts = hosts
+                    nextFeedAttemptElapsed =
+                        ThreatFeedRefreshPolicy.nextAttemptAfterSuccess(SystemClock.elapsedRealtime())
+                    Log.d(TAG, "OpenPhish feed loaded: ${hosts.size} hosts")
+                }
+                else -> {
+                    // Не кэшируем пустой ответ как «успех», чтобы не залипнуть на 6 часов без данных.
+                    nextFeedAttemptElapsed =
+                        ThreatFeedRefreshPolicy.nextAttemptAfterEmpty(SystemClock.elapsedRealtime())
+                    Log.w(TAG, "OpenPhish feed returned no hosts")
+                }
+            }
+            openPhishHosts
+        }
     }
 
     private fun feedContainsSubdomain(feed: Set<String>, host: String): Boolean {
@@ -123,7 +167,9 @@ class ThreatIntelRepository @Inject constructor(
     private fun cached(host: String): ThreatIntelResult? {
         synchronized(hostCache) {
             val entry = hostCache[host] ?: return null
-            if (entry.expiresAt < System.currentTimeMillis()) {
+            // Монотонные часы: перевод системного времени не должен ни «состарить» кэш,
+            // ни держать запись с вердиктом бесконечно.
+            if (entry.expiresAt < SystemClock.elapsedRealtime()) {
                 hostCache.remove(host)
                 return null
             }
@@ -138,7 +184,7 @@ class ThreatIntelRepository @Inject constructor(
             if (hostCache.size >= MAX_CACHE_ENTRIES && !hostCache.containsKey(result.host)) {
                 hostCache.entries.iterator().let { iterator -> if (iterator.hasNext()) { iterator.next(); iterator.remove() } }
             }
-            hostCache[result.host] = CacheEntry(result, System.currentTimeMillis() + ttl)
+            hostCache[result.host] = CacheEntry(result, SystemClock.elapsedRealtime() + ttl)
         }
         return result
     }
@@ -148,7 +194,5 @@ class ThreatIntelRepository @Inject constructor(
         private const val MAX_CACHE_ENTRIES = 256
         private const val TTL_MS = 6 * 60 * 60 * 1000L
         private const val UNKNOWN_TTL_MS = 10 * 60 * 1000L
-        private const val OPENPHISH_TTL_MS = 6 * 60 * 60 * 1000L
-        private const val EMPTY_FEED_RETRY_MS = 60 * 60 * 1000L
     }
 }
