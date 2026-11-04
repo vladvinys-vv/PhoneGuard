@@ -29,8 +29,6 @@ class SimSwapReceiver : BroadcastReceiver() {
     @Inject
     lateinit var detector: SimSwapDetector
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             TelephonyManager.ACTION_SIM_STATE_CHANGED,
@@ -39,7 +37,9 @@ class SimSwapReceiver : BroadcastReceiver() {
         }
 
         val pendingResult = goAsync()
-        scope.launch {
+        // Область уровня процесса: приёмник создаётся заново на каждый broadcast, поэтому
+        // собственная область на экземпляр означала джобы, которые никто никогда не отменит.
+        receiverScope.launch {
             try {
                 if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
                     // Фиксируем текущую SIM как базовую (детектор сам проверит разрешение).
@@ -55,9 +55,13 @@ class SimSwapReceiver : BroadcastReceiver() {
                 ) {
                     return@launch
                 }
-                if (!detector.hasUnconfirmed()) {
-                    detector.checkSimState()
-                }
+                // Проверка идёт всегда, даже если предыдущая подмена ещё не подтверждена.
+                // Раньше здесь стояло `if (!detector.hasUnconfirmed())`, и флаг в DataStore
+                // работал как выключатель детектора: пока пользователь не ответил на уведомление
+                // (или процесс убили до его ответа), новые события SIM не проверялись вообще.
+                // Повторов это не добавляет: детектор сравнивает отпечатки, а после подмены
+                // эталон уже обновлён, поэтому то же состояние даёт IGNORE.
+                detector.checkSimState()
             } catch (e: Exception) {
                 Log.w(TAG, "SIM state handling failed", e)
             } finally {
@@ -68,5 +72,7 @@ class SimSwapReceiver : BroadcastReceiver() {
 
     private companion object {
         const val TAG = "SimSwapReceiver"
+
+        val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }
