@@ -1,5 +1,6 @@
 package com.phoneguard.ui.screens.dashboard
 
+import android.content.Context
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.fullscan.FullScanOrchestrator
 import io.mockk.coEvery
@@ -23,6 +24,7 @@ class DashboardViewModelTest {
 
     private val dispatcher = UnconfinedTestDispatcher()
     private lateinit var viewModel: DashboardViewModel
+    private val context: Context = mockk(relaxed = true)
     private val preferencesManager: PreferencesManager = mockk()
     private val fullScanOrchestrator: FullScanOrchestrator = mockk()
 
@@ -49,7 +51,7 @@ class DashboardViewModelTest {
         every { preferencesManager.deviceAuditIssues } returns flowOf(1)
 
         coEvery { fullScanOrchestrator.getLatestScanSummary() } returns (50 to "18.07.2026 12:00")
-        viewModel = DashboardViewModel(preferencesManager, fullScanOrchestrator)
+        viewModel = DashboardViewModel(context, preferencesManager, fullScanOrchestrator)
     }
 
     @After

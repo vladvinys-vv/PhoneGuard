@@ -1,10 +1,17 @@
 package com.phoneguard.ui.screens.dashboard
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.fullscan.FullScanOrchestrator
+import com.phoneguard.perm.ProtectionCapabilityPolicy
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -43,9 +50,23 @@ data class DeviceAuditSummary(
  */
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val preferencesManager: PreferencesManager,
     private val fullScanOrchestrator: FullScanOrchestrator
 ) : ViewModel() {
+
+    /**
+     * Возможности защиты, которые сейчас ослаблены отозванными разрешениями.
+     *
+     * Разрешения запрашивались один раз на онбординге; если пользователь отозвал CAMERA,
+     * SEND_SMS, READ_PHONE_STATE или POST_NOTIFICATIONS, раньше об этом не сообщал никто —
+     * функции просто переставали работать. Таблица «возможность → разрешение» живёт в чистом
+     * [ProtectionCapabilityPolicy], здесь только чтение фактических разрешений.
+     */
+    private val _degradedCapabilities =
+        MutableStateFlow<List<ProtectionCapabilityPolicy.Capability>>(emptyList())
+    val degradedCapabilities: StateFlow<List<ProtectionCapabilityPolicy.Capability>> =
+        _degradedCapabilities.asStateFlow()
 
     private val _fullScanSummary = MutableStateFlow(FullScanSummary(null, null))
     val fullScanSummary: StateFlow<FullScanSummary> = _fullScanSummary.asStateFlow()
@@ -119,7 +140,34 @@ class DashboardViewModel @Inject constructor(
 
     init {
         loadFullScanSummary()
+        refreshCapabilities()
     }
+
+    /** Пересчитывает список ослабленных возможностей по фактическим разрешениям. */
+    private fun refreshCapabilities() {
+        val granted = buildSet {
+            if (isGranted(Manifest.permission.READ_PHONE_STATE)) {
+                add(ProtectionCapabilityPolicy.CapabilityPermission.PHONE_STATE)
+            }
+            if (isGranted(Manifest.permission.CAMERA)) {
+                add(ProtectionCapabilityPolicy.CapabilityPermission.CAMERA)
+            }
+            if (isGranted(Manifest.permission.SEND_SMS)) {
+                add(ProtectionCapabilityPolicy.CapabilityPermission.SEND_SMS)
+            }
+            if (isGranted(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                add(ProtectionCapabilityPolicy.CapabilityPermission.FINE_LOCATION)
+            }
+            if (isGranted(Manifest.permission.POST_NOTIFICATIONS)) {
+                add(ProtectionCapabilityPolicy.CapabilityPermission.POST_NOTIFICATIONS)
+            }
+        }
+        _degradedCapabilities.value =
+            ProtectionCapabilityPolicy.degraded(granted, Build.VERSION.SDK_INT)
+    }
+
+    private fun isGranted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
     private fun calculateAntiTheftScore(
         isDeviceAdminEnabled: Boolean,
@@ -161,6 +209,8 @@ class DashboardViewModel @Inject constructor(
     /** Перезагружает сводку сканирования (кнопка «обновить» на дашборде). */
     fun recalculateScore() {
         loadFullScanSummary()
+        // Разрешение могли отозвать в системных настройках, пока приложение было в фоне.
+        refreshCapabilities()
     }
 
     private fun loadFullScanSummary() {

@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import android.location.Address
 import android.location.Geocoder
 import android.telephony.TelephonyManager
@@ -62,6 +63,10 @@ class SimSwapDetector(
                 Manifest.permission.READ_PHONE_STATE
             ) != PackageManager.PERMISSION_GRANTED
         ) {
+            // Раньше это был молчаливый `return`: детектор подмены SIM просто переставал
+            // существовать, и в журнале не было ни строчки. Пользователь узнаёт, что защита
+            // ослаблена, из предупреждения на дашборде (ProtectionCapabilityPolicy).
+            Log.w(TAG, "READ_PHONE_STATE is not granted — SIM swap detection is disabled")
             return
         }
 
@@ -222,6 +227,8 @@ class SimSwapDetector(
     }
 
     companion object {
+        private const val TAG = "SimSwapDetector"
+
         const val ACTION_STOP_CONFIRMATION = "com.phoneguard.simswap.ACTION_STOP_CONFIRMATION"
     }
 }

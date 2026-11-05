@@ -25,6 +25,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.phoneguard.R
+import com.phoneguard.perm.ProtectionCapabilityPolicy
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel.FullScanSummary
 import com.phoneguard.ui.theme.*
 
@@ -42,6 +43,7 @@ fun DashboardScreen(
     val score by viewModel.securityScore.collectAsState()
     val fullScanSummary by viewModel.fullScanSummary.collectAsState()
     val phoneCheckSummary by viewModel.phoneCheckSummary.collectAsState()
+    val degradedCapabilities by viewModel.degradedCapabilities.collectAsState()
 
     // Сводка последнего сканирования читалась только в init: после возврата с
     // экрана сканирования дашборд продолжал показывать старую дату и оценку.
@@ -66,6 +68,10 @@ fun DashboardScreen(
             fontWeight = FontWeight.Bold
         )
 
+        if (degradedCapabilities.isNotEmpty()) {
+            DegradedProtectionCard(capabilities = degradedCapabilities)
+        }
+
         SecurityScoreCard(score = score.total)
 
         FullScanCard(
@@ -88,6 +94,62 @@ fun DashboardScreen(
 
         SimSwapStatusCard(onClick = onNavigateToSimSwap)
     }
+}
+
+/**
+ * Предупреждение «защита работает не полностью».
+ *
+ * Разрешения запрашивались один раз на онбординге. Если пользователь отозвал CAMERA, SEND_SMS,
+ * READ_PHONE_STATE или POST_NOTIFICATIONS, соответствующая функция просто перестаёт работать —
+ * и раньше об этом не сообщал никто. Список и тексты берутся из [ProtectionCapabilityPolicy],
+ * тексты — из уже существующих объяснений разрешений.
+ */
+@Composable
+fun DegradedProtectionCard(
+    capabilities: List<ProtectionCapabilityPolicy.Capability>
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Text(
+                    text = stringResource(R.string.protection_degraded_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            capabilities.forEach { capability ->
+                Text(
+                    text = stringResource(capability.rationaleRes()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+    }
+}
+
+/** Какое объяснение показать для ослабленной возможности (строки уже есть в ресурсах). */
+private fun ProtectionCapabilityPolicy.Capability.rationaleRes(): Int = when (this) {
+    ProtectionCapabilityPolicy.Capability.SIM_SWAP_DETECTION -> R.string.phone_state_permission_rationale
+    ProtectionCapabilityPolicy.Capability.INTRUSION_PHOTO -> R.string.camera_permission_rationale
+    ProtectionCapabilityPolicy.Capability.INTRUSION_SMS -> R.string.sms_permission_rationale
+    ProtectionCapabilityPolicy.Capability.TRUSTED_CONTACT_LOCATION -> R.string.location_permission_rationale
+    ProtectionCapabilityPolicy.Capability.INTRUSION_WARNING -> R.string.notifications_permission_rationale
 }
 
 @Composable
