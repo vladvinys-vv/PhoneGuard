@@ -681,4 +681,6 @@
     <string name="sim_swap_channel_description">Questions about a new SIM and SIM-swap warnings</string>
     <string name="intrusion_warning_channel_name">Intrusion warnings</string>
     <string name="intrusion_warning_channel_description">Alerts about suspicious activity on the device</string>
+    <string name="alarm_hold_title">Alarm is active</string>
+    <string name="alarm_hold_text">PhoneGuard keeps the siren running and waits for your command</string>
 </resources>

@@ -681,4 +681,6 @@
     <string name="sim_swap_channel_description">Вопросы о замене SIM и предупреждения о подмене</string>
     <string name="intrusion_warning_channel_name">Предупреждения о вторжении</string>
     <string name="intrusion_warning_channel_description">Уведомления о подозрительной активности на устройстве</string>
+    <string name="alarm_hold_title">Тревога активна</string>
+    <string name="alarm_hold_text">PhoneGuard держит сирену включённой и ждёт вашей команды</string>
 </resources>
