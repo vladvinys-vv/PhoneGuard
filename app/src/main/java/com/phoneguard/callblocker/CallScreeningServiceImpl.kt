@@ -59,7 +59,8 @@ class CallScreeningServiceImpl : CallScreeningService() {
 
     companion object {
         /** Канал блокировщика (общий с фильтром SMS). */
-        const val CHANNEL_ID = BlockerNotifications.CHANNEL_ID
+        // `val`, а не `const`: id канала теперь живёт в таблице NotificationChannels.
+        val CHANNEL_ID: String = BlockerNotifications.CHANNEL_ID
 
         /**
          * Отдельный id: раньше здесь стоял 1001 — тот же, что у постоянного

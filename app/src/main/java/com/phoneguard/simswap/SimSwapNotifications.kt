@@ -1,8 +1,6 @@
 package com.phoneguard.simswap
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -12,6 +10,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.phoneguard.R
+import com.phoneguard.util.NotificationChannelInstaller
+import com.phoneguard.util.NotificationChannels
 
 /**
  * Уведомление «Вы поменяли SIM?».
@@ -26,7 +26,7 @@ import com.phoneguard.R
  */
 object SimSwapNotifications {
 
-    const val CHANNEL_ID = "sim_swap_channel"
+    val CHANNEL_ID: String = NotificationChannels.Spec.SIM_SWAP.channelId
 
     /** Отдельный id: не пересекается с VPN (1001), звонками (1101/1102) и анти-вором. */
     const val SIM_SWAP_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SIM_SWAP
@@ -80,16 +80,11 @@ object SimSwapNotifications {
     }
 
     private fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
+        NotificationChannelInstaller.install(
+            context,
+            NotificationChannels.Spec.SIM_SWAP,
             context.getString(R.string.sim_swap_channel_name),
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = context.getString(R.string.sim_swap_channel_description)
-        }
-        manager.createNotificationChannel(channel)
+            context.getString(R.string.sim_swap_channel_description)
+        )
     }
 }

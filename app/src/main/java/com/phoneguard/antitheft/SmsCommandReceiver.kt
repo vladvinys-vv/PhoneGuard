@@ -1,7 +1,6 @@
 package com.phoneguard.antitheft
 
 import android.Manifest
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
@@ -19,6 +18,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.phoneguard.R
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.util.NotificationChannels
+import com.phoneguard.util.NotificationChannelInstaller
 import com.phoneguard.util.SmsSender
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -245,15 +246,12 @@ class SmsCommandReceiver : BroadcastReceiver() {
     private fun notifyRejectedCommand(context: Context) {
         runCatching {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                manager.createNotificationChannel(
-                    NotificationChannel(
-                        ALERT_CHANNEL_ID,
-                        context.getString(R.string.sms_command_channel_name),
-                        NotificationManager.IMPORTANCE_HIGH
-                    )
-                )
-            }
+            // Канал из общей таблицы; имя обновляется и у существующего канала.
+            NotificationChannelInstaller.install(
+                context,
+                NotificationChannels.Spec.SMS_COMMANDS,
+                context.getString(R.string.sms_command_channel_name)
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
@@ -282,7 +280,8 @@ class SmsCommandReceiver : BroadcastReceiver() {
         private const val ALARM_DURATION_MS = 60_000L
 
         /** Канал уведомлений о попытках подбора PIN по SMS. */
-        private const val ALERT_CHANNEL_ID = "sms_command_channel"
+        private val ALERT_CHANNEL_ID: String =
+            NotificationChannels.Spec.SMS_COMMANDS.channelId
         private const val ALERT_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SMS_COMMAND_REJECTED
 
         /**

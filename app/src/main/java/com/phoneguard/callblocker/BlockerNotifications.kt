@@ -1,14 +1,14 @@
 package com.phoneguard.callblocker
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.phoneguard.R
 import com.phoneguard.ui.MainActivity
+import com.phoneguard.util.NotificationChannelInstaller
+import com.phoneguard.util.NotificationChannels
 
 /**
  * Канал и уведомления блокировщика звонков/SMS.
@@ -20,7 +20,7 @@ import com.phoneguard.ui.MainActivity
  */
 object BlockerNotifications {
 
-    const val CHANNEL_ID = "call_blocker_channel"
+    val CHANNEL_ID: String = NotificationChannels.Spec.BLOCKED.channelId
 
     /** Заблокированный входящий звонок. */
     const val CALL_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.BLOCKED_CALL
@@ -29,17 +29,14 @@ object BlockerNotifications {
     const val SMS_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.BLOCKED_SMS
 
     fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
+        // Имя и описание обновляются и у существующего канала (ранний `return` не давал
+        // переводам доехать до пользователя).
+        NotificationChannelInstaller.install(
+            context,
+            NotificationChannels.Spec.BLOCKED,
             context.getString(R.string.call_blocker_channel_name),
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = context.getString(R.string.call_blocker_channel_description)
-        }
-        manager.createNotificationChannel(channel)
+            context.getString(R.string.call_blocker_channel_description)
+        )
     }
 
     /** Показывает короткое тихое уведомление о блокировке. */

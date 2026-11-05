@@ -1,7 +1,6 @@
 package com.phoneguard.firewall
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -27,6 +26,8 @@ import com.phoneguard.intrusion.IntrusionRepository
 import com.phoneguard.intrusion.IntrusionSeverity
 import com.phoneguard.intrusion.IntrusionType
 import com.phoneguard.model.FirewallLog
+import com.phoneguard.util.NotificationChannels
+import com.phoneguard.util.NotificationChannelInstaller
 import com.phoneguard.util.NetworkTypeResolver
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -65,7 +66,7 @@ class PhoneGuardVpnService : VpnService() {
     companion object {
         private const val TAG = "PGVpn"
         private const val VPN_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.VPN_FOREGROUND
-        private const val VPN_CHANNEL_ID = "phoneguard_vpn_channel"
+        private val VPN_CHANNEL_ID: String = NotificationChannels.Spec.FIREWALL.channelId
         const val ACTION_CONNECT = "com.phoneguard.CONNECT"
         const val ACTION_DISCONNECT = "com.phoneguard.DISCONNECT"
 
@@ -215,17 +216,12 @@ class PhoneGuardVpnService : VpnService() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                VPN_CHANNEL_ID,
-                getString(R.string.firewall_active),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.firewall_channel_description)
-            }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
+        NotificationChannelInstaller.install(
+            this,
+            NotificationChannels.Spec.FIREWALL,
+            getString(R.string.firewall_active),
+            getString(R.string.firewall_channel_description)
+        )
     }
 
     private fun buildNotification(): Notification {

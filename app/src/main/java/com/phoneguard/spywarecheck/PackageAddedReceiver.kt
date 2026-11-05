@@ -1,15 +1,13 @@
 package com.phoneguard.spywarecheck
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.phoneguard.util.NotificationChannelInstaller
 import com.phoneguard.R
 import com.phoneguard.malware.ApkSignatureScanner
 import dagger.hilt.android.AndroidEntryPoint
@@ -106,20 +104,17 @@ class PackageAddedReceiver : BroadcastReceiver() {
     }
 
     private fun createNotificationChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                context.getString(R.string.new_app_channel_name),
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
+        NotificationChannelInstaller.install(
+            context,
+            com.phoneguard.util.NotificationChannels.Spec.NEW_APP,
+            context.getString(R.string.new_app_channel_name)
+        )
     }
 
     companion object {
         private const val TAG = "PackageAddedReceiver"
-        private const val CHANNEL_ID = "package_added_channel"
+        private val CHANNEL_ID: String =
+            com.phoneguard.util.NotificationChannels.Spec.NEW_APP.channelId
 
         /**
          * Уведомление на каждый пакет, а не одно общее.
