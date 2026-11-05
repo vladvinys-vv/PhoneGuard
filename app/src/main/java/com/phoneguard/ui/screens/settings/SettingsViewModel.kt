@@ -7,7 +7,9 @@ import androidx.work.WorkManager
 import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.data.repository.FirewallRepository
+import android.net.Uri
 import com.phoneguard.data.settings.SettingsRepository
+import com.phoneguard.data.transfer.SettingsTransferManager
 import com.phoneguard.intrusion.IntrusionResponseExecutor
 import com.phoneguard.threatintel.ThreatIntelRepository
 import com.phoneguard.worker.ScanSchedulePolicy
@@ -28,6 +30,18 @@ sealed class ExportResult {
     object Failure : ExportResult()
 }
 
+/**
+ * Итог переноса настроек: без готовых строк — их локализует интерфейс.
+ *
+ * Резервное копирование выключено осознанно (в базе и сейфе чувствительные данные), поэтому
+ * единственный способ перенести настройки на новый телефон — файл.
+ */
+sealed class SettingsMoveResult {
+    data class Exported(val path: String) : SettingsMoveResult()
+    data class Imported(val accepted: Int, val rejected: Int) : SettingsMoveResult()
+    object Failed : SettingsMoveResult()
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
@@ -36,8 +50,38 @@ class SettingsViewModel @Inject constructor(
     private val firewallRepository: FirewallRepository,
     private val workManager: WorkManager,
     private val threatIntelRepository: ThreatIntelRepository,
-    private val intrusionResponseExecutor: IntrusionResponseExecutor
+    private val intrusionResponseExecutor: IntrusionResponseExecutor,
+    private val settingsTransferManager: SettingsTransferManager
 ) : ViewModel() {
+
+    private val _settingsMoveResult = MutableStateFlow<SettingsMoveResult?>(null)
+    val settingsMoveResult: StateFlow<SettingsMoveResult?> = _settingsMoveResult.asStateFlow()
+
+    fun consumeSettingsMoveResult() {
+        _settingsMoveResult.value = null
+    }
+
+    /** Экспорт настроек в файл во внешнем каталоге приложения. */
+    fun exportSettings() = viewModelScope.launch {
+        val file = runCatching { settingsTransferManager.exportToFile() }.getOrNull()
+        _settingsMoveResult.value = if (file != null) {
+            SettingsMoveResult.Exported(file.absolutePath)
+        } else {
+            SettingsMoveResult.Failed
+        }
+    }
+
+    /** Импорт настроек из выбранного пользователем файла. */
+    fun importSettings(uri: Uri) = viewModelScope.launch {
+        _settingsMoveResult.value = when (
+            val result = runCatching { settingsTransferManager.importFrom(uri) }
+                .getOrElse { SettingsTransferManager.ImportResult.Failed(it.message) }
+        ) {
+            is SettingsTransferManager.ImportResult.Applied ->
+                SettingsMoveResult.Imported(result.accepted, result.rejected)
+            is SettingsTransferManager.ImportResult.Failed -> SettingsMoveResult.Failed
+        }
+    }
 
     val isDarkTheme: StateFlow<Boolean> = preferencesManager.isDarkTheme
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)

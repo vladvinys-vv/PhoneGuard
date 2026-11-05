@@ -355,6 +355,12 @@
     <string name="vault_import_failed">Import failed: %1$s</string>
     <string name="export_logs_saved">Export saved: %1$s</string>
     <string name="export_logs_failed">Failed to export logs</string>
+    <string name="export_settings">Export settings</string>
+    <string name="import_settings">Import settings</string>
+    <string name="export_settings_saved">Settings saved: %1$s</string>
+    <string name="import_settings_done">Settings transferred: %1$d, skipped: %2$d</string>
+    <string name="settings_transfer_failed">Could not transfer settings</string>
+    <string name="settings_transfer_hint">Vault, PIN and logs are not transferred — only blocking rules, firewall and protection settings</string>
     <string name="backup_number_saved">Backup number saved</string>
     <string name="shoulder_surfer_enabled">Shoulder surfing protection enabled</string>
     <string name="shoulder_surfer_disabled">Shoulder surfing protection disabled</string>

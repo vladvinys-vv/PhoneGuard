@@ -1,6 +1,8 @@
 package com.phoneguard.ui.screens.settings
 
 import android.content.Context
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -312,6 +314,61 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.export_logs))
+            }
+
+            // Перенос настроек на новый телефон. Облачной резервной копии у приложения нет
+            // по замыслу (в базе и сейфе чувствительные данные), поэтому единственный путь —
+            // файл: экспort на старом устройстве, импорт на новом.
+            val settingsMoveResult by settingsViewModel.settingsMoveResult.collectAsState()
+            val settingsFilePicker = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri ->
+                if (uri != null) settingsViewModel.importSettings(uri)
+            }
+            LaunchedEffect(settingsMoveResult) {
+                when (val result = settingsMoveResult) {
+                    is SettingsMoveResult.Exported -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.export_settings_saved, result.path),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        settingsViewModel.consumeSettingsMoveResult()
+                    }
+                    is SettingsMoveResult.Imported -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                R.string.import_settings_done, result.accepted, result.rejected
+                            ),
+                            Toast.LENGTH_LONG
+                        ).show()
+                        settingsViewModel.consumeSettingsMoveResult()
+                    }
+                    SettingsMoveResult.Failed -> {
+                        Toast.makeText(context, R.string.settings_transfer_failed, Toast.LENGTH_LONG)
+                            .show()
+                        settingsViewModel.consumeSettingsMoveResult()
+                    }
+                    null -> Unit
+                }
+            }
+            Text(
+                text = stringResource(R.string.settings_transfer_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = { settingsViewModel.exportSettings() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.export_settings))
+            }
+            OutlinedButton(
+                onClick = { settingsFilePicker.launch(arrayOf("text/plain", "*/*")) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.import_settings))
             }
 
             // GDPR Delete All Data
