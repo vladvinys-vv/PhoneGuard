@@ -1,7 +1,7 @@
 package com.phoneguard.fullscan
 
 import android.content.Context
-import com.google.gson.Gson
+import com.phoneguard.util.ScanReportJson
 import com.phoneguard.R
 import com.phoneguard.data.local.ScanHistoryDao
 import com.phoneguard.data.repository.FirewallRepository
@@ -59,7 +59,6 @@ class FullScanOrchestrator @Inject constructor(
             "security_patch"
         )
     }
-    private val gson = Gson()
 
     sealed class FullScanState {
         data class Progress(
@@ -481,7 +480,8 @@ class FullScanOrchestrator @Inject constructor(
         val totalIssues = ScanReportPolicy.findingCount(report)
         return scanHistoryDao.insertScan(ScanHistory(
             riskScore = report.riskScore, issuesFound = totalIssues,
-            reportJson = gson.toJson(report)))
+            // Ключи — литералы, а не имена полей: R8 их не переименует (см. ScanReportJson).
+            reportJson = ScanReportJson.toJson(report)))
     }
 
     suspend fun getLatestScan(): ScanHistory? = scanHistoryDao.getLatestScan()

@@ -41,9 +41,6 @@
 -keep class com.google.mlkit.** { *; }
 -dontwarn com.google.mlkit.**
 
-# Gson (FullScanOrchestrator)
--keep class com.google.gson.** { *; }
-
 # JSON (PhoneGuardVpnService)
 -keep class org.json.** { *; }
 
@@ -75,7 +72,6 @@
 -keep class com.phoneguard.fullscan.** { *; }
 -keep class com.phoneguard.antitheft.** { *; }
 -keep class com.phoneguard.spywarecheck.** { *; }
--keep class com.phoneguard.privacyscanner.** { *; }
 -keep class com.phoneguard.data.repository.** { *; }
 -keep class com.phoneguard.data.settings.** { *; }
 

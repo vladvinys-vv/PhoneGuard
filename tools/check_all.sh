@@ -17,6 +17,13 @@ step "gradle_check.py"
 python3 tools/gradle_check.py || failed=1
 python3 tools/gradle_check.py --self-test || failed=1
 
+step "proguard_check.py"
+# Правила R8 проверяются только релизной сборкой, которой в песочнице нет: правило для
+# несуществующего пакета создаёт «защиту без защиты», а отсутствие правила для рефлексии
+# падает лишь у пользователя релизной сборки.
+python3 tools/proguard_check.py || failed=1
+python3 tools/proguard_check.py --self-test || failed=1
+
 step "migration_check.py"
 # SQL-миграции Room против сущностей: пропущенная колонка = падение у обновляющихся
 # пользователей («Migration didn't properly handle»), а не просто красный тест.

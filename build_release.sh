@@ -28,17 +28,21 @@ VARIANT="$(capitalize "$FLAVOR")$(capitalize "$BUILD_TYPE")"
 echo "=== PhoneGuard Release Builder ==="
 echo ""
 
-# Для release нужен либо keystore.properties, либо KEYSTORE_PATH.
+# Для release нужен либо keystore.properties, либо KEYSTORE_PATH. Без подписи Gradle теперь
+# падает (`app/build.gradle`), поэтому неподписанная сборка включается только явным флагом —
+# так «зелёная» сборка не может оказаться непригодной для публикации незамеченной.
+UNSIGNED_FLAG=""
 if [ "$BUILD_TYPE" = "release" ]; then
     if [ -z "${KEYSTORE_PATH:-}" ] && [ ! -f keystore.properties ]; then
         echo "WARNING: keystore.properties не найден и KEYSTORE_PATH не задан —"
-        echo "         APK соберётся неподписанным (unsigned) и не будет принят Play Store."
+        echo "         APK/AAB соберутся НЕПОДПИСАННЫМИ и не будут приняты Play Store."
         echo "         Создайте keystore.properties:"
         echo "           storeFile=path/to/keystore.jks"
         echo "           storePassword=..."
         echo "           keyAlias=..."
         echo "           keyPassword=..."
         echo ""
+        UNSIGNED_FLAG="-PallowUnsignedRelease=true"
     fi
 fi
 
@@ -46,11 +50,13 @@ fi
 if command -v python3 >/dev/null 2>&1; then
     echo "--- Static audit"
     python3 tools/static_audit.py
+    echo "--- R8 rules"
+    python3 tools/proguard_check.py
     echo ""
 fi
 
 echo "Building $FLAVOR $BUILD_TYPE..."
-./gradlew clean "assemble${VARIANT}" --stacktrace
+./gradlew clean "assemble${VARIANT}" ${UNSIGNED_FLAG} --stacktrace
 
 APK_DIR="app/build/outputs/apk/${FLAVOR}/${BUILD_TYPE}"
 if ! compgen -G "${APK_DIR}/*.apk" >/dev/null 2>&1; then
@@ -69,7 +75,7 @@ done
 if [ "$BUILD_TYPE" = "release" ]; then
     echo ""
     echo "Building App Bundle for Play Store..."
-    ./gradlew "bundle${VARIANT}" --stacktrace
+    ./gradlew "bundle${VARIANT}" ${UNSIGNED_FLAG} --stacktrace
 
     if ! compgen -G "app/build/outputs/bundle/*/*.aab" >/dev/null 2>&1; then
         echo "ERROR: AAB не найден в app/build/outputs/bundle/"
