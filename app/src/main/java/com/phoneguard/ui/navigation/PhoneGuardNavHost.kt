@@ -47,6 +47,14 @@ sealed class Screen(val route: String, val title: Int, val icon: ImageVector) {
     object SecureVault : Screen("vault", R.string.secure_vault, Icons.Default.Lock)
     object FullScan : Screen("fullscan", R.string.full_scan, Icons.Default.Security)
     object PhoneCheck : Screen("phonecheck", R.string.phone_check, Icons.Default.PhonelinkSetup)
+
+    /**
+     * Защита чувствительных приложений.
+     *
+     * В нижней панели её нет намеренно: это не ежедневный экран, а настройка «один раз и
+     * забыл», но попасть на неё можно с дашборда и по ссылке `phoneguard://protect`.
+     */
+    object SensitiveApps : Screen("protect", R.string.sensitive_apps_nav_title, Icons.Default.Security)
 }
 
 /**
@@ -104,7 +112,17 @@ fun PhoneGuardNavHost(
                         onNavigateToSpywareCheck = { navController.navigate(Screen.SpywareCheck.route) },
                         onNavigateToFullScan = { navController.navigate(Screen.FullScan.route) },
                         onNavigateToSimSwap = { navController.navigate("simswap_history") },
-                        onNavigateToPhoneCheck = { navController.navigate(Screen.PhoneCheck.route) }
+                        onNavigateToPhoneCheck = { navController.navigate(Screen.PhoneCheck.route) },
+                        onNavigateToSensitiveApps = { navController.navigate(Screen.SensitiveApps.route) }
+                    )
+                }
+                composable(
+                    route = Screen.SensitiveApps.route,
+                    deepLinks = listOf(navDeepLink { uriPattern = "phoneguard://protect" })
+                ) {
+                    com.phoneguard.ui.screens.protect.SensitiveAppsScreen(
+                        viewModel = hiltViewModel(),
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(
