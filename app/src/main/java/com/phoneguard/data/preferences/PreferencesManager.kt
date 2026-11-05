@@ -135,6 +135,15 @@ class PreferencesManager(private val context: Context) {
         private val KEY_BLOCK_HIDDEN = booleanPreferencesKey("block_hidden")
         private val KEY_BLOCK_INTERNATIONAL = booleanPreferencesKey("block_international")
 
+        /**
+         * Пакеты, которые пользователь отметил как ценные (защита чувствительных приложений).
+         *
+         * Набор строк, а не список через запятую: имена пакетов запятую не содержат, но
+         * набор сам снимает вопрос склеивания и дублей. В файл переноса настроек ключ не
+         * попадает — в формате обмена нет типа «набор» (см. [exportableSettings]).
+         */
+        private val KEY_PROTECTED_APPS = stringSetPreferencesKey("protected_apps")
+
         // SimSwap
         private val KEY_LAST_KNOWN_IMSI = stringPreferencesKey("last_known_imsi")
         private val KEY_SIM_SWAP_CONFIRMED = booleanPreferencesKey("sim_swap_confirmed")
@@ -283,6 +292,22 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setLostModeActive(active: Boolean) {
         context.dataStore.edit { it[KEY_LOST_MODE_ACTIVE] = active }
+    }
+
+    // Защита чувствительных приложений
+    val protectedApps: Flow<Set<String>> =
+        context.dataStore.data.map { it[KEY_PROTECTED_APPS] ?: emptySet() }
+
+    /** Заменяет набор целиком: правила «что можно» живут в `protect/SensitiveAppPolicy`. */
+    suspend fun setProtectedApps(packages: Set<String>) {
+        context.dataStore.edit { edit ->
+            if (packages.isEmpty()) {
+                // Пустой набор — это отсутствие ключа, а не пустое множество в хранилище.
+                edit.remove(KEY_PROTECTED_APPS)
+            } else {
+                edit[KEY_PROTECTED_APPS] = packages
+            }
+        }
     }
 
     // Pro status

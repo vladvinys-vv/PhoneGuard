@@ -1,12 +1,15 @@
 package com.phoneguard.ui.screens.dashboard
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -38,7 +41,8 @@ fun DashboardScreen(
     onNavigateToSpywareCheck: () -> Unit,
     onNavigateToFullScan: () -> Unit,
     onNavigateToSimSwap: () -> Unit,
-    onNavigateToPhoneCheck: () -> Unit
+    onNavigateToPhoneCheck: () -> Unit,
+    onNavigateToSensitiveApps: () -> Unit
 ) {
     val score by viewModel.securityScore.collectAsState()
     val fullScanSummary by viewModel.fullScanSummary.collectAsState()
@@ -56,9 +60,12 @@ fun DashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // Дашборд прокручивается: карточек стало больше, и на невысоких экранах нижние
+    // («Смена SIM», «Защита приложений») просто обрезались — до них нельзя было дойти.
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -93,6 +100,53 @@ fun DashboardScreen(
         )
 
         SimSwapStatusCard(onClick = onNavigateToSimSwap)
+
+        SensitiveAppsCard(onClick = onNavigateToSensitiveApps)
+    }
+}
+
+/**
+ * Вход в «Защиту приложений».
+ *
+ * Карточка без цифр намеренно: сколько приложений отмечено и сколько рядом умеет
+ * подглядывать, зависит от установленных приложений и прав, а считать это на дашборде
+ * значило бы опрашивать `PackageManager` и `AppOps` при каждом возврате на экран.
+ */
+@Composable
+fun SensitiveAppsCard(onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Security,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.sensitive_apps_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = stringResource(R.string.sensitive_apps_card_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
