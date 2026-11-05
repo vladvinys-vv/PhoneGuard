@@ -101,6 +101,60 @@ class EncryptionManager @Inject constructor(
     }
 
     /**
+     * Отдаёт поток с расшифрованным содержимым файла сейфа — для выгрузки в переносимый архив.
+     *
+     * Копия на диск не создаётся: `EncryptedFile.openFileInput()` расшифровывает по мере
+     * чтения. Вызывающий код обязан закрыть поток; `null` — файла нет или имя подозрительное.
+     */
+    fun openDecryptedStream(item: VaultItem): InputStream? {
+        val source = existingVaultFileOrNull(item.fileName) ?: return null
+        return EncryptedFile.Builder(
+            source,
+            masterKey,
+            EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
+        ).build().openFileInput()
+    }
+
+    /**
+     * Кладёт в сейф содержимое из [input] — импорт файла из архива переноса.
+     *
+     * Отличается от [encryptFileToVault] тем, что источник — не `Uri`, а поток: имя,
+     * MIME-тип и дата создания уже известны из архива, а `ContentResolver` тут не при чём.
+     * Имя чистится и получает суффикс при совпадении, как у обычного импорта.
+     */
+    suspend fun encryptStreamToVault(
+        displayName: String,
+        mimeType: String,
+        createdAt: Long,
+        input: InputStream,
+        maxBytes: Long = MAX_FILE_SIZE_BYTES
+    ): VaultItem = withContext(Dispatchers.IO) {
+        val safeMime = mimeType.ifBlank { "application/octet-stream" }
+        val fileName = uniqueFileName(sanitizeFileName(displayName))
+        val encryptedFile = createEncryptedFile(fileName)
+        var written = 0L
+        try {
+            encryptedFile.openFileOutput().use { output ->
+                written = copyWithLimit(input, output, maxBytes)
+            }
+        } catch (e: Exception) {
+            // Недописанный файл в сейфе выглядел бы как целый.
+            File(vaultDir, fileName).delete()
+            throw e
+        }
+        val category = VaultItemKind.categoryOf(safeMime)
+        VaultItem(
+            fileName = fileName,
+            fileSize = written,
+            mimeType = safeMime,
+            encryptionKeyAlias = masterKey.keyAlias,
+            createdAt = createdAt,
+            isImage = category == VaultItemCategory.IMAGE,
+            category = category
+        )
+    }
+
+    /**
      * Расшифровывает файл во временный файл внутри [previewDir].
      *
      * В кэше держится ограниченное число копий ([VaultPreviewPolicy.MAX_PREVIEW_FILES]),

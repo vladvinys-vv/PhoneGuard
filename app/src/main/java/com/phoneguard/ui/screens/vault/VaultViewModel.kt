@@ -12,9 +12,11 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.phoneguard.data.repository.VaultRepository
+import com.phoneguard.data.transfer.VaultTransferManager
 import com.phoneguard.model.VaultItem
 import com.phoneguard.util.AnalyticsHelper
 import com.phoneguard.vault.EncryptionManager
+import com.phoneguard.vault.VaultArchiveFormat
 import com.phoneguard.vault.VaultSession
 import com.phoneguard.vault.VaultFileTooLargeException
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -63,7 +65,8 @@ class VaultViewModel @Inject constructor(
     private val repository: VaultRepository,
     @ApplicationContext private val context: Context,
     private val analyticsHelper: AnalyticsHelper,
-    private val vaultSession: VaultSession
+    private val vaultSession: VaultSession,
+    private val vaultTransferManager: VaultTransferManager
 ) : ViewModel() {
     val allItems = repository.allItems
 
@@ -275,6 +278,94 @@ class VaultViewModel @Inject constructor(
     /** Экран уже запустил интент — сбрасываем, чтобы не открывать его повторно. */
     fun consumePreview() {
         _previewIntent.value = null
+    }
+
+    /**
+     * Итог переноса сейфа — кодами, а не текстом: строки подставляет экран.
+     */
+    sealed class VaultTransferEvent {
+        /** Архив записан: путь и число файлов. */
+        data class VaultTransferSaved(val items: Int, val path: String) : VaultTransferEvent()
+
+        /** Файлы добавлены в сейф этого устройства. */
+        data class VaultTransferRestored(val items: Int) : VaultTransferEvent()
+
+        /** В сейфе нет файлов — переносить нечего. */
+        object VaultTransferEmpty : VaultTransferEvent()
+
+        /** Архив не принят; причина локализуется на экране. */
+        data class VaultTransferRefused(val reason: VaultArchiveFormat.Rejection) :
+            VaultTransferEvent()
+
+        /** Файл не открылся или не записался. */
+        object VaultTransferFailed : VaultTransferEvent()
+    }
+
+    private val _transferEvent = MutableStateFlow<VaultTransferEvent?>(null)
+    val transferEvent: StateFlow<VaultTransferEvent?> = _transferEvent.asStateFlow()
+
+    fun consumeTransferEvent() {
+        _transferEvent.value = null
+    }
+
+    /**
+     * Выгружает сейф в переносимый архив.
+     *
+     * Парольная фраза приходит из диалога и обнуляется сразу после использования: это
+     * единственное, что защищает архив на новом телефоне, и держать её в поле ViewModel
+     * (переживающем поворот экрана) нельзя.
+     */
+    fun exportVault(passphrase: CharArray) {
+        viewModelScope.launch {
+            val outcome = try {
+                vaultTransferManager.export(passphrase)
+            } catch (e: Exception) {
+                Log.w(TAG, "Экспорт сейфа не удался", e)
+                null
+            } finally {
+                passphrase.fill('\u0000')
+            }
+            _transferEvent.value = when (outcome) {
+                is VaultTransferManager.ExportOutcome.VaultExportDone ->
+                    VaultTransferEvent.VaultTransferSaved(
+                        items = outcome.items,
+                        path = outcome.file.absolutePath
+                    )
+                is VaultTransferManager.ExportOutcome.VaultExportRefused ->
+                    VaultTransferEvent.VaultTransferRefused(outcome.reason)
+                VaultTransferManager.ExportOutcome.VaultExportEmpty ->
+                    VaultTransferEvent.VaultTransferEmpty
+                VaultTransferManager.ExportOutcome.VaultExportFailed, null ->
+                    VaultTransferEvent.VaultTransferFailed
+            }
+        }
+    }
+
+    /**
+     * Восстанавливает файлы из архива в сейф этого устройства.
+     *
+     * Повторный импорт того же архива не перезаписывает файлы: совпадающие имена получают
+     * суффикс — потерять данные из-за случайного второго импорта нельзя.
+     */
+    fun importVault(uri: Uri, passphrase: CharArray) {
+        viewModelScope.launch {
+            val outcome = try {
+                vaultTransferManager.import(uri, passphrase)
+            } catch (e: Exception) {
+                Log.w(TAG, "Импорт сейфа не удался", e)
+                null
+            } finally {
+                passphrase.fill('\u0000')
+            }
+            _transferEvent.value = when (outcome) {
+                is VaultTransferManager.ImportOutcome.VaultImportDone ->
+                    VaultTransferEvent.VaultTransferRestored(outcome.items)
+                is VaultTransferManager.ImportOutcome.VaultImportRefused ->
+                    VaultTransferEvent.VaultTransferRefused(outcome.reason)
+                VaultTransferManager.ImportOutcome.VaultImportFailed, null ->
+                    VaultTransferEvent.VaultTransferFailed
+            }
+        }
     }
 
     fun importFile(uri: Uri, deleteOriginal: Boolean = false) {

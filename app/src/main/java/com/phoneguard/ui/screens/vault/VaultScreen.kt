@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -33,6 +34,7 @@ import com.phoneguard.R
 import com.phoneguard.model.VaultItem
 import com.phoneguard.model.VaultItemCategory
 import com.phoneguard.util.IntentUtils
+import com.phoneguard.vault.VaultArchiveFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -47,6 +49,9 @@ fun VaultScreen(
     val authError by viewModel.authError.collectAsState()
     val previewError by viewModel.previewError.collectAsState()
     val previewIntent by viewModel.previewIntent.collectAsState()
+    val transferEvent by viewModel.transferEvent.collectAsState()
+    var showExportDialog by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
     val context = LocalContext.current
     val view = LocalView.current
 
@@ -77,6 +82,13 @@ fun VaultScreen(
         }
     }
 
+    // Импорт сейфа: сначала выбираем файл архива, потом спрашиваем парольную фразу.
+    val vaultPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) pendingImportUri = uri
+    }
+
     // Автоблокировка: раньше сейф оставался разблокированным, если приложение
     // уходило в фон с открытым экраном сейфа (переключение задач, блокировка экрана).
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -86,6 +98,32 @@ fun VaultScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    if (showExportDialog) {
+        VaultPassphraseDialog(
+            title = stringResource(R.string.vault_export_vault),
+            confirmText = stringResource(R.string.vault_export_vault),
+            requireRepeat = true,
+            onDismiss = { showExportDialog = false },
+            onConfirm = { passphrase ->
+                showExportDialog = false
+                viewModel.exportVault(passphrase)
+            }
+        )
+    }
+
+    pendingImportUri?.let { uri ->
+        VaultPassphraseDialog(
+            title = stringResource(R.string.vault_import_vault),
+            confirmText = stringResource(R.string.vault_import_vault),
+            requireRepeat = false,
+            onDismiss = { pendingImportUri = null },
+            onConfirm = { passphrase ->
+                pendingImportUri = null
+                viewModel.importVault(uri, passphrase)
+            }
+        )
     }
 
     Scaffold(
@@ -138,6 +176,25 @@ fun VaultScreen(
                 }
             }
         } else {
+            Column(modifier = Modifier.padding(padding)) {
+                VaultTransferSection(
+                    onExport = { showExportDialog = true },
+                    onImport = { vaultPickerLauncher.launch(arrayOf("*/*")) }
+                )
+                transferEvent?.let { event ->
+                    Text(
+                        text = vaultTransferMessage(event),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    TextButton(
+                        onClick = { viewModel.consumeTransferEvent() },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            }
             authError?.let { error ->
                 Text(
                     text = vaultErrorMessage(error),
@@ -265,4 +322,139 @@ private fun vaultErrorMessage(error: VaultError): String = when (error) {
     is VaultError.ImportFailure ->
         stringResource(R.string.vault_import_failed, error.text ?: stringResource(R.string.error_generic))
     VaultError.PreviewFailure -> stringResource(R.string.vault_preview_failed)
+}
+
+/**
+ * Раздел «перенос сейфа» над списком файлов.
+ *
+ * Кнопки появляются только в разблокированном сейфе (весь экран уже под `FLAG_SECURE`):
+ * выгрузка расшифровывает все файлы, поэтому до биометрии её показывать нельзя.
+ */
+@Composable
+fun VaultTransferSection(onExport: () -> Unit, onImport: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                stringResource(R.string.vault_transfer_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                stringResource(R.string.vault_transfer_description),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onExport) {
+                    Text(stringResource(R.string.vault_export_vault))
+                }
+                OutlinedButton(onClick = onImport) {
+                    Text(stringResource(R.string.vault_import_vault))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Ввод парольной фразы для архива сейфа.
+ *
+ * Повтор нужен при создании архива: опечатка в единственном поле сделала бы файл
+ * неоткрываемым навсегда, а проверить это можно только на новом телефоне.
+ */
+@Composable
+private fun VaultPassphraseDialog(
+    title: String,
+    confirmText: String,
+    requireRepeat: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (CharArray) -> Unit
+) {
+    var passphrase by remember { mutableStateOf("") }
+    var repeated by remember { mutableStateOf("") }
+    val minLength = VaultArchiveFormat.MIN_PASSPHRASE_LENGTH
+    val tooShort = passphrase.isNotEmpty() && passphrase.length < minLength
+    val mismatch = requireRepeat && repeated.isNotEmpty() && repeated != passphrase
+    val canConfirm = passphrase.length >= minLength && (!requireRepeat || repeated == passphrase)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.vault_transfer_passphrase_hint, minLength))
+                OutlinedTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = { Text(stringResource(R.string.vault_passphrase)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true
+                )
+                if (requireRepeat) {
+                    OutlinedTextField(
+                        value = repeated,
+                        onValueChange = { repeated = it },
+                        label = { Text(stringResource(R.string.vault_passphrase_repeat)) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                }
+                if (tooShort) {
+                    Text(
+                        stringResource(R.string.vault_passphrase_too_short, minLength),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (mismatch) {
+                    Text(
+                        stringResource(R.string.vault_passphrase_mismatch),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(passphrase.toCharArray()) },
+                enabled = canConfirm
+            ) {
+                Text(confirmText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
+    )
+}
+
+/** Текст результата переноса — локализуется здесь, ViewModel отдаёт только коды. */
+@Composable
+private fun vaultTransferMessage(event: VaultViewModel.VaultTransferEvent): String = when (event) {
+    is VaultViewModel.VaultTransferEvent.VaultTransferSaved ->
+        stringResource(R.string.vault_export_saved, event.path, event.items)
+    is VaultViewModel.VaultTransferEvent.VaultTransferRestored ->
+        stringResource(R.string.vault_import_done, event.items)
+    VaultViewModel.VaultTransferEvent.VaultTransferEmpty ->
+        stringResource(R.string.vault_export_empty)
+    VaultViewModel.VaultTransferEvent.VaultTransferFailed ->
+        stringResource(R.string.vault_transfer_failed)
+    is VaultViewModel.VaultTransferEvent.VaultTransferRefused -> when (event.reason) {
+        VaultArchiveFormat.Rejection.EMPTY_PASSPHRASE,
+        VaultArchiveFormat.Rejection.WEAK_PASSPHRASE ->
+            stringResource(
+                R.string.vault_passphrase_too_short,
+                VaultArchiveFormat.MIN_PASSPHRASE_LENGTH
+            )
+        VaultArchiveFormat.Rejection.NOT_AN_ARCHIVE ->
+            stringResource(R.string.vault_import_not_archive)
+        VaultArchiveFormat.Rejection.UNSUPPORTED_VERSION ->
+            stringResource(R.string.vault_import_bad_version)
+        VaultArchiveFormat.Rejection.WRONG_PASSPHRASE_OR_CORRUPT ->
+            stringResource(R.string.vault_import_wrong_passphrase)
+        else -> stringResource(R.string.vault_import_corrupt)
+    }
 }
