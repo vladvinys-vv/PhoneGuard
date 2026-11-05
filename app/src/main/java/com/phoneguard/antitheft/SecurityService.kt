@@ -11,6 +11,8 @@ import android.os.VibratorManager
 import androidx.core.content.ContextCompat
 import com.phoneguard.R
 import com.phoneguard.data.preferences.PreferencesManager
+import com.phoneguard.util.NotificationChannelInstaller
+import com.phoneguard.util.NotificationChannels
 import com.phoneguard.util.SmsSender
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.Locale
@@ -213,6 +215,8 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
         sirenJob = sirenScope.launch {
             kotlinx.coroutines.delay(durationMs)
             releaseAlarm()
+            // Сирена отзвучала сама — временное предупреждение больше не актуально.
+            cancelTransientNotifications(NotificationChannels.StopReason.SIREN_EXPIRED)
             synchronized(this@AntiTheftSecurityServiceImpl) {
                 lostMode = LostModePolicy.onSirenSilenced(lostMode)
                 _lostModeActive.value = lostMode.lostModeActive
@@ -233,12 +237,27 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
 
     override suspend fun stopAlarm() {
         releaseAlarm()
+        // Раньше сирена замолкала, а уведомление о вторжении оставалось висеть до тапа:
+        // выглядело так, будто событие продолжается.
+        cancelTransientNotifications(NotificationChannels.StopReason.ALARM_STOPPED)
         synchronized(this) {
             lostMode = LostModePolicy.onStopAlarm(lostMode)
             _lostModeActive.value = lostMode.lostModeActive
             stateRestored = true
         }
         preferencesManager.setLostModeActive(false)
+    }
+
+    /**
+     * Гасит временные уведомления, относящиеся к остановленному событию.
+     *
+     * Список id — в чистой политике [NotificationChannels.cancelledIds], чтобы «что гасить при
+     * остановке тревоги» не расползалось по сервисам.
+     */
+    private fun cancelTransientNotifications(reason: NotificationChannels.StopReason) {
+        runCatching {
+            NotificationChannelInstaller.cancel(context, NotificationChannels.cancelledIds(reason))
+        }
     }
 
     /** Останавливает и освобождает плеер и вибрацию; состояние меняется отдельно, под блокировкой. */

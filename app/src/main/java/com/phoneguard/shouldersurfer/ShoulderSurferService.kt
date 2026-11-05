@@ -1,10 +1,11 @@
 package com.phoneguard.shouldersurfer
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
@@ -21,6 +22,8 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.phoneguard.R
+import com.phoneguard.util.NotificationChannels
+import com.phoneguard.util.NotificationChannelInstaller
 import com.phoneguard.util.BatteryOptimizationHelper
 import com.phoneguard.util.RetryBackoffPolicy
 import dagger.hilt.android.AndroidEntryPoint
@@ -75,9 +78,10 @@ class ShoulderSurferService : LifecycleService() {
     companion object {
         private const val TAG = "ShoulderSurfer"
 
-        private const val CHANNEL_ID = "shoulder_surfer_channel"
+        private val CHANNEL_ID: String = NotificationChannels.Spec.SHOULDER_SURFER.channelId
         private const val NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SHOULDER_SURFER_FOREGROUND
-        private const val ALERT_CHANNEL_ID = "shoulder_surfer_alert_channel"
+        private val ALERT_CHANNEL_ID: String =
+            NotificationChannels.Spec.SHOULDER_SURFER_ALERT.channelId
         private const val ALERT_NOTIFICATION_ID = com.phoneguard.util.NotificationIds.SHOULDER_SURFER_ALERT
         const val ACTION_START = "com.phoneguard.shouldersurfer.START"
         const val ACTION_STOP = "com.phoneguard.shouldersurfer.STOP"
@@ -145,27 +149,18 @@ class ShoulderSurferService : LifecycleService() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.shoulder_surfer_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.shoulder_surfer_channel_desc)
-            }
-            val alertChannel = NotificationChannel(
-                ALERT_CHANNEL_ID,
-                getString(R.string.shoulder_surfer_alert_channel_name),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = getString(R.string.shoulder_surfer_alert_channel_desc)
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 250, 250, 250)
-            }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-            manager.createNotificationChannel(alertChannel)
-        }
+        NotificationChannelInstaller.install(
+            this,
+            NotificationChannels.Spec.SHOULDER_SURFER,
+            getString(R.string.shoulder_surfer_channel_name),
+            getString(R.string.shoulder_surfer_channel_desc)
+        )
+        NotificationChannelInstaller.install(
+            this,
+            NotificationChannels.Spec.SHOULDER_SURFER_ALERT,
+            getString(R.string.shoulder_surfer_alert_channel_name),
+            getString(R.string.shoulder_surfer_alert_channel_desc)
+        )
     }
 
     private fun createNotification(): Notification {
@@ -255,6 +250,12 @@ class ShoulderSurferService : LifecycleService() {
 
     private fun stopDetection() {
         analysisJob?.cancel()
+        // Раньше предупреждение «кто-то смотрит в экран» оставалось висеть после остановки
+        // детектора: `setAutoCancel(true)` убирает его только по тапу пользователя.
+        NotificationChannelInstaller.cancel(
+            this,
+            NotificationChannels.cancelledIds(NotificationChannels.StopReason.DETECTION_STOPPED)
+        )
         // Анализатор снимаем до `unbindAll()`: иначе в очереди камеры остаются кадры,
         // которые после остановки сервиса продолжают вызывать `analyzeImage`.
         runCatching { boundAnalysis?.clearAnalyzer() }
@@ -362,8 +363,18 @@ class ShoulderSurferService : LifecycleService() {
             .setContentIntent(pendingIntent)
             .build()
 
+        // POST_NOTIFICATIONS (Android 13+): без разрешения уведомление не показывается, а
+        // вызов может бросить SecurityException из ML Kit-колбэка и уронить сервис.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "POST_NOTIFICATIONS не выдано — предупреждение о подглядывании не показывается")
+            return
+        }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(ALERT_NOTIFICATION_ID, notification)
+        runCatching { manager.notify(ALERT_NOTIFICATION_ID, notification) }
+            .onFailure { Log.w(TAG, "Не удалось показать предупреждение о подглядывании", it) }
     }
 
     /**

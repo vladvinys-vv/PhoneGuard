@@ -1,11 +1,7 @@
 package com.phoneguard.antitheft
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.camera.core.CameraSelector
@@ -17,6 +13,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import com.phoneguard.R
 import com.phoneguard.data.local.IntrusionEventDao
+import com.phoneguard.util.NotificationChannelInstaller
+import com.phoneguard.util.NotificationChannels
 import com.phoneguard.util.RetryBackoffPolicy
 import com.phoneguard.util.SmsSender
 import dagger.hilt.android.AndroidEntryPoint
@@ -61,7 +59,7 @@ class StealthCameraService : LifecycleService() {
 
         private const val TAG = "StealthCameraService"
         private const val NOTIFICATION_ID = com.phoneguard.util.NotificationIds.STEALTH_CAMERA
-        private const val CHANNEL_ID = "stealth_camera_channel"
+        private val CHANNEL_ID: String = NotificationChannels.Spec.STEALTH_CAMERA.channelId
         private const val CAPTURE_TIMEOUT_MS = 20_000L
     }
 
@@ -96,15 +94,12 @@ class StealthCameraService : LifecycleService() {
     }
 
     private fun createNotification(): Notification {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.stealth_camera_title),
-                NotificationManager.IMPORTANCE_MIN
-            )
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            nm.createNotificationChannel(channel)
-        }
+        // Канал — из общей таблицы: важность MIN (уведомление не должно быть заметным).
+        NotificationChannelInstaller.install(
+            this,
+            NotificationChannels.Spec.STEALTH_CAMERA,
+            getString(R.string.stealth_camera_title)
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.stealth_camera_title))
