@@ -187,6 +187,8 @@
     <string name="sms_permission_rationale">SMS permission is required for remote commands and SIM change alerts</string>
     <string name="camera_permission_rationale">Camera access is required to take photos on failed unlock attempts</string>
     <string name="phone_state_permission_rationale">Phone state access is required for SIM change detection</string>
+    <string name="notifications_permission_rationale">Notification permission is required for intrusion warnings</string>
+    <string name="protection_degraded_title">Protection is degraded</string>
     
     <!-- Errors -->
     <string name="error_generic">An error occurred</string>

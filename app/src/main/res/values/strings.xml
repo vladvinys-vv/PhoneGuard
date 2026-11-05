@@ -193,6 +193,8 @@
     <string name="sms_permission_rationale">Разрешение на SMS необходимо для удалённых команд и оповещений о смене SIM</string>
     <string name="camera_permission_rationale">Доступ к камере необходим для фотографирования при неудачных попытках разблокировки</string>
     <string name="phone_state_permission_rationale">Доступ к состоянию телефона необходим для обнаружения смены SIM</string>
+    <string name="notifications_permission_rationale">Разрешение на уведомления необходимо для предупреждений о вторжении</string>
+    <string name="protection_degraded_title">Защита работает не полностью</string>
     
     <!-- Errors -->
     <string name="error_generic">Произошла ошибка</string>
