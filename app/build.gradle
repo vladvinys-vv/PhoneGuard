@@ -10,24 +10,46 @@ plugins {
 // ВАЖНО: это Groovy DSL, а не Kotlin DSL. Здесь нет `mapOf(...)`, `listOf(...)` и прочих
 // функций stdlib Kotlin — их вызов падает на этапе конфигурации с MissingMethodException
 // (именно так ломался `./gradlew lintDebug`). Все свойства задаются через `=`.
+// ── Подпись и версия релиза ──────────────────────────────────────────────────────────────
+// `keystore.properties` живёт вне репозитория (.gitignore); в CI его создаёт шаг
+// «Materialise release keystore» из секретов Codemagic.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+def releaseStorePath = keystoreProperties['storeFile'] ?: System.getenv("KEYSTORE_PATH")
+if (releaseStorePath != null) {
+    releaseStorePath = releaseStorePath.toString().trim()
+}
+// `file("")` — это каталог проекта, то есть «существует»: пустое `storeFile=` раньше включало
+// signingConfig с пустыми паролями и роняло сборку невнятной ошибкой. Теперь нужен именно файл.
+def hasReleaseKeystore = releaseStorePath && file(releaseStorePath).isFile()
+
+// Версию задаёт CI: `-PpgVersionCode=… -PpgVersionName=…` (или PG_VERSION_CODE/PG_VERSION_NAME).
+// Без них — прежние значения по умолчанию. Раньше `versionCode` был зашит единицей: второй
+// релизный сбор из тега получал тот же versionCode, который Play уже не принимает.
+def defaultVersionCode = 1
+def defaultVersionName = "1.0.0"
+def versionCodeValue = (project.findProperty("pgVersionCode") ?: System.getenv("PG_VERSION_CODE") ?: defaultVersionCode).toString().trim()
+def versionNameValue = (project.findProperty("pgVersionName") ?: System.getenv("PG_VERSION_NAME") ?: defaultVersionName).toString().trim()
+if (!(versionCodeValue ==~ /\d+/) || versionCodeValue.toInteger() < 1) {
+    throw new GradleException("PhoneGuard: pgVersionCode должен быть целым числом >= 1, получено «${versionCodeValue}»")
+}
+if (versionNameValue.isEmpty()) {
+    throw new GradleException("PhoneGuard: pgVersionName не может быть пустым")
+}
+
 android {
     namespace = 'com.phoneguard'
     compileSdk = 35
-
-    def keystorePropertiesFile = rootProject.file("keystore.properties")
-    def keystoreProperties = new Properties()
-    if (keystorePropertiesFile.exists()) {
-        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-    }
-    def releaseStorePath = keystoreProperties['storeFile'] ?: System.getenv("KEYSTORE_PATH")
-    def hasReleaseKeystore = releaseStorePath != null && file(releaseStorePath).exists()
 
     defaultConfig {
         applicationId = "com.phoneguard"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = versionCodeValue.toInteger()
+        versionName = versionNameValue
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -138,6 +160,30 @@ android {
     }
 }
 
+// Раньше `assembleProductionRelease` без keystore молча собирал НЕПОДПИСАННЫЙ apk: сборка
+// зелёная, артефакт для публикации негоден. Теперь релизная сборка без подписи падает,
+// если явно не разрешено `-PallowUnsignedRelease=true` (проверочные сборки в CI).
+def allowUnsignedRelease = project.hasProperty("allowUnsignedRelease") &&
+        project.property("allowUnsignedRelease").toString().toBoolean()
+
+gradle.taskGraph.whenReady { graph ->
+    if (hasReleaseKeystore || allowUnsignedRelease) {
+        return
+    }
+    def unsignedReleaseTasks = graph.allTasks.findAll { task ->
+        task.project == project && task.name ==~ /(assemble|bundle|package|minify).*Release/
+    }
+    if (!unsignedReleaseTasks.isEmpty()) {
+        throw new GradleException(
+            "PhoneGuard: нет keystore для подписи (задачи: " +
+            unsignedReleaseTasks.collect { it.name }.join(", ") + "). " +
+            "Создай keystore.properties (storeFile, storePassword, keyAlias, keyPassword) " +
+            "или задай KEYSTORE_PATH/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD. " +
+            "Для проверочной сборки без подписи добавь -PallowUnsignedRelease=true."
+        )
+    }
+}
+
 dependencies {
     // Core Android
     implementation "androidx.core:core-ktx:$rootProject.ext.core_ktx_version"
@@ -180,7 +226,6 @@ dependencies {
     implementation "androidx.sqlite:sqlite:2.6.2"
 
     // JSON serialization for scan reports
-    implementation "com.google.code.gson:gson:2.11.0"
 
     // Phone number parsing / E.164 normalisation (google/libphonenumber)
     implementation "com.googlecode.libphonenumber:libphonenumber:$rootProject.ext.libphonenumber_version"

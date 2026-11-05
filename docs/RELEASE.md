@@ -26,8 +26,13 @@ Optionally also `python3 tools/kotlin_analysis.py` (needs `tree-sitter` + `tree-
 parses every `.kt` file and reports syntax errors and suspend calls outside a suspend context. Without
 the parser installed the script prints a hint and exits 0.
 
-`python3 tools/sync_strings.py --check` must exit 0 (636 keys in each of `values`, `values-en`,
+`python3 tools/sync_strings.py --check` must exit 0 (645 keys in each of `values`, `values-en`,
 `values-ru`, `values-de`); it reports exactly which keys are missing instead of writing files.
+
+`python3 tools/proguard_check.py` must also pass: it сверяет `app/proguard-rules.pro` с кодом и
+зависимостями (правило для несуществующего пакета, рефлексия без `-keep`, отсутствие `Signature`).
+Эти ошибки видны только на релизной сборке, поэтому проверка стоит в `check_all.sh` и первым
+шагом в `build_release.sh`.
 
 1. **No Firebase / no telemetry**
    - The app intentionally has **no** Firebase (Analytics, Crashlytics, Performance) and no `google-services.json`.
@@ -39,15 +44,29 @@ the parser installed the script prints a hint and exits 0.
 2. **Signing Config**
    - Generate release keystore: `keytool -genkey -v -keystore phoneguard.jks -keyalg RSA -keysize 2048 -validity 10000`
    - Store in secure location, add path/passwords to `keystore.properties` or env variables
+     (`KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`)
    - Never commit `keystore.properties` or `.jks` to version control
+   - **Релизная сборка без keystore теперь падает**, а не собирает молча неподписанный APK:
+     `app/build.gradle` проверяет граф задач и выбрасывает `GradleException` с подсказкой.
+     Для проверочной сборки без подписи нужен явный флаг `-PallowUnsignedRelease=true`
+     (`build_release.sh` добавляет его сам и печатает предупреждение).
+   - В Codemagic keystore материализуется из секретов `KEYSTORE_BASE64`,
+     `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` шагом «Materialise release keystore»;
+     для тега `v*` без keystore сборка падает — публикационный артефакт без подписи бессмысленен.
 
-3. **Build Flavors**
+3. **Version and Build Flavors**
+   - `versionCode`/`versionName` берутся из `-PpgVersionCode=…`/`-PpgVersionName=…` (или
+     `PG_VERSION_CODE`/`PG_VERSION_NAME`), по умолчанию — `1` и `1.0.0`. В Codemagic тег
+     `v1.2.3` превращается в `versionName 1.2.3` и `versionCode 10203`; тег другого формата и
+     `pgVersionCode < 1` считаются ошибкой. Зашитая единица давала одинаковый `versionCode`
+     у разных релизов, а такой AAB Play не принимает.
    - `./build_release.sh production release` — проверки, затем APK **и** AAB одной командой
-     (`app/build/outputs/apk/production/release/*.apk`, `app/build/outputs/bundle/*/*.aab`);
-     без `keystore.properties`/`KEYSTORE_PATH` скрипт предупреждает, что APK неподписанный
+     (`app/build/outputs/apk/production/release/*.apk`, `app/build/outputs/bundle/*/*.aab`)
    - `./gradlew assembleProductionRelease` — только production APK
    - `./gradlew assembleStagingRelease` — staging build for testing
    - `./gradlew bundleProductionRelease` — только Play Store App Bundle
+   - `mapping.txt` (`app/build/outputs/mapping/**`) сохраняется как артефакт CI: без него
+     стек-трейс релизной сборки не разобрать.
 
 4. **Play Store Assets**
    - Screenshots: phone (320dp, 384dp, 480dp), tablet (600dp, 720dp), foldable

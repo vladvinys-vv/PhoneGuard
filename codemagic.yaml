@@ -45,6 +45,8 @@ workflows:
         script: chmod +x ./gradlew
       - name: Gradle scripts check
         script: python3 tools/gradle_check.py
+      - name: R8 rules check
+        script: python3 tools/proguard_check.py
       - name: Room migrations check
         script: python3 tools/migration_check.py
       - name: Static audit
@@ -77,14 +79,71 @@ workflows:
           fi
       - name: Resources and manifest (aapt2)
         script: python3 tools/aapt2_check.py
+      # Keystore приходит из секретов Codemagic (KEYSTORE_BASE64, KEYSTORE_PASSWORD,
+      # KEY_ALIAS, KEY_PASSWORD). Без него релизная сборка теперь падает на guard'е в
+      # app/build.gradle — молча собрать неподписанный APK больше нельзя.
+      - name: Materialise release keystore
+        script: |
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "KEYSTORE_BASE64 не задан — релизная сборка пойдёт как проверочная (без подписи)"
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$CM_BUILD_DIR/app/release.keystore"
+          {
+            echo "storeFile=release.keystore"
+            echo "storePassword=${KEYSTORE_PASSWORD:-}"
+            echo "keyAlias=${KEY_ALIAS:-}"
+            echo "keyPassword=${KEY_PASSWORD:-}"
+          } > "$CM_BUILD_DIR/keystore.properties"
+          echo "keystore готов: $CM_BUILD_DIR/app/release.keystore"
+
       - name: Lint
         script: ./gradlew lintProductionDebug --no-daemon --stacktrace
       - name: Unit tests
         script: ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
       - name: Build production debug APK
         script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
-      - name: Build production release APK
-        script: ./gradlew assembleProductionRelease --no-daemon --stacktrace
+      # versionCode/versionName: из тега `v1.2.3` → code 10203, иначе — build number.
+      # Зашитая в build.gradle единица давала одинаковый versionCode у разных релизов,
+      # а такой APK/AAB Play не принимает.
+      - name: Build production release APK and bundle
+        script: |
+          VERSION_NAME=""
+          VERSION_CODE=""
+          if [ -n "${CM_TAG:-}" ]; then
+            case "$CM_TAG" in
+              v[0-9]*.[0-9]*.[0-9]*) ;;
+              *)
+                echo "Тег ${CM_TAG} не в формате vMAJOR.MINOR.PATCH — версию определить нельзя"
+                exit 1
+                ;;
+            esac
+            VERSION_NAME="${CM_TAG#v}"
+            MAJOR="$(echo "$VERSION_NAME" | cut -d. -f1)"
+            MINOR="$(echo "$VERSION_NAME" | cut -d. -f2)"
+            PATCH="$(echo "$VERSION_NAME" | cut -d. -f3)"
+            VERSION_CODE="$((MAJOR * 10000 + MINOR * 100 + PATCH))"
+          else
+            VERSION_CODE="${BUILD_NUMBER:-1}"
+            VERSION_NAME="0.0.${VERSION_CODE}"
+          fi
+          echo "сборка версии ${VERSION_NAME} (versionCode ${VERSION_CODE})"
+
+          UNSIGNED=""
+          if [ ! -f "$CM_BUILD_DIR/keystore.properties" ]; then
+            # Тег — публикационный сбор: без подписи он не имеет смысла.
+            case "${CM_TAG:-}" in
+              v*)
+                echo "Тег ${CM_TAG}, а keystore нет — публикационная сборка без подписи невозможна"
+                exit 1
+                ;;
+            esac
+            UNSIGNED="-PallowUnsignedRelease=true"
+            echo "ВНИМАНИЕ: keystore нет — APK/AAB будут неподписанными (только для проверки)"
+          fi
+          ./gradlew assembleProductionRelease bundleProductionRelease \
+            -PpgVersionCode="$VERSION_CODE" -PpgVersionName="$VERSION_NAME" \
+            $UNSIGNED --no-daemon --stacktrace
       # Play с 01.11.2025 требует 16 КБ страницы памяти для targetSdk 35 — проверяем фактический APK.
       - name: Verify 16 KB page alignment
         script: |
@@ -104,6 +163,8 @@ workflows:
     artifacts:
       - app/build/outputs/**/*.apk
       - app/build/outputs/**/*.aab
+      # mapping.txt нужен, чтобы разобрать стек-трейс из релизной сборки.
+      - app/build/outputs/mapping/**
       - app/build/reports/lint-results-debug.html
       - app/build/reports/tests/**
 
