@@ -134,7 +134,17 @@ class SmsSpamReceiver : BroadcastReceiver() {
             val stored = normalized ?: rawSender
             runCatching {
                 appDatabase.blockedLogDao().insertBlockedLog(
-                    BlockedLog(phoneNumber = stored, isSms = true)
+                    BlockedLog(
+                        phoneNumber = stored,
+                        isSms = true,
+                        // Причина та же, что у звонков: журнал и жалоба читают её как
+                        // `CallBlockDecision.BlockReason.name`.
+                        reason = if (blockedByNumber) {
+                            CallBlockDecision.BlockReason.BLACKLISTED.name
+                        } else {
+                            CallBlockDecision.BlockReason.SPAM_DATABASE.name
+                        }
+                    )
                 )
             }
             analyticsHelper.logCallBlocked(isSms = true)

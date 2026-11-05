@@ -1,5 +1,6 @@
 package com.phoneguard.callblocker
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,6 +80,59 @@ class CallBlockDecisionTest {
                 parsed.copy(blockInternational = true, foreignNumber = false)
             )
         )
+    }
+
+    @Test
+    fun `reason matches every blocking branch`() {
+        assertEquals(
+            CallBlockDecision.BlockReason.BLACKLISTED,
+            CallBlockDecision.reason(CallBlockDecision.Facts(blacklisted = true))
+        )
+        assertEquals(
+            CallBlockDecision.BlockReason.SPAM_DATABASE,
+            CallBlockDecision.reason(CallBlockDecision.Facts(spamDatabase = true))
+        )
+        assertEquals(
+            CallBlockDecision.BlockReason.HIDDEN_NUMBER,
+            CallBlockDecision.reason(
+                CallBlockDecision.Facts(callerIdHidden = true, blockHidden = true)
+            )
+        )
+        assertEquals(
+            CallBlockDecision.BlockReason.UNPARSEABLE_NUMBER,
+            CallBlockDecision.reason(
+                CallBlockDecision.Facts(numberParsed = false, blockUnknown = true)
+            )
+        )
+        assertEquals(
+            CallBlockDecision.BlockReason.INTERNATIONAL,
+            CallBlockDecision.reason(
+                CallBlockDecision.Facts(
+                    numberParsed = true,
+                    blockInternational = true,
+                    foreignNumber = true
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `reason is null exactly when the call is not blocked`() {
+        // Причина у пропущенного звонка означала бы, что журнал врёт о решении.
+        val cases = listOf(
+            CallBlockDecision.Facts(),
+            CallBlockDecision.Facts(whitelisted = true, blacklisted = true),
+            CallBlockDecision.Facts(callerIdHidden = true),
+            CallBlockDecision.Facts(numberParsed = false),
+            CallBlockDecision.Facts(numberParsed = true, blockInternational = true, foreignNumber = false)
+        )
+        cases.forEach { facts ->
+            assertEquals(
+                "решение и причина разошлись для $facts",
+                CallBlockDecision.shouldBlock(facts),
+                CallBlockDecision.reason(facts) != null
+            )
+        }
     }
 
     @Test

@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.phoneguard.callblocker.BnetzaIncidentPolicy
+import com.phoneguard.callblocker.BnetzaReportManager
+import com.phoneguard.data.local.AppDatabase
 import com.phoneguard.data.local.BlockedLog
 import com.phoneguard.data.local.BlockedNumber
 import com.phoneguard.data.preferences.PreferencesManager
@@ -20,7 +23,8 @@ import javax.inject.Inject
 @HiltViewModel
 class CallBlockerViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
-    private val appDatabase: com.phoneguard.data.local.AppDatabase,
+    private val bnetzaReportManager: BnetzaReportManager,
+    private val appDatabase: AppDatabase,
     @ApplicationContext private val context: Context,
     private val csvImportHelper: CsvImportHelper,
     private val phoneNumberNormalizer: PhoneNumberNormalizer
@@ -48,6 +52,45 @@ class CallBlockerViewModel @Inject constructor(
 
     private val _hasMoreLogs = MutableStateFlow(false)
     val hasMoreLogs: StateFlow<Boolean> = _hasMoreLogs.asStateFlow()
+
+    /**
+     * Итог формирования жалобы в Bundesnetzagentur — без готовых строк, их локализует UI.
+     */
+    sealed class BnetzaResult {
+        data class Ready(val incidents: Int, val path: String) : BnetzaResult()
+        object NoIncidents : BnetzaResult()
+        object NoContact : BnetzaResult()
+        object Failed : BnetzaResult()
+    }
+
+    private val _bnetzaResult = MutableStateFlow<BnetzaResult?>(null)
+    val bnetzaResult: StateFlow<BnetzaResult?> = _bnetzaResult.asStateFlow()
+
+    fun consumeBnetzaResult() {
+        _bnetzaResult.value = null
+    }
+
+    /**
+     * Собирает жалобу за последние 90 дней и сохраняет два файла в `exports/`.
+     *
+     * Отправку не делаем даже кнопкой «отправить»: в жалобе данные пользователя, решение
+     * остаётся за ним. Интерфейс только показывает, где лежат файлы.
+     */
+    fun createBnetzaComplaint() = viewModelScope.launch {
+        _bnetzaResult.value = when (val result = bnetzaReportManager.generate()) {
+            is BnetzaReportManager.Result.Ready ->
+                BnetzaResult.Ready(result.incidents, result.textFile.absolutePath)
+            is BnetzaReportManager.Result.NotReady -> {
+                val issues = result.issues
+                when {
+                    BnetzaIncidentPolicy.Issue.REPORTER_MISSING in issues ->
+                        BnetzaResult.NoContact
+                    else -> BnetzaResult.NoIncidents
+                }
+            }
+            BnetzaReportManager.Result.Failed -> BnetzaResult.Failed
+        }
+    }
 
     private val pageSize = 20
     private val blacklistOffset = MutableStateFlow(0)

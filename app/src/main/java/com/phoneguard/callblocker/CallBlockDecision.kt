@@ -40,6 +40,51 @@ internal object CallBlockDecision {
         val foreignNumber: Boolean = false
     )
 
+    /**
+     * Почему звонок был отклонён.
+     *
+     * Причина нужна за пределами блокировки: журнал блокировок показывает её пользователю,
+     * а жалоба в Bundesnetzagentur без причины невозможна (там требуется категория
+     * нарушения). До этого причина вычислялась и выбрасывалась — в `BlockedLog` оставались
+     * только номер и время, поэтому «самую частую причину блокировок» показать было нельзя.
+     */
+    enum class BlockReason {
+        /** Номер в чёрном списке пользователя. */
+        BLACKLISTED,
+
+        /** Номер найден в локальной спам-базе. */
+        SPAM_DATABASE,
+
+        /** Номер скрыт или не передан оператором. */
+        HIDDEN_NUMBER,
+
+        /** Номер есть, но не приводится к E.164 (буквенный sender id, мусор). */
+        UNPARSEABLE_NUMBER,
+
+        /** Международный номер при включённой настройке. */
+        INTERNATIONAL
+    }
+
+    /**
+     * Причина блокировки или `null`, если звонок не блокируется.
+     *
+     * Порядок тот же, что в [shouldBlock]: результат одной функции не должен расходиться
+     * с другой, иначе в журнале окажется причина у пропущенного звонка (или наоборот).
+     */
+    fun reason(facts: Facts): BlockReason? = when {
+        facts.whitelisted -> null
+        facts.blacklisted -> BlockReason.BLACKLISTED
+        facts.spamDatabase -> BlockReason.SPAM_DATABASE
+        facts.callerIdHidden -> if (facts.blockHidden || facts.blockUnknown) {
+            BlockReason.HIDDEN_NUMBER
+        } else {
+            null
+        }
+        !facts.numberParsed -> if (facts.blockUnknown) BlockReason.UNPARSEABLE_NUMBER else null
+        facts.blockInternational && facts.foreignNumber -> BlockReason.INTERNATIONAL
+        else -> null
+    }
+
     /** @return `true`, если звонок нужно отклонить */
     fun shouldBlock(facts: Facts): Boolean = when {
         // 1. Белый список важнее любых правил: его выставляет сам пользователь.
