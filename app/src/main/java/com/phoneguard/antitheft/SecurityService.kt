@@ -176,6 +176,12 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
             }.getOrNull()
         }
 
+        // Пока сирена играет, процесс обязан быть foreground: иначе система убивает его
+        // при первой нехватке памяти, и тревога обрывается. Сервис звуком не управляет —
+        // только держит процесс (см. [AlarmHoldService]).
+        if (alarmPlayer != null) {
+            AlarmHoldService.start(context)
+        }
         return alarmPlayer != null
     }
 
@@ -263,6 +269,7 @@ class AntiTheftSecurityServiceImpl @Inject constructor(
     /** Останавливает и освобождает плеер и вибрацию; состояние меняется отдельно, под блокировкой. */
     @Synchronized
     private fun releaseAlarm() {
+        AlarmHoldService.stop(context)
         runCatching { alarmPlayer?.stop() }
         runCatching { alarmPlayer?.release() }
         alarmPlayer = null

@@ -214,6 +214,18 @@
             android:foregroundServiceType="camera"
             android:exported="false" />
 
+        <!-- Удержание тревоги: foreground-уведомление, пока звучит сирена.
+             Без него система убивает фоновый процесс, и сирена обрывается; при убийстве
+             процесса сервис поднимается заново (START_STICKY) и восстанавливает тревогу. -->
+        <service
+            android:name=".antitheft.AlarmHoldService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="alarm_siren" />
+        </service>
+
         <!-- Shoulder Surfer Detection Service -->
         <service
             android:name=".shouldersurfer.ShoulderSurferService"

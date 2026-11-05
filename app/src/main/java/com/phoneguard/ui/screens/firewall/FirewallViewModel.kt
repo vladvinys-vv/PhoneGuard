@@ -203,7 +203,10 @@ class FirewallViewModel @Inject constructor(
         try {
             context.startService(intent)
         } catch (e: Exception) {
-            // Сервис мог быть уже остановлен системой.
+            // Из фона `startService` бросает `IllegalStateException` (Android 8+). Раньше
+            // команда терялась: переключатель показывал «выключено», а туннель продолжал
+            // работать. `stopService` разрешён всегда, а туннель закрывает `onDestroy`.
+            runCatching { context.stopService(intent) }
         }
         _isVpnActive.value = false
     }

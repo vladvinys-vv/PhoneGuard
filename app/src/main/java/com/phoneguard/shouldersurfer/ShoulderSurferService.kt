@@ -110,12 +110,17 @@ class ShoulderSurferService : LifecycleService() {
             }
         }
 
+        /**
+         * Останавливает детектор.
+         *
+         * Раньше здесь был `startService(ACTION_STOP)`: из фона (Android 8+) он бросает
+         * `IllegalStateException`, команда «остановить» терялась — интерфейс показывал
+         * «выключено», а камера продолжала работать. `stopService` разрешён из любого
+         * состояния, а очистку делает `onDestroy` сервиса.
+         */
         fun stop(context: Context): Boolean {
-            val intent = Intent(context, ShoulderSurferService::class.java).apply {
-                action = ACTION_STOP
-            }
             return try {
-                context.startService(intent)
+                context.stopService(Intent(context, ShoulderSurferService::class.java))
                 true
             } catch (e: Exception) {
                 Log.w(TAG, "Shoulder surfer service stop failed", e)

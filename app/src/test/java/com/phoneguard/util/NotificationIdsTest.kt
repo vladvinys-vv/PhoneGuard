@@ -23,7 +23,8 @@ class NotificationIdsTest {
         "SMS_ALARM" to NotificationIds.SMS_ALARM,
         "STEALTH_CAMERA" to NotificationIds.STEALTH_CAMERA,
         "INTRUSION_WARNING" to NotificationIds.INTRUSION_WARNING,
-        "SMS_COMMAND_REJECTED" to NotificationIds.SMS_COMMAND_REJECTED
+        "SMS_COMMAND_REJECTED" to NotificationIds.SMS_COMMAND_REJECTED,
+        "ALARM_HOLD" to NotificationIds.ALARM_HOLD
     )
 
     @Test

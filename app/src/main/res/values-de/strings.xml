@@ -674,4 +674,6 @@
     <string name="sim_swap_channel_description">Rückfragen zum SIM-Wechsel und Warnungen vor SIM-Tausch</string>
     <string name="intrusion_warning_channel_name">Eindringlingswarnungen</string>
     <string name="intrusion_warning_channel_description">Hinweise auf verdächtige Aktivität auf dem Gerät</string>
+    <string name="alarm_hold_title">Alarm ist aktiv</string>
+    <string name="alarm_hold_text">PhoneGuard hält die Sirene aktiv und wartet auf Ihre Eingabe</string>
 </resources>
