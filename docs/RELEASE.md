@@ -30,9 +30,19 @@ the parser installed the script prints a hint and exits 0.
 `values-ru`, `values-de`); it reports exactly which keys are missing instead of writing files.
 
 `python3 tools/proguard_check.py` must also pass: it сверяет `app/proguard-rules.pro` с кодом и
-зависимостями (правило для несуществующего пакета, рефлексия без `-keep`, отсутствие `Signature`).
-Эти ошибки видны только на релизной сборке, поэтому проверка стоит в `check_all.sh` и первым
-шагом в `build_release.sh`.
+зависимостями (правило для несуществующего пакета, рефлексия без `-keep`, отсутствие `Signature`,
+доля собственных классов под `-keep`, сохранение имён констант enum). Эти ошибки видны только на
+релизной сборке, поэтому проверка стоит в `check_all.sh` и первым шагом в `build_release.sh`.
+
+**После** релизной сборки — проверка настоящего `mapping.txt` (артефакт Codemagic):
+
+```bash
+python3 tools/proguard_check.py --mapping app/build/outputs/mapping/release/mapping.txt
+```
+
+Скрипт падает, если обфускация фактически не произошла (все собственные классы отображаются сами
+в себя) или если R8 переименовал константы enum: они хранятся в SQLite и в файле переноса
+настроек строкой, и после обновления старые данные перестали бы читаться — молча.
 
 1. **No Firebase / no telemetry**
    - The app intentionally has **no** Firebase (Analytics, Crashlytics, Performance) and no `google-services.json`.
