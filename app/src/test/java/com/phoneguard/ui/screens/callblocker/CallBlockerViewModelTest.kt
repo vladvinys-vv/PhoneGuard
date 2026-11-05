@@ -1,10 +1,13 @@
 package com.phoneguard.ui.screens.callblocker
 
+import com.phoneguard.callblocker.BnetzaIncidentPolicy
+import com.phoneguard.callblocker.BnetzaReportManager
 import com.phoneguard.data.local.BlockedLogDao
 import com.phoneguard.data.local.BlockedNumberDao
 import com.phoneguard.data.preferences.PreferencesManager
 import com.phoneguard.util.CsvImportHelper
 import com.phoneguard.util.PhoneNumberNormalizer
+import java.io.File
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -33,6 +36,7 @@ class CallBlockerViewModelTest {
     private val blockedNumberDao: BlockedNumberDao = mockk(relaxed = true)
     private val blockedLogDao: BlockedLogDao = mockk(relaxed = true)
     private val phoneNumberNormalizer = PhoneNumberNormalizer(context)
+    private val bnetzaReportManager = mockk<BnetzaReportManager>(relaxed = true)
 
     @Before
     fun setup() {
@@ -48,7 +52,10 @@ class CallBlockerViewModelTest {
         coEvery { blockedNumberDao.getWhitelistCount() } returns 0
         coEvery { blockedLogDao.getPagedBlockedLogs(any(), any()) } returns emptyList()
         coEvery { blockedLogDao.getBlockedLogsCount() } returns 0
-        viewModel = CallBlockerViewModel(preferencesManager, appDatabase, context, csvImportHelper, phoneNumberNormalizer)
+        viewModel = CallBlockerViewModel(
+            preferencesManager, bnetzaReportManager, appDatabase, context,
+            csvImportHelper, phoneNumberNormalizer
+        )
     }
 
     @After
@@ -84,5 +91,51 @@ class CallBlockerViewModelTest {
                 }
             )
         }
+    }
+
+    @Test
+    fun `bnetza complaint reports where the files were written`() = runTest {
+        coEvery { bnetzaReportManager.generate(any()) } returns
+            BnetzaReportManager.Result.Ready(
+                incidents = 2,
+                textFile = File("/exports/bnetza.txt"),
+                csvFile = File("/exports/bnetza.csv")
+            )
+
+        viewModel.createBnetzaComplaint()
+
+        assertEquals(
+            CallBlockerViewModel.BnetzaResult.Ready(2, "/exports/bnetza.txt"),
+            viewModel.bnetzaResult.value
+        )
+        viewModel.consumeBnetzaResult()
+        assertNull(viewModel.bnetzaResult.value)
+    }
+
+    @Test
+    fun `missing contact is reported separately from missing incidents`() = runTest {
+        // Пользователю нужно разное действие: в первом случае — вписать номер, во втором —
+        // ждать/ничего не делать. Одно сообщение на оба случая бесполезно.
+        coEvery { bnetzaReportManager.generate(any()) } returns
+            BnetzaReportManager.Result.NotReady(
+                listOf(BnetzaIncidentPolicy.Issue.REPORTER_MISSING)
+            )
+        viewModel.createBnetzaComplaint()
+        assertEquals(CallBlockerViewModel.BnetzaResult.NoContact, viewModel.bnetzaResult.value)
+
+        coEvery { bnetzaReportManager.generate(any()) } returns
+            BnetzaReportManager.Result.NotReady(
+                listOf(BnetzaIncidentPolicy.Issue.NO_INCIDENTS)
+            )
+        viewModel.createBnetzaComplaint()
+        assertEquals(CallBlockerViewModel.BnetzaResult.NoIncidents, viewModel.bnetzaResult.value)
+    }
+
+    @Test
+    fun `failed export is not reported as an empty complaint`() = runTest {
+        coEvery { bnetzaReportManager.generate(any()) } returns
+            BnetzaReportManager.Result.Failed
+        viewModel.createBnetzaComplaint()
+        assertEquals(CallBlockerViewModel.BnetzaResult.Failed, viewModel.bnetzaResult.value)
     }
 }

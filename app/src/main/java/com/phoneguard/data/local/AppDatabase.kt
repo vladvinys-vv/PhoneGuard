@@ -30,7 +30,7 @@ import javax.inject.Singleton
         com.phoneguard.model.SpamNumber::class,
         IntrusionEventEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

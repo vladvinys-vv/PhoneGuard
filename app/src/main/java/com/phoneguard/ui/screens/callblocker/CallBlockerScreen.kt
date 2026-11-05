@@ -16,10 +16,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
+import com.phoneguard.callblocker.CallBlockDecision
 import com.phoneguard.data.local.BlockedNumber
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,6 +78,11 @@ fun CallBlockerScreen(
 
             BlockRulesSection(viewModel = viewModel)
 
+            // Жалоба в Bundesnetzagentur: логика была, а дойти до неё из приложения
+            // было нельзя. Период фиксирован (90 дней) — этого достаточно для формы
+            // BNetzA, а лишние настройки здесь только мешают.
+            BnetzaComplaintSection(viewModel = viewModel, snackbarHostState = snackbarHostState)
+
             when (selectedTab) {
                 0 -> NumberListSection(
                     numbers = viewModel.blacklist.collectAsState().value,
@@ -107,6 +114,72 @@ fun CallBlockerScreen(
                 showAddDialog = false
             }
         )
+    }
+}
+
+/**
+ * Жалоба на мусорные звонки в Bundesnetzagentur (§ 67 TKG, § 7 UWG).
+ *
+ * Приложение не отправляет письмо само: в жалобе данные пользователя, поэтому оно только
+ * готовит два файла и показывает путь. Отправить — решение пользователя.
+ */
+@Composable
+fun BnetzaComplaintSection(
+    viewModel: CallBlockerViewModel,
+    snackbarHostState: SnackbarHostState
+) {
+    val result by viewModel.bnetzaResult.collectAsState()
+    // Подстановка аргументов — здесь, в композиции: строка с двумя плейсхолдерами не должна
+    // форматироваться вручную, иначе легко забыть аргумент и показать «%1$s» пользователю.
+    val savedMessage = when (val current = result) {
+        is CallBlockerViewModel.BnetzaResult.Ready ->
+            stringResource(R.string.bnetza_complaint_saved, current.path, current.incidents)
+        else -> null
+    }
+    val noIncidentsText = stringResource(R.string.bnetza_complaint_no_incidents)
+    val noContactText = stringResource(R.string.bnetza_complaint_no_contact)
+    val failedText = stringResource(R.string.bnetza_complaint_failed)
+
+    LaunchedEffect(result) {
+        when (result) {
+            is CallBlockerViewModel.BnetzaResult.Ready -> {
+                snackbarHostState.showSnackbar(savedMessage.orEmpty())
+                viewModel.consumeBnetzaResult()
+            }
+            CallBlockerViewModel.BnetzaResult.NoIncidents -> {
+                snackbarHostState.showSnackbar(noIncidentsText)
+                viewModel.consumeBnetzaResult()
+            }
+            CallBlockerViewModel.BnetzaResult.NoContact -> {
+                snackbarHostState.showSnackbar(noContactText)
+                viewModel.consumeBnetzaResult()
+            }
+            CallBlockerViewModel.BnetzaResult.Failed -> {
+                snackbarHostState.showSnackbar(failedText)
+                viewModel.consumeBnetzaResult()
+            }
+            null -> Unit
+        }
+    }
+
+    Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.bnetza_complaint_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.bnetza_complaint_description),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Button(
+                onClick = { viewModel.createBnetzaComplaint() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.bnetza_complaint_create))
+            }
+        }
     }
 }
 
@@ -247,7 +320,10 @@ fun LogListSection(
                 supportingContent = {
                     val type = if (log.isSms) stringResource(R.string.blocked_sms) else stringResource(R.string.blocked_call)
                     val time = formatTimestamp(log.timestamp)
-                    Text("$type • $time")
+                    // Причина раньше вычислялась и терялась: пользователь видел только номер
+                    // и время. Без неё нельзя ни понять решение, ни возразить на него.
+                    val reason = blockReasonLabel(log.reason)
+                    Text(if (reason == null) "$type • $time" else "$type • $time • $reason")
                 }
             )
             Divider()
@@ -298,4 +374,22 @@ fun AddNumberDialog(
             }
         }
     )
+}
+
+/**
+ * Человеческая подпись причины блокировки.
+ *
+ * Неизвестное значение (запись из будущей версии, `null` до схемы 9) не показываем:
+ * строка `SPAM_DATABASE` в интерфейсе хуже, чем её отсутствие.
+ */
+@Composable
+private fun blockReasonLabel(reason: String?): String? = when (reason) {
+    CallBlockDecision.BlockReason.BLACKLISTED.name -> stringResource(R.string.log_reason_blacklisted)
+    CallBlockDecision.BlockReason.SPAM_DATABASE.name -> stringResource(R.string.log_reason_spam_database)
+    CallBlockDecision.BlockReason.HIDDEN_NUMBER.name -> stringResource(R.string.log_reason_hidden)
+    CallBlockDecision.BlockReason.UNPARSEABLE_NUMBER.name ->
+        stringResource(R.string.log_reason_unparseable)
+    CallBlockDecision.BlockReason.INTERNATIONAL.name ->
+        stringResource(R.string.log_reason_international)
+    else -> null
 }

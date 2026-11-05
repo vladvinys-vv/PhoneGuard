@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 internal object DatabaseMigrations {
 
     /** Целевая версия схемы (должна совпадать с `version` в `@Database`). */
-    const val LATEST_VERSION = 8
+    const val LATEST_VERSION = 9
 
     /**
      * Все миграции по порядку.
@@ -34,7 +34,8 @@ internal object DatabaseMigrations {
             MIGRATION_4_5,
             MIGRATION_5_6,
             MIGRATION_6_7,
-            MIGRATION_7_8
+            MIGRATION_7_8,
+            MIGRATION_8_9
         )
     }
 
@@ -151,6 +152,14 @@ internal object DatabaseMigrations {
             db.execSQL("ALTER TABLE `vault_items` ADD COLUMN `category` TEXT NOT NULL DEFAULT 'OTHER'")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_vault_items_category` ON `vault_items` (`category`)")
             db.execSQL("UPDATE `vault_items` SET `category` = 'IMAGE' WHERE `isImage` = 1")
+        }
+    }
+
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Причина блокировки: без неё журнал не объясняет решение, а жалоба
+            // в Bundesnetzagentur невозможна (там требуется категория нарушения).
+            db.execSQL("ALTER TABLE `blocked_log` ADD COLUMN `reason` TEXT")
         }
     }
 

@@ -12,7 +12,12 @@ class BnetzaComplaintReportTest {
         val id = BnetzaComplaintReport.generateReportId()
         assertNotNull(id)
         assertTrue("Report ID should start with BNETZA-", id.startsWith("BNETZA-"))
-        assertTrue("Report ID should match pattern BNETZA-YYYYMMDD-XXXX", id.matches(Regex("""^BNETZA-\d{8}-\d{4}$""")))
+        // Семь цифр хвоста: время в миллисекундах (5) + случайные (2). Четырёх не хватало —
+        // две жалобы в один день могли получить одинаковый номер.
+        assertTrue(
+            "Report ID should match pattern BNETZA-YYYYMMDD-NNNNNNN",
+            id.matches(Regex("""^BNETZA-\d{8}-\d{7}$"""))
+        )
     }
 
     @Test
@@ -87,9 +92,40 @@ class BnetzaComplaintReportTest {
             "Vorgangsnummer;Datum_Uhrzeit;Anrufer_Rufnummer;Verstoss_Kategorie;Angenommen;Dauer_Sekunden;Beworbene_Firma;Hinweise",
             lines[0]
         )
-        assertTrue(lines[1].contains("BNETZA-20261105-9999;2026-11-05 09:15:00;+49891234567;PING_CALL;false;0;;"))
-        // Semicolon in company name should be replaced with comma
-        assertTrue(lines[2].contains("Stromspar AG, Service"))
-        assertTrue(lines[2].contains("UNERLAUBTE_WERBUNG;true;120"))
+        // `Nein`/`Ja`, а не `false`/`true`: официальная форма немецкая, и текстовая версия
+        // жалобы отвечает на тот же вопрос словом «Ja».
+        assertTrue(lines[1].contains("BNETZA-20261105-9999;2026-11-05 09:15:00;+49891234567;PING_CALL;Nein;0;;"))
+        // Точка с запятой в названии фирмы больше не подменяется запятой: поле
+        // экранируется кавычками по RFC 4180, данные не искажаются.
+        assertTrue(lines[2].contains("\"Stromspar AG; Service\""))
+        assertTrue(lines[2].contains("UNERLAUBTE_WERBUNG;Ja;120"))
+    }
+
+    @Test
+    fun `csv quotes values with quotes and line breaks`() {
+        val incident = SpamCallIncident(
+            callerNumber = "+49891234567",
+            callTimestamp = "2026-11-05 09:15:00",
+            violationType = BnetzaViolationType.UNERLAUBTE_WERBUNG,
+            notes = "Zitat: \"Strom sparen\"\nZeile zwei"
+        )
+        val report = BnetzaComplaintReport(
+            reportId = "BNETZA-20261105-1",
+            generatedDate = "2026-11-05",
+            incidents = listOf(incident)
+        )
+        val csv = report.toBnetzaCsv()
+        // Кавычки внутри поля удваиваются, поле целиком взято в кавычки.
+        assertTrue(csv.contains("\"Zitat: \"\"Strom sparen\"\""))
+    }
+
+    @Test
+    fun `report id embeds the date and differs between calls`() {
+        val first = BnetzaComplaintReport.generateReportId(1_760_000_000_000L)
+        val second = BnetzaComplaintReport.generateReportId(1_760_000_001_000L)
+        assertTrue(first.startsWith("BNETZA-"))
+        // Время входит в номер, поэтому две жалобы подряд не получают один и тот же id —
+        // это единственное, по чему BNetzA связывает переписку.
+        assertTrue(first != second)
     }
 }

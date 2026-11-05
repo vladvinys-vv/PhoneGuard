@@ -99,13 +99,17 @@ class CallScreeningServiceImpl : CallScreeningService() {
             // Система ждёт ответа ограниченное время (порядка 5 с), иначе звонок
             // пропускается мимо скрининга. Чтение базы + DataStore + спам-базы могло
             // не уложиться, поэтому решение ограничено таймаутом: не успели — пропускаем.
-            val shouldBlock = withTimeoutOrNull(RESPONSE_TIMEOUT_MS) {
+            // Факты считаются один раз: решение и причина блокировки обязаны совпадать,
+            // а раньше причина вычислялась и выбрасывалась — в журнале оставались только
+            // номер и время.
+            val facts = withTimeoutOrNull(RESPONSE_TIMEOUT_MS) {
                 try {
-                    checkShouldBlockNumber(rawNumber)
+                    collectFacts(rawNumber)
                 } catch (_: Exception) {
-                    false
+                    CallBlockDecision.Facts()
                 }
-            } ?: false
+            } ?: CallBlockDecision.Facts()
+            val shouldBlock = CallBlockDecision.shouldBlock(facts)
 
             val response = CallResponse.Builder()
                 .setDisallowCall(shouldBlock)
@@ -119,18 +123,21 @@ class CallScreeningServiceImpl : CallScreeningService() {
             withContext(Dispatchers.Main) { respondToCall(callDetails, response) }
 
             if (shouldBlock) {
-                logBlockedCall(if (isHidden) null else rawNumber)
+                logBlockedCall(
+                    rawNumber = if (isHidden) null else rawNumber,
+                    reason = CallBlockDecision.reason(facts)
+                )
             }
         }
     }
 
     /**
-     * Собирает факты о звонке и отдаёт решение [CallBlockDecision].
+     * Собирает факты о звонке для [CallBlockDecision].
      *
      * Чтения БД и настроек идут с короткими замыканиями: если номер в белом списке,
      * остальные запросы не выполняются вовсе (система ждёт ответа ограниченное время).
      */
-    private suspend fun checkShouldBlockNumber(rawNumber: String?): Boolean {
+    private suspend fun collectFacts(rawNumber: String?): CallBlockDecision.Facts {
         val blockedNumberDao = appDatabase.blockedNumberDao()
         val normalized = rawNumber?.let { phoneNumberNormalizer.canonical(it) }
         val candidates = buildList {
@@ -152,18 +159,16 @@ class CallScreeningServiceImpl : CallScreeningService() {
         val blockInternational = needsPolicy && !hidden && normalized != null &&
             preferencesManager.blockInternationalNumbers.first()
 
-        return CallBlockDecision.shouldBlock(
-            CallBlockDecision.Facts(
-                whitelisted = whitelisted,
-                blacklisted = blacklisted,
-                spamDatabase = spamDatabase,
-                callerIdHidden = hidden,
-                numberParsed = normalized != null,
-                blockUnknown = blockUnknown,
-                blockHidden = blockHidden,
-                blockInternational = blockInternational,
-                foreignNumber = blockInternational && isForeignNumber(normalized.orEmpty())
-            )
+        return CallBlockDecision.Facts(
+            whitelisted = whitelisted,
+            blacklisted = blacklisted,
+            spamDatabase = spamDatabase,
+            callerIdHidden = hidden,
+            numberParsed = normalized != null,
+            blockUnknown = blockUnknown,
+            blockHidden = blockHidden,
+            blockInternational = blockInternational,
+            foreignNumber = blockInternational && isForeignNumber(normalized.orEmpty())
         )
     }
 
@@ -184,7 +189,10 @@ class CallScreeningServiceImpl : CallScreeningService() {
         }
     }
 
-    private suspend fun logBlockedCall(rawNumber: String?) {
+    private suspend fun logBlockedCall(
+        rawNumber: String?,
+        reason: CallBlockDecision.BlockReason?
+    ) {
         val blockedLogDao = appDatabase.blockedLogDao()
         val storableNumber = rawNumber?.let { phoneNumberNormalizer.canonical(it) }
             ?: rawNumber
@@ -193,7 +201,10 @@ class CallScreeningServiceImpl : CallScreeningService() {
         blockedLogDao.insertBlockedLog(
             com.phoneguard.data.local.BlockedLog(
                 phoneNumber = storableNumber,
-                isSms = false
+                isSms = false,
+                // Строкой, а не enum: журнал читается и генератором жалобы, а неизвестное
+                // имя из будущей версии не должно ронять чтение таблицы.
+                reason = reason?.name
             )
         )
         // Номер в аналитику не передаётся — только факт блокировки звонка/SMS

@@ -47,10 +47,18 @@ data class BnetzaComplaintReport(
         const val OFFICIAL_EMAIL = "rufnummernmissbrauch@bnetza.de"
         const val OFFICIAL_ADDRESS = "Postfach 80 01, 53105 Bonn"
 
-        fun generateReportId(): String {
-            val dateStr = SimpleDateFormat("yyyyMMdd", Locale.GERMANY).format(Date())
-            val rand = (1000..9999).random()
-            return "BNETZA-$dateStr-$rand"
+        /**
+         * Номер дела: дата + время в миллисекундах + случайный хвост.
+         *
+         * Раньше было только случайное число из четырёх цифр: у активного пользователя
+         * две жалобы в один день вполне могли получить одинаковый номер, а это единственное,
+         * по чему BNetzA связывает обращение с продолжением переписки.
+         */
+        fun generateReportId(nowMillis: Long = System.currentTimeMillis()): String {
+            val dateStr = SimpleDateFormat("yyyyMMdd", Locale.GERMANY).format(Date(nowMillis))
+            val suffix = nowMillis % 100_000
+            val rand = (10..99).random()
+            return "BNETZA-$dateStr-%05d%02d".format(suffix, rand)
         }
     }
 
@@ -107,18 +115,49 @@ data class BnetzaComplaintReport(
     }
 
     /**
-     * Exports incident logs as official BNetzA CSV format for bulk evidence submission.
+     * Экспорт инцидентов в CSV для массовой подачи (разделитель `;` — как принято
+     * в немецких таблицах).
+     *
+     * Раньше значения просто склеивались: точка с запятой или перевод строки в заметке
+     * ломали разбор строки, `wasAnswered` уезжало как `true/false` (в текстовой форме —
+     * «Ja/Nein», то есть два разных ответа на один вопрос), а точка с запятой в
+     * рекламируемой фирме молча заменялась на запятую и искажала данные. Теперь поля
+     * экранируются по RFC 4180 (кавычки удваиваются), а булево значение переводится
+     * в немецкое «Ja»/«Nein».
      */
     fun toBnetzaCsv(): String {
         val sb = StringBuilder()
-        sb.appendLine("Vorgangsnummer;Datum_Uhrzeit;Anrufer_Rufnummer;Verstoss_Kategorie;Angenommen;Dauer_Sekunden;Beworbene_Firma;Hinweise")
+        val header = listOf(
+            "Vorgangsnummer",
+            "Datum_Uhrzeit",
+            "Anrufer_Rufnummer",
+            "Verstoss_Kategorie",
+            "Angenommen",
+            "Dauer_Sekunden",
+            "Beworbene_Firma",
+            "Hinweise"
+        )
+        sb.appendLine(header.joinToString(";"))
         for (inc in incidents) {
-            val safeCompany = (inc.advertisedProductOrCompany ?: "").replace(";", ",")
-            val safeNotes = (inc.notes ?: "").replace(";", ",").replace("\n", " ")
-            sb.appendLine(
-                "$reportId;${inc.callTimestamp};${inc.callerNumber};${inc.violationType.name};${inc.wasAnswered};${inc.callDurationSeconds};$safeCompany;$safeNotes"
+            val row = listOf(
+                reportId,
+                inc.callTimestamp,
+                inc.callerNumber,
+                inc.violationType.name,
+                if (inc.wasAnswered) "Ja" else "Nein",
+                inc.callDurationSeconds.toString(),
+                inc.advertisedProductOrCompany.orEmpty(),
+                inc.notes.orEmpty()
             )
+            sb.appendLine(row.joinToString(";") { csvField(it) })
         }
         return sb.toString()
+    }
+
+    /** Экранирование одного поля CSV: кавычки, точки с запятой и переводы строк. */
+    private fun csvField(value: String): String {
+        val needsQuotes = value.any { it == ';' || it == '"' || it == '\n' || it == '\r' }
+        if (!needsQuotes) return value
+        return "\"" + value.replace("\"", "\"\"") + "\""
     }
 }
