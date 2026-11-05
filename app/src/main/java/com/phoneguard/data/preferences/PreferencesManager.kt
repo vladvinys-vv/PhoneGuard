@@ -15,6 +15,75 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 class PreferencesManager(private val context: Context) {
 
+    /**
+     * Снимок настроек для переноса на новый телефон.
+     *
+     * Читается всё хранилище DataStore и фильтруется чистой политикой
+     * [com.phoneguard.util.SettingsTransfer]: секреты и данные, привязанные к устройству
+     * (хэш PIN, парольная фраза базы, IMSI, состояние тревоги), в файл не попадают.
+     * Наборы строк и дробные значения не переносятся — в формате обмена для них нет типа,
+     * и придумывать его ради одного-двух ключей не стоит.
+     */
+    suspend fun exportableSettings(): List<com.phoneguard.util.SettingsTransfer.SettingEntry> {
+        val stored = context.dataStore.data.first()
+        return stored.asMap().mapNotNull { (key, value) ->
+            if (!com.phoneguard.util.SettingsTransfer.isTransferable(key.name)) return@mapNotNull null
+            when (value) {
+                is Boolean -> com.phoneguard.util.SettingsTransfer.SettingEntry(
+                    key.name, com.phoneguard.util.SettingsTransfer.Type.BOOLEAN, value.toString()
+                )
+                is Int -> com.phoneguard.util.SettingsTransfer.SettingEntry(
+                    key.name, com.phoneguard.util.SettingsTransfer.Type.INT, value.toString()
+                )
+                is Long -> com.phoneguard.util.SettingsTransfer.SettingEntry(
+                    key.name, com.phoneguard.util.SettingsTransfer.Type.LONG, value.toString()
+                )
+                is String -> com.phoneguard.util.SettingsTransfer.SettingEntry(
+                    key.name, com.phoneguard.util.SettingsTransfer.Type.STRING, value
+                )
+                else -> null
+            }
+        }.sortedBy { it.key }
+    }
+
+    /**
+     * Применяет настройки из файла переноса.
+     *
+     * @return сколько записей применено. Записи с недопустимыми ключами или значением
+     *   молча пропускаются: одна испорченная строка не должна отменять импорт остальных.
+     */
+    suspend fun applyTransferredSettings(
+        entries: List<com.phoneguard.util.SettingsTransfer.SettingEntry>
+    ): Int {
+        val transfer = com.phoneguard.util.SettingsTransfer
+        var applied = 0
+        context.dataStore.edit { prefs ->
+            entries.forEach { entry ->
+                if (!transfer.isTransferable(entry.key) || !transfer.valueMatchesType(entry)) {
+                    return@forEach
+                }
+                when (entry.type) {
+                    com.phoneguard.util.SettingsTransfer.Type.BOOLEAN -> {
+                        val parsed = entry.value.toBooleanStrictOrNull() ?: return@forEach
+                        prefs[booleanPreferencesKey(entry.key)] = parsed
+                    }
+                    com.phoneguard.util.SettingsTransfer.Type.INT -> {
+                        val parsed = entry.value.toIntOrNull() ?: return@forEach
+                        prefs[intPreferencesKey(entry.key)] = parsed
+                    }
+                    com.phoneguard.util.SettingsTransfer.Type.LONG -> {
+                        val parsed = entry.value.toLongOrNull() ?: return@forEach
+                        prefs[longPreferencesKey(entry.key)] = parsed
+                    }
+                    com.phoneguard.util.SettingsTransfer.Type.STRING ->
+                        prefs[stringPreferencesKey(entry.key)] = entry.value
+                }
+                applied++
+            }
+        }
+        return applied
+    }
+
     companion object {
         /** Файл-зеркало для выбранного языка (читается синхронно из Activity). */
         const val LOCALE_PREFS = "phoneguard_locale"

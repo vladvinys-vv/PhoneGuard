@@ -348,6 +348,12 @@
     <string name="vault_import_failed">Import fehlgeschlagen: %1$s</string>
     <string name="export_logs_saved">Export gespeichert: %1$s</string>
     <string name="export_logs_failed">Protokolle konnten nicht exportiert werden</string>
+    <string name="export_settings">Einstellungen exportieren</string>
+    <string name="import_settings">Einstellungen importieren</string>
+    <string name="export_settings_saved">Einstellungen gespeichert: %1$s</string>
+    <string name="import_settings_done">Übertragene Einstellungen: %1$d, übersprungen: %2$d</string>
+    <string name="settings_transfer_failed">Einstellungen konnten nicht übertragen werden</string>
+    <string name="settings_transfer_hint">Tresor, PIN und Protokolle werden nicht übertragen — nur Sperrregeln, Firewall und Schutzeinstellungen</string>
     <string name="backup_number_saved">Sicherungsnummer gespeichert</string>
     <string name="shoulder_surfer_enabled">Schutz vor Blickdiebstahl aktiviert</string>
     <string name="shoulder_surfer_disabled">Schutz vor Blickdiebstahl deaktiviert</string>

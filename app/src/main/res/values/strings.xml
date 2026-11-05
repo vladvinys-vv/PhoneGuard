@@ -355,6 +355,12 @@
     <string name="vault_import_failed">Ошибка импорта: %1$s</string>
     <string name="export_logs_saved">Экспорт сохранён: %1$s</string>
     <string name="export_logs_failed">Не удалось экспортировать логи</string>
+    <string name="export_settings">Экспорт настроек</string>
+    <string name="import_settings">Импорт настроек</string>
+    <string name="export_settings_saved">Настройки сохранены: %1$s</string>
+    <string name="import_settings_done">Перенесено настроек: %1$d, пропущено: %2$d</string>
+    <string name="settings_transfer_failed">Не удалось перенести настройки</string>
+    <string name="settings_transfer_hint">Сейф, PIN и журналы не переносятся — только правила блокировки, брандмауэр и параметры защиты</string>
     <string name="backup_number_saved">Резервный номер сохранён</string>
     <string name="shoulder_surfer_enabled">Защита от подглядывания включена</string>
     <string name="shoulder_surfer_disabled">Защита от подглядывания выключена</string>
