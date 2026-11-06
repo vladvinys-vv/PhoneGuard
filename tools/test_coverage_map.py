@@ -88,17 +88,35 @@ def runnable_test_files() -> tuple[list[Path], list[tuple[Path, str]]]:
 # Почему тест-файл не исполняется офлайн. Названия — для человека: «пропущено 24» без
 # причины выглядит как забытая работа, хотя часть из них в песочнице не запустить физически.
 SKIP_BUCKETS = (
-    ("импорт io.mockk", "MockK (нет библиотеки: Maven Central из песочницы недоступен)"),
-    ("импорт org.robolectric", "Robolectric (нет Android-рантайма)"),
-    ("импорт androidx.", "AndroidX (нужен рантайм, а не только android.jar)"),
-    ("импорт android.", "Android SDK (методы android.jar бросают Stub!)"),
+    ("io.mockk", "MockK (нет библиотеки: Maven Central из песочницы недоступен)"),
+    ("org.robolectric", "Robolectric (нет Android-рантайма)"),
+    ("androidx.", "AndroidX (нужен рантайм, а не только android.jar)"),
+    ("android.", "Android SDK (методы android.jar бросают Stub!)"),
 )
 
+IMPORT_LINE = re.compile(r"^import\s+([\w.]+)", re.M)
 
-def classify_skip(reason: str) -> str:
-    """Причина пропуска → группа. Неизвестная причина не прячется в «прочее» молча."""
+
+def imports_of(path: Path) -> list[str]:
+    return IMPORT_LINE.findall(path.read_text(encoding="utf-8"))
+
+
+def classify_skip(reason: str, path: Path | None = None) -> str:
+    """Причина пропуска → группа. Неизвестная причина не прячется в «прочее» молча.
+
+    Раньше группу выбирал первый блокирующий импорт, а порядок импортов произволен:
+    Robolectric-тест, начавшийся с `android.content.Intent`, попадал в «Android SDK», хотя
+    запустить его нельзя именно из-за Robolectric (он приносит настоящий Android-рантайм).
+    Поэтому, если известен файл, группа определяется по всем его импортам, от специфичного
+    к общему, а причина — это подпись, а не источник истины.
+    """
+    if path is not None:
+        names = imports_of(path)
+        for prefix, bucket in SKIP_BUCKETS:
+            if any(name.startswith(prefix) for name in names):
+                return bucket
     for prefix, bucket in SKIP_BUCKETS:
-        if reason.startswith(prefix):
+        if reason.startswith(f"импорт {prefix}"):
             return bucket
     return f"прочее: {reason}"
 
@@ -110,7 +128,7 @@ def skipped_report() -> int:
     print(f"офлайн не выполняются: {len(skipped)} тест-файлов")
     grouped: dict[str, list[Path]] = {}
     for path, reason in skipped:
-        grouped.setdefault(classify_skip(reason), []).append(path)
+        grouped.setdefault(classify_skip(reason, path), []).append(path)
     for bucket in sorted(grouped, key=lambda name: (-len(grouped[name]), name)):
         paths = grouped[bucket]
         print(f"\n  {bucket} — {len(paths)}:")
@@ -139,8 +157,24 @@ def self_test() -> int:
     if not unknown.startswith("прочее"):
         problems.append(f"неизвестная причина должна попадать в «прочее», получено {unknown}")
 
+    # Файл с Robolectric, но первым блокирующим импортом `android.*`: раньше он попадал в
+    # «Android SDK». Проверяем на настоящем файле, а не на строке причины.
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sample = Path(tmp) / "MixedTest.kt"
+        sample.write_text(
+            "package x\n\nimport android.content.Intent\nimport org.robolectric.RobolectricTestRunner\n",
+            encoding="utf-8",
+        )
+        mixed = classify_skip("импорт android.content.Intent", sample)
+        if not mixed.startswith("Robolectric"):
+            problems.append(f"Robolectric-тест с `android.*` в начале отнесён к {mixed}")
+
     _, skipped = runnable_test_files()
-    unclassified = [reason for _, reason in skipped if classify_skip(reason).startswith("прочее")]
+    unclassified = [
+        reason for path, reason in skipped if classify_skip(reason, path).startswith("прочее")
+    ]
     if unclassified:
         problems.append(f"в проекте есть неклассифицированные причины: {sorted(set(unclassified))}")
 
