@@ -161,6 +161,17 @@ jobs:
           fi
           echo "проверяю $APK"
           "$ZIPALIGN" -c -P 16 -v 4 "$APK" | tail -5
+      # Единственное место, где проверяются правила R8 на настоящем результате: `mapping.txt`
+      # появляется только у релизной сборки. Тот же шаг есть в codemagic.yaml и build_release.sh.
+      - name: Verify R8 obfuscation (mapping.txt)
+        run: |
+          MAPPING="$(ls app/build/outputs/mapping/*Release/mapping.txt 2>/dev/null | head -1)"
+          if [ -z "$MAPPING" ]; then
+            echo "mapping.txt не найден в app/build/outputs/mapping/*Release —"
+            echo "обфускация не выполнялась (minifyEnabled?) или путь переопределён"
+            exit 1
+          fi
+          python3 tools/proguard_check.py --mapping "$MAPPING"
       - uses: actions/upload-artifact@v4
         with:
           name: PhoneGuard-production-release

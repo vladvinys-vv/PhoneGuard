@@ -259,7 +259,7 @@ python3 tools/gradle_check.py --warnings-as-errors
 `-keepattributes` есть `Signature`.
 
 Отдельно проверяется доля собственных классов под `-keep`: больше 10 % — предупреждение, больше
-25 % — **ошибка**. Сейчас под `-keep` 0 из 226 классов (только `-keepnames` у `worker/**`, чтобы
+25 % — **ошибка**. Сейчас под `-keep` 0 из 231 класса (только `-keepnames` у `worker/**`, чтобы
 WorkManager нашёл задачи, поставленные прошлой версией по сохранённому имени класса). До батча 48
 там было 20 правил вида `-keep class com.phoneguard.<пакет>.** { *; }` и 183 класса из 252 —
 обфускация не работала вообще, а казалось, что правила «на всякий случай».
@@ -270,16 +270,20 @@ WorkManager нашёл задачи, поставленные прошлой в�
 направление каждого соединения — `UNKNOWN`. Проверка падает, если код пишет имена enum, а
 правила их не сохраняют.
 
-Когда есть настоящий `mapping.txt` (артефакт Codemagic, `app/build/outputs/mapping/**`), тот же
-скрипт проверяет по нему две вещи, которые иначе видит только человек с релизом в руках:
-обфускация действительно произошла (собственные классы переименованы) и константы enum сохранили
-имена.
+По настоящему `mapping.txt` тот же скрипт проверяет две вещи, которые иначе видит только человек
+с релизом в руках: обфускация действительно произошла (собственные классы переименованы) и
+константы enum сохранили имена. Файл появляется только у релизной сборки, поэтому проверка
+запускается там, где эта сборка и происходит: шаг «Verify R8 obfuscation (mapping.txt)» в
+`codemagic.yaml` и в job `build-release` GitHub Actions, плюс `build_release.sh` после
+`assemble…Release`. Все три берут найденный `app/build/outputs/mapping/*Release/mapping.txt`
+(имя каталога зависит от флейвора) и падают, если файла нет: релиз без проверки обфускации —
+это релиз, о котором неизвестно ничего.
 
 ```bash
 python3 tools/proguard_check.py            # правила против кода и зависимостей
 python3 tools/proguard_check.py --verbose  # плюс список правил и их целей
 python3 tools/proguard_check.py --self-test
-python3 tools/proguard_check.py --mapping app/build/outputs/mapping/release/mapping.txt
+python3 tools/proguard_check.py --mapping app/build/outputs/mapping/productionRelease/mapping.txt
 ```
 
 ### `tools/jvm_unit_test.py`
@@ -554,7 +558,8 @@ tree-sitter помечает `ERROR`-ом весь файл. Это дефект
 * Gradle запускается, а Android SDK не настроен (`setup-android`, `sdkmanager`, `ANDROID_HOME`);
 * нет `testProductionDebugUnitTest` — тесты в этом CI просто не выполняются;
 * запущена часть проверок из `tools/`, а остальные забыты: конфигурации расходятся, и ошибку
-  ловит только другой CI.
+  ловит только другой CI;
+* собирается release, но `mapping.txt` не проверяется — обфускация остаётся непроверенной.
 
 ```bash
 python3 tools/ci_check.py

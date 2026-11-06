@@ -73,6 +73,23 @@ for apk in "${APK_DIR}"/*.apk; do
 done
 
 if [ "$BUILD_TYPE" = "release" ]; then
+    # R8 проверяется только настоящей релизной сборкой, и это единственное место, где
+    # `mapping.txt` существует. Без проверки правило `-keep`, снова прикрывшее всё,
+    # видно только по размеру APK — то есть никак.
+    MAPPING="$(ls app/build/outputs/mapping/*Release/mapping.txt 2>/dev/null | head -1 || true)"
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "ERROR: python3 не найден, а проверка mapping.txt обязательна для release"
+        exit 1
+    fi
+    if [ -z "$MAPPING" ]; then
+        echo "ERROR: mapping.txt не найден в app/build/outputs/mapping/*Release"
+        echo "       обфускация не выполнялась — проверьте minifyEnabled в app/build.gradle"
+        exit 1
+    fi
+    echo ""
+    echo "--- R8 mapping (${MAPPING})"
+    python3 tools/proguard_check.py --mapping "$MAPPING"
+
     echo ""
     echo "Building App Bundle for Play Store..."
     ./gradlew "bundle${VARIANT}" ${UNSIGNED_FLAG} --stacktrace

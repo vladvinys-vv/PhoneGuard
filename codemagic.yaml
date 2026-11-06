@@ -144,6 +144,20 @@ workflows:
           ./gradlew assembleProductionRelease bundleProductionRelease \
             -PpgVersionCode="$VERSION_CODE" -PpgVersionName="$VERSION_NAME" \
             $UNSIGNED --no-daemon --stacktrace
+      # Правила R8 проверяются только релизной сборкой: в песочнице нет ни Gradle, ни R8.
+      # Слишком широкий `-keep` уже один раз отключил обфускацию целиком, и заметить это
+      # было нечем: релиз отличался от debug размером, а не защитой.
+      - name: Verify R8 obfuscation (mapping.txt)
+        script: |
+          # Путь по умолчанию — app/build/outputs/mapping/productionRelease/mapping.txt,
+          # но `mappingFile` можно переопределить, поэтому берём найденный Release-маппинг.
+          MAPPING="$(ls app/build/outputs/mapping/*Release/mapping.txt 2>/dev/null | head -1)"
+          if [ -z "$MAPPING" ]; then
+            echo "mapping.txt не найден в app/build/outputs/mapping/*Release —"
+            echo "обфускация не выполнялась (minifyEnabled?) или путь переопределён"
+            exit 1
+          fi
+          python3 tools/proguard_check.py --mapping "$MAPPING"
       # Play с 01.11.2025 требует 16 КБ страницы памяти для targetSdk 35 — проверяем фактический APK.
       - name: Verify 16 KB page alignment
         script: |
