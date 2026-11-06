@@ -2283,6 +2283,31 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "администратор устройства",
         "de": "Geräteadministrator",
     },
+    # Действия в предупреждениях о защите (perm/ProtectionActionPolicy).
+    "protection_action_grant": {
+        "default": "Разрешить",
+        "en": "Allow",
+        "ru": "Разрешить",
+        "de": "Zulassen",
+    },
+    "protection_action_open_settings": {
+        "default": "Открыть настройки",
+        "en": "Open settings",
+        "ru": "Открыть настройки",
+        "de": "Einstellungen öffnen",
+    },
+    "exposure_dismiss": {
+        "default": "Больше не предупреждать",
+        "en": "Don't warn again",
+        "ru": "Больше не предупреждать",
+        "de": "Nicht mehr warnen",
+    },
+    "exposure_revoke": {
+        "default": "Отозвать право",
+        "en": "Revoke permission",
+        "ru": "Отозвать право",
+        "de": "Recht entziehen",
+    },
 }
 
 LOCALES = {

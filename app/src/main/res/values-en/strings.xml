@@ -667,4 +667,8 @@
     <string name="neighbour_capability_accessibility">accessibility service</string>
     <string name="neighbour_capability_notification_access">notification access</string>
     <string name="neighbour_capability_device_admin">device administrator</string>
+    <string name="protection_action_grant">Allow</string>
+    <string name="protection_action_open_settings">Open settings</string>
+    <string name="exposure_dismiss">Don\'t warn again</string>
+    <string name="exposure_revoke">Revoke permission</string>
 </resources>

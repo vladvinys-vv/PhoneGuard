@@ -155,6 +155,25 @@ class PreferencesManager(private val context: Context) {
          */
         private val KEY_NEIGHBOUR_ALERTS = stringSetPreferencesKey("neighbour_alerts")
 
+        /**
+         * Пакеты, про которые пользователь нажал «больше не предупреждать».
+         *
+         * Не то же самое, что «не защищено»: приложение остаётся опасным соседом в списке
+         * найденного, но перестаёт занимать экран. Хранится отдельно от `protected_apps`,
+         * чтобы снятие галочки не возвращало надоевшее предупреждение.
+         */
+        private val KEY_HIDDEN_NEIGHBOURS = stringSetPreferencesKey("hidden_neighbours")
+
+        /**
+         * Разрешения, которые приложение уже запрашивало.
+         *
+         * Нужно, чтобы отличить «ещё не спрашивали» от «отказано навсегда»:
+         * `shouldShowRequestPermissionRationale` в обоих случаях возвращает `false`, и без этой
+         * отметки кнопка «Разрешить» молча ничего бы не делала (Android второй диалог не
+         * показывает).
+         */
+        private val KEY_ASKED_PERMISSIONS = stringSetPreferencesKey("asked_permissions")
+
         // SimSwap
         private val KEY_LAST_KNOWN_IMSI = stringPreferencesKey("last_known_imsi")
         private val KEY_SIM_SWAP_CONFIRMED = booleanPreferencesKey("sim_swap_confirmed")
@@ -328,6 +347,36 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { edit ->
             val formatted = NeighbourAlertPolicy.format(next)
             if (formatted.isEmpty()) edit.remove(KEY_NEIGHBOUR_ALERTS) else edit[KEY_NEIGHBOUR_ALERTS] = formatted
+        }
+    }
+
+    /** Пакеты, которые пользователь попросил больше не показывать в «опасных соседях». */
+    val hiddenNeighbours: Flow<Set<String>> =
+        context.dataStore.data.map { it[KEY_HIDDEN_NEIGHBOURS] ?: emptySet() }
+
+    suspend fun hideNeighbour(packageName: String) {
+        if (packageName.isBlank()) return
+        context.dataStore.edit { edit ->
+            edit[KEY_HIDDEN_NEIGHBOURS] = (edit[KEY_HIDDEN_NEIGHBOURS] ?: emptySet()) + packageName
+        }
+    }
+
+    /** Снимает скрытие: после переустановки приложения предупреждение снова имеет смысл. */
+    suspend fun showNeighbour(packageName: String) {
+        context.dataStore.edit { edit ->
+            val next = (edit[KEY_HIDDEN_NEIGHBOURS] ?: emptySet()) - packageName
+            if (next.isEmpty()) edit.remove(KEY_HIDDEN_NEIGHBOURS) else edit[KEY_HIDDEN_NEIGHBOURS] = next
+        }
+    }
+
+    /** Разрешения, которые приложение уже запрашивало (см. `KEY_ASKED_PERMISSIONS`). */
+    val askedPermissions: Flow<Set<String>> =
+        context.dataStore.data.map { it[KEY_ASKED_PERMISSIONS] ?: emptySet() }
+
+    suspend fun markPermissionAsked(permission: String) {
+        if (permission.isBlank()) return
+        context.dataStore.edit { edit ->
+            edit[KEY_ASKED_PERMISSIONS] = (edit[KEY_ASKED_PERMISSIONS] ?: emptySet()) + permission
         }
     }
 

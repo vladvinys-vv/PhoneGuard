@@ -1,6 +1,5 @@
 package com.phoneguard.ui.screens.settings
 
-import android.content.Context
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.content.Intent
@@ -58,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.BuildConfig
 import com.phoneguard.R
+import com.phoneguard.util.findActivity
 import com.phoneguard.util.IntentUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -507,10 +507,3 @@ private fun LanguageSelector(settingsViewModel: SettingsViewModel) {
 }
 
 
-
-/** Разворачивает обёртки Context, чтобы добраться до Activity для `recreate()`. */
-private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
-    is android.app.Activity -> this
-    is android.content.ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
