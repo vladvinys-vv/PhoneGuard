@@ -14,9 +14,4 @@ class ShoulderSurferRepository @Inject constructor(
     fun startService(): Boolean = ShoulderSurferService.start(context)
 
     fun stopService(): Boolean = ShoulderSurferService.stop(context)
-
-    fun isServiceRunning(): Boolean {
-        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        return manager.getRunningServices(100).any { it.service.className == ShoulderSurferService::class.java.name }
-    }
 }

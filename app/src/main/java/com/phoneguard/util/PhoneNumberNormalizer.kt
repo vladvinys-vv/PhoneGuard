@@ -87,12 +87,7 @@ class PhoneNumberNormalizer @Inject constructor(
     }
 
     /** Маска для отображения в UI: последние четыре символа скрываются — `+491701234567` → `+49170123••••`. */
-    fun mask(number: String?): String {
-        val trimmed = number?.trim().orEmpty()
-        if (trimmed.length <= 4) return trimmed
-        val visiblePrefix = trimmed.take(trimmed.length - 4)
-        return "$visiblePrefix••••"
-    }
+    fun mask(number: String?): String = PhoneNumberFormat.mask(number)
 
     /** ISO-код региона, который будет применяться при парсинге локальных номеров. */
     fun currentRegion(): String = defaultRegion
@@ -109,30 +104,12 @@ class PhoneNumberNormalizer @Inject constructor(
     private fun formatE164(number: Phonenumber.PhoneNumber): String =
         phoneNumberUtil.format(number, PhoneNumberUtil.PhoneNumberFormat.E164)
 
-    /**
-     * Оставляет только цифры и ведущий `+`.
-     * Отсекает строки, которые заведомо не являются телефонным номером
-     * (`*100#`, USSD, «private», «anonymous», буквенный мусор).
-     */
-    private fun sanitize(rawNumber: String?): String? {
-        val input = rawNumber?.trim().orEmpty()
-        if (input.isEmpty()) return null
-        if (input.any { it == '#' || it == '*' }) return null
-        if (input.any { it.isLetter() }) return null
+    /** Правила «что считать номером» — в чистом [PhoneNumberFormat] (там же тесты). */
+    private fun sanitize(rawNumber: String?): String? = PhoneNumberFormat.sanitize(rawNumber)
 
-        val digits = input.filter { it.isDigit() }
-        if (digits.length < 4) return null
-        return if (input.startsWith("+")) "+$digits" else digits
-    }
+    private fun fallbackDigits(number: String): String? = PhoneNumberFormat.fallbackE164(number)
 
-    /** Последний рубеж: если libphonenumber не смог разобрать номер — храним E.164-подобную форму. */
-    private fun fallbackDigits(number: String): String? {
-        val digits = digitsOnly(number)
-        if (digits.length < 4 || digits.length > MAX_E164_DIGITS) return null
-        return "+$digits"
-    }
-
-    private fun digitsOnly(number: String): String = number.filter { it.isDigit() }
+    private fun digitsOnly(number: String): String = PhoneNumberFormat.digitsOnly(number)
 
     @Suppress("MissingPermission")
     private fun detectDefaultRegion(): String {
@@ -156,7 +133,5 @@ class PhoneNumberNormalizer @Inject constructor(
         /** Германия — основной рынок проекта (см. README), используется как последний fallback. */
         const val DEFAULT_REGION = "DE"
 
-        /** Максимальная длина E.164 — 15 цифр без учёта `+`. */
-        private const val MAX_E164_DIGITS = 15
     }
 }

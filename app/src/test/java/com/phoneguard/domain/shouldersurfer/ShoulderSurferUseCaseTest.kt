@@ -4,16 +4,8 @@ import com.phoneguard.data.shouldersurfer.ShoulderSurferRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 /**
@@ -21,23 +13,10 @@ import org.junit.Test
  * (разрешила ли система запуск foreground-сервиса) не теряется по дороге —
  * на нём держится сообщение «не удалось запустить детектор» в UI.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class ShoulderSurferUseCaseTest {
 
-    private val dispatcher = UnconfinedTestDispatcher()
-    private lateinit var useCase: ShoulderSurferUseCase
     private val repository: ShoulderSurferRepository = mockk()
-
-    @Before
-    fun setup() {
-        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
-        useCase = ShoulderSurferUseCase(repository)
-    }
-
-    @After
-    fun tearDown() {
-        kotlinx.coroutines.Dispatchers.resetMain()
-    }
+    private val useCase = ShoulderSurferUseCase(repository)
 
     @Test
     fun startReturnsRepositoryResult() {
@@ -57,11 +36,5 @@ class ShoulderSurferUseCaseTest {
         every { repository.stopService() } returns false
         assertFalse(useCase.stop())
         verify(exactly = 1) { repository.stopService() }
-    }
-
-    @Test
-    fun isRunningExposesRepositoryState() = runTest {
-        every { repository.isServiceRunning() } returns true
-        assertTrue(useCase.isRunning().first())
     }
 }
