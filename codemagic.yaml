@@ -57,6 +57,8 @@ workflows:
         script: python3 tools/sync_strings.py --check
       - name: No unused string resources
         script: python3 tools/unused_strings.py
+      - name: Release path (signing, R8, mapping, 16 KB)
+        script: python3 tools/release_check.py
       - name: Kotlin frontend check
         script: |
           if command -v kotlinc >/dev/null 2>&1; then

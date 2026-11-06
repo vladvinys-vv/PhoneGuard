@@ -49,6 +49,12 @@ step "unused_strings.py"
 python3 tools/unused_strings.py || failed=1
 python3 tools/unused_strings.py --self-test || failed=1
 
+step "release_check.py"
+# Связка «CI пишет keystore сюда → Gradle ищет там», «CI проверяет mapping/*Release», «док
+# велит открыть mapping/release» ломается только на реальной релизной сборке.
+python3 tools/release_check.py || failed=1
+python3 tools/release_check.py --self-test || failed=1
+
 step "junit_gate.py"
 # Gradle возвращает 0, даже если тест-класс не попал в прогон: отчёт зелёный, а класса в нём нет.
 # Локально отчёта нет — сверка пропускается с сообщением, в CI она обязательна
