@@ -33,7 +33,8 @@
 ```
 
 Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
-`ci_check.py`, `docs_check.py`, `unused_strings.py`, `junit_gate.py`, проверяет
+`ci_check.py`, `docs_check.py`, `unused_strings.py`, `junit_gate.py`, `release_check.py`,
+проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
 `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
 (`gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`, `ci_check.py`
@@ -492,6 +493,31 @@ python3 tools/unused_strings.py --self-test
 список исключений не чистится никогда. Удалять строку нужно сначала из словаря
 `tools/sync_strings.py`, потом из четырёх `strings.xml`: иначе `sync_strings.py` вернёт её
 обратно при следующем запуске.
+
+### `tools/release_check.py`
+
+Релизный путь проверяется статически, до первой настоящей сборки. Обычные проверки видят код и
+правила R8, но не видят **связку** между файлами, а именно она ломается в самый дорогой момент:
+
+* CI пишет keystore в `app/release.keystore` и `storeFile=release.keystore` — Gradle разрешает
+  этот путь относительно `app/`, значит файл найдётся; стоит одной стороне разойтись, и релиз
+  соберётся **неподписанным**, а сборка останется зелёной;
+* CI проверяет `app/build/outputs/mapping/*Release/mapping.txt`, а задача называется
+  `productionRelease` — при переименовании флейвора mapping перестанет находиться;
+* `docs/RELEASE.md` велит открыть `mapping/release/mapping.txt` — такого каталога у проекта с
+  флейворами не бывает (эта ошибка действительно была в инструкции и в CHANGELOG).
+
+Что проверяется: `minifyEnabled`/`shrinkResources`, `proguardFiles`, `signingConfig` только при
+наличии keystore, guard против молча неподписанного релиза, версия из `pgVersionCode`/
+`pgVersionName` с проверкой числа, отсутствие паролей в `build.gradle`, `.gitignore` для
+`keystore.properties`/`*.jks`/`*.keystore`, порядок шагов Codemagic (keystore до сборки, mapping и
+16 КБ после), артефакты `mapping/**` и `.aab`, а также число строк в инструкции против
+`strings.xml`.
+
+```bash
+python3 tools/release_check.py
+python3 tools/release_check.py --self-test
+```
 
 ### `tools/junit_gate.py`
 

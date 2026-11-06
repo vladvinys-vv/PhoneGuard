@@ -40,6 +40,7 @@ REQUIRED_CHECKS = (
     "sync_strings.py",
     "unused_strings.py",
     "junit_gate.py",
+    "release_check.py",
 )
 
 UNIT_TEST_TASK = "testProductionDebugUnitTest"
@@ -272,6 +273,7 @@ jobs:
           python3 tools/docs_check.py
           python3 tools/sync_strings.py --check
           python3 tools/unused_strings.py
+          python3 tools/release_check.py
       - run: ./gradlew testProductionDebugUnitTest --no-daemon
       - run: python3 tools/junit_gate.py --require-report
       - run: ./gradlew assembleProductionRelease --no-daemon

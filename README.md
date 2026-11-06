@@ -137,6 +137,7 @@ python3 tools/ci_check.py                # обязательно: конфиг�
 python3 tools/sync_strings.py            # идемпотентная синхронизация строк в 4 локалях
 python3 tools/unused_strings.py          # обязательно: строк без единой ссылки нет
 python3 tools/junit_gate.py --self-test  # обязательно: сверка тест-классов с JUnit-XML (в CI — --require-report)
+python3 tools/release_check.py           # обязательно: подпись, R8, версия, mapping, 16 КБ — до релизной сборки
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор (с android.jar — строже)
 python3 tools/aapt2_check.py             # опционально: ресурсы и манифест через aapt2 (как Gradle)
 python3 tools/kotlin_analysis.py         # опционально: парсер Kotlin (нужен tree-sitter)

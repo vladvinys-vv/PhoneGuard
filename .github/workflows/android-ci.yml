@@ -48,6 +48,11 @@ jobs:
       - name: No unused string resources
         run: python3 tools/unused_strings.py
 
+      # Подпись, R8, версия и mapping проверяются только релизной сборкой; связка между
+      # CI и Gradle (куда пишется keystore, где ищется mapping) проверяется здесь.
+      - name: Release path (signing, R8, mapping, 16 KB)
+        run: python3 tools/release_check.py
+
       # Ошибки конфигурации Gradle (Kotlin-DSL в Groovy, версии плагинов, ext) валят
       # любую задачу ещё до компиляции — проверяем до тяжёлых job'ов.
       - name: Gradle scripts check
