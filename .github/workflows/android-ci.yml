@@ -164,7 +164,10 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - run: chmod +x gradlew
-      - run: ./gradlew assembleProductionRelease --no-daemon --stacktrace
+      # Keystore в этом job'е нет, а guard в `app/build.gradle` падает на любой задаче
+      # `*Release` без подписи — иначе неподписанный APK уходил бы в артефакты молча.
+      # Явный флаг: это проверочная сборка, а не публикационная (та — в Codemagic).
+      - run: ./gradlew assembleProductionRelease -PallowUnsignedRelease=true --no-daemon --stacktrace
       - name: Verify 16 KB page alignment
         run: |
           APK="$(ls app/build/outputs/apk/production/release/*.apk 2>/dev/null | head -1)"

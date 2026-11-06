@@ -204,6 +204,35 @@ def check_keys_count(doc: str, actual: int) -> list[str]:
     return errors
 
 
+RELEASE_TASK = re.compile(r"gradlew[^\n]*(?:assemble|bundle)\w*Release")
+
+
+def check_ci_release_builds(configs: dict[str, str]) -> list[str]:
+    """Любой CI, собирающий `*Release`, обязан либо подписать, либо явно разрешить неподписанный.
+
+    Guard в `app/build.gradle` падает на `assemble*Release` без keystore — иначе неподписанный
+    APK уходил бы в артефакты молча. Значит job, который релиз собирает и про keystore не знает,
+    красный при каждом запуске; заметить это можно только по логу, если этот CI не основной.
+    """
+    errors: list[str] = []
+    for name, text in configs.items():
+        if not RELEASE_TASK.search(text):
+            continue
+        has_keystore = "KEYSTORE_BASE64" in text or "keystore.properties" in text
+        has_unsigned_flag = "allowUnsignedRelease" in text
+        if not has_keystore and not has_unsigned_flag:
+            errors.append(
+                f"{name}: собирается release-задача без keystore и без `-PallowUnsignedRelease=true` — "
+                "guard в app/build.gradle уронит этот job"
+            )
+        if "--mapping" not in text:
+            errors.append(
+                f"{name}: release-задача собирается, но `mapping.txt` не проверяется — "
+                "обфускация останется непроверенной"
+            )
+    return errors
+
+
 def check_gitignore(gitignore: str) -> list[str]:
     errors: list[str] = []
     if not gitignore:
@@ -257,6 +286,11 @@ def run(root: Path) -> list[str]:
     names = flavors(gradle)
     errors = check_gradle(gradle, root / "app/proguard-rules.pro")
     errors += check_codemagic(codemagic)
+    errors += check_ci_release_builds({
+        ".github/workflows/android-ci.yml": read(root / ".github/workflows/android-ci.yml"),
+        ".gitlab-ci.yml": read(root / ".gitlab-ci.yml"),
+        "codemagic.yaml": codemagic,
+    })
     errors += check_keystore_paths(codemagic, gradle)
     errors += check_gitignore(gitignore)
     strings_xml = root / "app/src/main/res/values/strings.xml"
@@ -434,6 +468,28 @@ def self_test() -> int:
         check("число строк в инструкции сверяется с strings.xml", any("645 строк" in e for e in run(root)))
         (root / "docs/RELEASE.md").write_text(DOC_GOOD, encoding="utf-8")
 
+        # Ни GitHub Actions, ни GitLab не собирают release — правило не должно ругаться.
+        check("CI без release-задач не ругается", run(root) == [])
+
+        # CI собирает release без keystore и без явного флага — guard уронит job.
+        (root / ".github/workflows").mkdir(parents=True)
+        (root / ".github/workflows/android-ci.yml").write_text(
+            "      - run: ./gradlew assembleProductionRelease --no-daemon\n"
+            "      - run: python3 tools/proguard_check.py --mapping app/build/outputs/mapping/productionRelease/mapping.txt\n",
+            encoding="utf-8",
+        )
+        check(
+            "release без keystore и без флага поймано",
+            any("allowUnsignedRelease" in e and "android-ci.yml" in e for e in run(root)),
+        )
+        (root / ".github/workflows/android-ci.yml").write_text(
+            "      - run: ./gradlew assembleProductionRelease -PallowUnsignedRelease=true\n"
+            "      - run: python3 tools/proguard_check.py --mapping app/build/outputs/mapping/productionRelease/mapping.txt\n",
+            encoding="utf-8",
+        )
+        check("явный флаг снимает замечание", run(root) == [])
+        (root / ".github/workflows/android-ci.yml").unlink()
+
         # keystore перестал игнорироваться.
         (root / ".gitignore").write_text("*.keystore\n", encoding="utf-8")
         check("не полный .gitignore пойман", any("keystore.properties" in e for e in run(root)))
@@ -450,7 +506,7 @@ def self_test() -> int:
         return 1
     print(
         "release_check --self-test: ok (minify, подпись, версия, пароли, пути keystore, "
-        ".gitignore, артефакты mapping, каталог в документации)"
+        ".gitignore, артефакты mapping, каталог в документации, release без флага)"
     )
     return 0
 
