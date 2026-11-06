@@ -133,6 +133,7 @@ python3 tools/gradle_check.py            # обязательно: конфиг�
 python3 tools/static_audit.py            # обязательно: 0 error(s), 0 warning(s)
 python3 tools/migration_check.py         # обязательно: миграции Room против @Entity (исполняет SQL)
 python3 tools/docs_check.py              # обязательно: числа в документации совпадают с кодом
+python3 tools/ci_check.py                # обязательно: конфигурации CI не «вечнозелёные»
 python3 tools/sync_strings.py            # идемпотентная синхронизация строк в 4 локалях
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор (с android.jar — строже)
 python3 tools/aapt2_check.py             # опционально: ресурсы и манифест через aapt2 (как Gradle)
@@ -173,15 +174,19 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 
 | Job | Что делает |
 |---|---|
-| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `migration_check.py` (миграции Room) + `static_audit.py` + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` |
+| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` |
 | `kotlin-frontend` | ставит Kotlin 2.1.0 + `platforms;android-35`/`build-tools`, прогоняет `kotlin_frontend_check.py` (с настоящим `android.jar`) и `aapt2_check.py` (ресурсы + манифест) |
-| `lint`, `unit-test` | `lintDebug`, `testDebugUnitTest` (отчёты тестов выгружаются при падении) |
+| `lint`, `unit-test` | `lintProductionDebug`, `testProductionDebugUnitTest` (отчёты тестов выгружаются при падении) |
 | `build-debug`, `build-release` | `assembleProductionDebug`, `assembleProductionRelease` (APK как артефакт) |
 | `notify` | отправляет итог сборки на внешний webhook (`tools/webhook_notify.py`, `if: always()`) |
 
 Codemagic (`codemagic.yaml`) делает то же самое плюс `publishing.scripts` с уведомлением о
-статусе и `triggering` на push/PR/теги. Настройка обоих направлений webhook'ов —
-[`docs/CI_WEBHOOKS.md`](docs/CI_WEBHOOKS.md).
+статусе и `triggering` на push/PR/теги. Третья конфигурация — `.gitlab-ci.yml` (static-checks →
+unit-test → build-debug, Android SDK ставится через `sdkmanager` и кэшируется). Расхождения между
+тремя конфигурациями ловит `tools/ci_check.py`: он падает на `|| true` после сборки или проверки,
+на задаче Gradle без флейвора (`testDebugUnitTest` вместо `testProductionDebugUnitTest`), на
+отсутствии Android SDK и на «в этом CI нет половины обязательных проверок». Настройка обоих
+направлений webhook'ов — [`docs/CI_WEBHOOKS.md`](docs/CI_WEBHOOKS.md).
 
 ## Документация
 

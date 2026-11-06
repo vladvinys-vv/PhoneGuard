@@ -35,6 +35,11 @@ jobs:
       - name: Docs numbers match the code
         run: python3 tools/docs_check.py
 
+      # Правила R8 против реального кода: слишком широкий `-keep` уже один раз отключил
+      # обфускацию целиком. Проверка дешёвая и без Android SDK.
+      - name: R8 rules vs code
+        run: python3 tools/proguard_check.py
+
       - name: Strings are in sync with tools/sync_strings.py
         run: python3 tools/sync_strings.py --check
 
