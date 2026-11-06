@@ -2,6 +2,32 @@
 
 ## [Unreleased] — интеграции и исправления
 
+### Fixed
+- **79 строковых ресурсов из 710 (11 %) никто не читал** (новый `tools/unused_strings.py`,
+  self-test; новых тестов нет):
+  - **Компилятор о такой строке молчит, lint тоже, а стоимость реальная:** четыре локали
+    переводов и словарь `sync_strings.py` продолжали сопровождать строку, добавленную под
+    экран, который потом переделали. Копилось годами и целыми блоками: команды
+    `#LOCK`/`#ALARM`/`#LOCATION`/`#WIPE` с описаниями, тарифы Pro (`upgrade_to_pro`,
+    `unlock_pro`, `one_time_purchase`, `restore_purchase`), согласие на аналитику
+    (`analytics_consent_title`/`_description`/`analytics_enabled`), причины блокировки звонка
+    (`reason_blacklist`, `reason_unknown`, `reason_hidden`, `reason_international`),
+    `new_app_installed_title`, `battery_optimization_description`, `vault_delete_original`.
+  - **Порядок удаления важен:** сначала запись в `tools/sync_strings.py`, потом строка в
+    четырёх `strings.xml`. Наоборот — и `sync_strings.py` вернёт её обратно при следующем
+    запуске. Проверено: `sync_strings.py --check` зелёный после уборки.
+  - **`tools/unused_strings.py`** считает использованием `R.string.<name>` в Kotlin/Java и
+    `@string/<name>` в XML. Динамического поиска строк в проекте нет (`getIdentifier`,
+    `getStringArray`, `typedArray` не встречаются), поэтому «не упомянута» = «недостижима».
+    Осознанно оставленные строки вносятся в `tools/unused_strings_allow.txt` строкой
+    `имя — причина`; запись без причины и устаревшая запись — ошибки. Сейчас список пуст.
+  - **Проверка встроена в ритуал:** шаг в `check_all.sh` и в `static-checks` всех трёх CI
+    (GitHub Actions, Codemagic, GitLab) + `unused_strings.py` добавлен в обязательный набор
+    `tools/ci_check.py` — иначе конфигурации разъехались бы на первой же уборке. Проверено на
+    живом дереве: добавленная «мёртвая» строка даёт ошибку, удалённая — нет.
+  - Мёртвого кода в Kotlin при этом нет: `TODO`/`FIXME` — 0, а все ресурсы в `res/`
+    (drawable/xml/raw/mipmap) используются по ссылкам.
+
 ### Added
 - **Опасный сосед сообщает о себе сразу после установки** (+23 проверки, 924 → 947 тестов
   (94 → 95 файлов)):

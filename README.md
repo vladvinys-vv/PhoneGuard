@@ -135,6 +135,7 @@ python3 tools/migration_check.py         # обязательно: миграц�
 python3 tools/docs_check.py              # обязательно: числа в документации совпадают с кодом
 python3 tools/ci_check.py                # обязательно: конфигурации CI не «вечнозелёные»
 python3 tools/sync_strings.py            # идемпотентная синхронизация строк в 4 локалях
+python3 tools/unused_strings.py          # обязательно: строк без единой ссылки нет
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор (с android.jar — строже)
 python3 tools/aapt2_check.py             # опционально: ресурсы и манифест через aapt2 (как Gradle)
 python3 tools/kotlin_analysis.py         # опционально: парсер Kotlin (нужен tree-sitter)
@@ -175,7 +176,7 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 
 | Job | Что делает |
 |---|---|
-| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` |
+| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` + `unused_strings.py` (нет строк без ссылок) |
 | `kotlin-frontend` | ставит Kotlin 2.1.0 + `platforms;android-35`/`build-tools`, прогоняет `kotlin_frontend_check.py` (с настоящим `android.jar`) и `aapt2_check.py` (ресурсы + манифест) |
 | `lint`, `unit-test` | `lintProductionDebug`, `testProductionDebugUnitTest` (отчёты тестов выгружаются при падении) |
 | `build-debug`, `build-release` | `assembleProductionDebug`, `assembleProductionRelease` (APK как артефакт) |

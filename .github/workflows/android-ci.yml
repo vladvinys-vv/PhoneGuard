@@ -43,6 +43,11 @@ jobs:
       - name: Strings are in sync with tools/sync_strings.py
         run: python3 tools/sync_strings.py --check
 
+      # Строка без единой ссылки — не ошибка компилятора и не ошибка lint: она просто
+      # сопровождается переводом неизвестно зачем.
+      - name: No unused string resources
+        run: python3 tools/unused_strings.py
+
       # Ошибки конфигурации Gradle (Kotlin-DSL в Groovy, версии плагинов, ext) валят
       # любую задачу ещё до компиляции — проверяем до тяжёлых job'ов.
       - name: Gradle scripts check

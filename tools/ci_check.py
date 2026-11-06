@@ -38,6 +38,7 @@ REQUIRED_CHECKS = (
     "static_audit.py",
     "docs_check.py",
     "sync_strings.py",
+    "unused_strings.py",
 )
 
 UNIT_TEST_TASK = "testProductionDebugUnitTest"
@@ -261,6 +262,7 @@ jobs:
           python3 tools/static_audit.py
           python3 tools/docs_check.py
           python3 tools/sync_strings.py --check
+          python3 tools/unused_strings.py
       - run: ./gradlew testProductionDebugUnitTest --no-daemon
       - run: ./gradlew assembleProductionRelease --no-daemon
       - run: python3 tools/proguard_check.py --mapping app/build/outputs/mapping/productionRelease/mapping.txt
