@@ -55,6 +55,8 @@ workflows:
         script: python3 tools/docs_check.py
       - name: Strings are in sync
         script: python3 tools/sync_strings.py --check
+      - name: No unused string resources
+        script: python3 tools/unused_strings.py
       - name: Kotlin frontend check
         script: |
           if command -v kotlinc >/dev/null 2>&1; then

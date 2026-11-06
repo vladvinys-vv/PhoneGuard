@@ -43,6 +43,12 @@ step "docs_check.py"
 # Цифры в README/docs против кода: «217 файлов», «106 из 167 классов» стареют молча.
 python3 tools/docs_check.py || failed=1
 
+step "unused_strings.py"
+# Строка, добавленная под удалённый экран, живёт годами: компилятор о ней молчит, а переводы и
+# словарь sync_strings.py продолжают её сопровождать. Так накопилось 79 мёртвых строк из 710.
+python3 tools/unused_strings.py || failed=1
+python3 tools/unused_strings.py --self-test || failed=1
+
 step "sync_strings.py --check"
 # Сравнение с git ломается при незакоммиченных правках строк, поэтому спрашиваем сам скрипт.
 python3 tools/sync_strings.py --check || failed=1

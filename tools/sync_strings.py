@@ -1856,12 +1856,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Камера анализирует окружение…",
         "de": "Die Kamera analysiert die Umgebung…",
     },
-    "intrusion_notification_text": {
-        "default": "Обработка угрозы",
-        "en": "Handling threat",
-        "ru": "Обработка угрозы",
-        "de": "Bedrohung wird behandelt",
-    },
     "unknown_location": {
         "default": "неизвестная локация",
         "en": "unknown location",
@@ -2072,12 +2066,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Некорректный номер телефона",
         "de": "Ungültige Telefonnummer",
     },
-    "apk_signature_check": {
-        "default": "Проверка подписей APK",
-        "en": "APK signature check",
-        "ru": "Проверка подписей APK",
-        "de": "APK-Signaturprüfung",
-    },
     "indicator_debug_signature": {
         "default": "Подпись debug-ключом",
         "en": "Signed with a debug key",
@@ -2107,12 +2095,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "New apps",
         "ru": "Новые приложения",
         "de": "Neue Apps",
-    },
-    "new_app_installed_title": {
-        "default": "Установлено новое приложение",
-        "en": "New app installed",
-        "ru": "Установлено новое приложение",
-        "de": "Neue App installiert",
     },
     "new_app_suspicious_title": {
         "default": "Подозрительная подпись приложения",

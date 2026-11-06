@@ -33,7 +33,7 @@
 ```
 
 Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
-`ci_check.py`, `docs_check.py`, проверяет
+`ci_check.py`, `docs_check.py`, `unused_strings.py`, проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
 `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
 (`gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`, `ci_check.py`
@@ -439,6 +439,31 @@ SQL** через встроенный в Python `sqlite3`:
 
 Идемпотентно раскладывает словарь строк в `values`, `values-en`, `values-ru`, `values-de`.
 Запускать после любого изменения текстов; повторный запуск ничего не меняет.
+
+### `tools/unused_strings.py`
+
+Строковые ресурсы, на которые никто не ссылается. Компилятор о такой строке молчит, lint — тоже,
+а переводы в четырёх локалях и словарь `sync_strings.py` продолжают её сопровождать: строка
+добавлялась под экран, который потом переделали. В проекте так накопилось **79 мёртвых строк из
+710 (11 %)** — целые блоки: команды `#LOCK`/`#ALARM`/`#WIPE` с описаниями, тарифы Pro
+(`upgrade_to_pro`, `unlock_pro`, `one_time_purchase`), согласие на аналитику, причины блокировки
+звонка (`reason_blacklist`, `reason_unknown`, …), `new_app_installed_title`.
+
+Использованием считается `R.string.<name>` в Kotlin/Java и `@string/<name>` в XML. Динамического
+поиска строк в проекте нет (`getIdentifier`, `getStringArray`, `typedArray` не встречаются),
+поэтому «не упомянута» здесь значит «недостижима».
+
+```bash
+python3 tools/unused_strings.py            # 0 ошибок: все строки используются
+python3 tools/unused_strings.py --verbose  # плюс разрешённые записи
+python3 tools/unused_strings.py --self-test
+```
+
+Осознанно оставленные строки вносятся в `tools/unused_strings_allow.txt` строкой
+`имя — причина`; запись без причины и **устаревшая** запись (строки уже нет) — ошибки, иначе
+список исключений не чистится никогда. Удалять строку нужно сначала из словаря
+`tools/sync_strings.py`, потом из четырёх `strings.xml`: иначе `sync_strings.py` вернёт её
+обратно при следующем запуске.
 
 ### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
 

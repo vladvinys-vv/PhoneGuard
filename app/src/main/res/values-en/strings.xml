@@ -3,10 +3,8 @@
     <string name="app_name">PhoneGuard</string>
     
     <!-- Common -->
-    <string name="loading">Loading…</string>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
-    <string name="confirm">Confirm</string>
     <string name="delete">Delete</string>
     <string name="edit">Edit</string>
     <string name="back">Back</string>
@@ -15,7 +13,6 @@
     <string name="enable">Enable</string>
     <string name="disable">Disable</string>
     <string name="ok">OK</string>
-    <string name="yes">Yes</string>
     <string name="no">No</string>
     
     <!-- Dashboard -->
@@ -26,51 +23,27 @@
     <string name="fair">Fair</string>
     <string name="poor">Poor</string>
     <string name="critical">Critical</string>
-    <string name="anti_theft_score">Anti-Theft</string>
-    <string name="call_blocker_score">Call/SMS Blocker</string>
-    <string name="privacy_score">Privacy</string>
-    <string name="spyware_score">Spyware Detection</string>
     
     <!-- Anti-Theft -->
     <string name="anti_theft">Anti-Theft</string>
-    <string name="anti_theft_setup">Anti-Theft Setup</string>
     <string name="pin_code">PIN Code</string>
-    <string name="enter_pin">Enter PIN</string>
-    <string name="confirm_pin">Confirm PIN</string>
-    <string name="pin_mismatch">PIN mismatch</string>
     <string name="pin_too_short">PIN must be at least 4 digits</string>
     <string name="pin_set">PIN is set</string>
-    <string name="pin_not_set">PIN not set</string>
     <string name="set_pin">Set PIN</string>
     <string name="backup_number">Backup Number</string>
-    <string name="enter_backup_number">Enter backup phone number</string>
     <string name="backup_number_hint">+1 234 567 8900</string>
     <string name="sim_lock">SIM Lock</string>
     <string name="sim_lock_enabled">SIM change detection enabled</string>
-    <string name="sim_lock_disabled">SIM change detection disabled</string>
     <string name="device_admin">Device Admin</string>
-    <string name="device_admin_title">Device Administrator</string>
     <string name="device_admin_description">Protects PhoneGuard from uninstallation and allows remote lock</string>
     <string name="device_admin_label">PhoneGuard Admin</string>
     <string name="enable_device_admin">Enable Device Admin</string>
-    <string name="remote_commands">Remote Commands</string>
     <string name="remote_alarm">Remote Alarm</string>
     <string name="remote_alarm_description">Trigger loud alarm via SMS</string>
-    <string name="command_lock">#LOCK</string>
-    <string name="command_alarm">#ALARM</string>
-    <string name="command_location">#LOCATION</string>
-    <string name="command_wipe">#WIPE</string>
-    <string name="command_lock_desc">Lock the device</string>
-    <string name="command_alarm_desc">Trigger a loud alarm</string>
-    <string name="command_location_desc">Get device location</string>
-    <string name="command_wipe_desc">Wipe all data</string>
     <string name="failed_attempts_photo">Photo on failed unlock</string>
     <string name="stealth_camera_title">PhoneGuard Anti-Theft</string>
     <string name="stealth_camera_text">Camera service active</string>
     <string name="photo_on_failed_attempts_enabled">Take photo on 3 failed attempts</string>
-    <string name="protection_features">Protection Features</string>
-    <string name="how_it_works">How It Works</string>
-    <string name="sms_commands_description">Send these SMS commands to your backup number to control your device remotely</string>
     
     <!-- Call & SMS Blocker -->
     <string name="call_sms_blocker">Call &amp; SMS Blocker</string>
@@ -83,43 +56,28 @@
     <string name="block_unknown">Block unknown numbers</string>
     <string name="block_hidden">Block hidden numbers</string>
     <string name="block_international">Block international</string>
-    <string name="spam_database">Spam Database</string>
-    <string name="import_csv">Import CSV</string>
-    <string name="export_csv">Export CSV</string>
     <string name="blocked_call">Blocked call</string>
     <string name="blocked_sms">Blocked SMS</string>
     <string name="call_blocked_title">Call blocked</string>
     <string name="blocked_number">Blocked: %1$s</string>
-    <string name="call_screening_role">Call Screening Role</string>
-    <string name="enable_call_screening">Enable Call Screening</string>
     <string name="empty_blacklist">Blacklist is empty. Add numbers to block</string>
     <string name="empty_whitelist">Whitelist is empty. Add numbers to allow</string>
     <string name="empty_log">No blocked calls or SMS yet</string>
     <string name="block_rules">Block Rules</string>
     <string name="call_blocker_channel_name">Call Blocker</string>
     <string name="call_blocker_channel_description">Notifications for blocked calls</string>
-    <string name="reason_blacklist">Blacklisted</string>
-    <string name="reason_unknown">Unknown number</string>
-    <string name="reason_hidden">Hidden number</string>
-    <string name="reason_international">International number</string>
     <string name="delete_number">Delete number</string>
     
     <!-- Privacy Scanner -->
     <string name="privacy_scanner">Privacy Scanner</string>
-    <string name="apps_with_permissions">Apps with Permissions</string>
     <string name="camera">Camera</string>
     <string name="microphone">Microphone</string>
     <string name="location">Location</string>
     <string name="contacts">Contacts</string>
-    <string name="storage">Storage</string>
     <string name="sms">SMS</string>
     <string name="phone">Phone</string>
     <string name="excessive_permissions">Excessive Permissions</string>
-    <string name="permission_timeline">Permission Usage Timeline</string>
     <string name="open_app_settings">Open App Settings</string>
-    <string name="revoke_permission">Revoke Permission</string>
-    <string name="package_usage_stats">Package Usage Stats</string>
-    <string name="grant_package_usage">Grant Package Usage Access</string>
     <string name="filter_all">All</string>
     <string name="filter_excessive">Excessive</string>
     <string name="filter_camera">Camera</string>
@@ -132,9 +90,6 @@
     
     <!-- Spyware Check -->
     <string name="spyware_check">Spyware Check</string>
-    <string name="suspicious_apps">Suspicious Apps</string>
-    <string name="hidden_icon">Hidden Icon</string>
-    <string name="recently_installed">Recently Installed</string>
     <string name="device_admin_apps">Device Admin Apps</string>
     <string name="device_admin_desc">Apps with device admin privileges</string>
     <string name="accessibility_services">Accessibility Services</string>
@@ -144,9 +99,7 @@
     <string name="hidden_apps">Hidden Apps</string>
     <string name="hidden_desc">Apps without launcher icon</string>
     <string name="scan_now">Scan Now</string>
-    <string name="last_scan">Last Scan</string>
     <string name="risk_score">Risk Score</string>
-    <string name="risk_level">Risk Level</string>
     <string name="low_risk">Low</string>
     <string name="medium_risk">Medium</string>
     <string name="high_risk">High</string>
@@ -157,9 +110,6 @@
     <!-- Settings -->
     <string name="settings">Settings</string>
     <string name="language">Language</string>
-    <string name="english">English</string>
-    <string name="german">Deutsch</string>
-    <string name="russian">Русский</string>
     <string name="export_logs">Export Logs</string>
     <string name="about">About</string>
     <string name="about_description">Your personal security assistant</string>
@@ -168,21 +118,10 @@
     <string name="read_privacy_policy">Read our privacy policy</string>
     <string name="terms_of_service">Terms of Service</string>
     <string name="read_terms_of_service">Read our terms of service</string>
-    <string name="restore_purchase">Restore Purchase</string>
-    <string name="upgrade_to_pro">Upgrade to Pro</string>
     
     <!-- Premium -->
-    <string name="pro_features">Pro Features</string>
-    <string name="anti_theft_pro">Anti-Theft (Pro)</string>
-    <string name="sim_detection_pro">SIM Change Detection (Pro)</string>
-    <string name="photo_failed_attempts_pro">Photo on Failed Attempts (Pro)</string>
-    <string name="advanced_spyware_scanner_pro">Advanced Spyware Scanner (Pro)</string>
-    <string name="unlock_pro">Unlock Pro</string>
-    <string name="one_time_purchase">One-time purchase</string>
-    <string name="no_subscription">No subscription</string>
     
     <!-- Permissions -->
-    <string name="permission_rationale_title">Permission Required</string>
     <string name="location_permission_rationale">Location access is required to track your device if lost</string>
     <string name="sms_permission_rationale">SMS permission is required for remote commands and SIM change alerts</string>
     <string name="camera_permission_rationale">Camera access is required to take photos on failed unlock attempts</string>
@@ -192,22 +131,16 @@
     
     <!-- Errors -->
     <string name="error_generic">An error occurred</string>
-    <string name="error_invalid_pin">Invalid PIN</string>
     <string name="error_invalid_number">Invalid phone number</string>
-    <string name="error_permission_denied">Permission denied</string>
 
     <!-- Firewall -->
     <string name="firewall">Firewall</string>
-    <string name="firewall_service">Firewall Service</string>
-    <string name="firewall_service_desc">Protect your device and control traffic</string>
     <string name="firewall_active">Firewall active</string>
     <string name="firewall_blocking_traffic">Blocking unwanted traffic... (%1$d blocked)</string>
     <string name="firewall_monitoring">Monitoring traffic</string>
     <string name="firewall_start">Start Firewall</string>
     <string name="firewall_stop">Stop Firewall</string>
     <string name="block_all">Block All</string>
-    <string name="block_wifi">Block Wi-Fi</string>
-    <string name="block_mobile">Block Mobile</string>
     <string name="edit_domains_ips">Edit domains/IPs</string>
     <string name="connection_type_wifi">Wi-Fi</string>
     <string name="connection_type_mobile">Mobile</string>
@@ -223,13 +156,11 @@
     <string name="secure_vault">Secure Vault</string>
     <string name="vault_unlock">Unlock Vault</string>
     <string name="vault_import">Import Files</string>
-    <string name="vault_delete_original">Delete original</string>
     <string name="preview">Preview</string>
 
     <!-- Full Scan -->
     <string name="full_scan">Full Scan</string>
     <string name="scan_history">Scan History</string>
-    <string name="scan_not_found">Scan not found</string>
     <string name="export_pdf">Export PDF</string>
     <string name="export_pdf_success">Report saved: %1$s</string>
     <string name="export_pdf_failed">Failed to export report</string>
@@ -253,13 +184,9 @@
     <string name="delete_all_data_description">This will delete all logs, history and settings. This action cannot be undone.</string>
     <string name="data_deleted">Data deleted</string>
     <string name="battery_optimization_title">Battery Optimization</string>
-    <string name="battery_optimization_description">Disable battery optimization for PhoneGuard so protection works in background.</string>
     <string name="open_battery_settings">Open battery settings</string>
     <string name="scheduled_scan">Scheduled Scan</string>
     <string name="schedule_scan_description">Automatically run a scan once a week</string>
-    <string name="analytics_consent_title">Analytics</string>
-    <string name="analytics_consent_description">Send anonymous usage statistics to improve the app</string>
-    <string name="analytics_enabled">Analytics enabled</string>
     <string name="siren_alarm">Siren Alarm</string>
     <string name="siren_alarm_description">Trigger a loud alarm on the device</string>
     <string name="alarm_started">Alarm started</string>
@@ -268,7 +195,6 @@
     <!-- SIM Swap -->
     <string name="sim_swap">SIM Swap Protection</string>
     <string name="sim_swap_status">SIM Swap Status</string>
-    <string name="sim_swap_last_change">Last SIM Change</string>
     <string name="sim_swap_unknown">No changes detected</string>
     <string name="sim_swap_unconfirmed">Unconfirmed SIM change</string>
     <string name="sim_swap_suspected_attack">Possible SIM swap attack</string>
@@ -280,8 +206,6 @@
     <string name="sim_swap_yes">It was me</string>
     <string name="sim_swap_no">Not me, lock device</string>
     <string name="sim_swap_timer">Auto-lock in</string>
-    <string name="sim_swap_sms_sent">Notification sent to backup number</string>
-    <string name="sim_swap_sms_failed">Failed to prepare SMS</string>
 
 
     <!-- Intrusion response -->
@@ -310,13 +234,11 @@
     <string name="threat_intel_description">Check domains from suspicious SMS against the public URLhaus and OpenPhish databases. Only the host name leaves the device - never message text or phone numbers. Off by default.</string>
     <string name="threat_intel_opt_in_note">Enabling this makes network requests to urlhaus-api.abuse.ch and openphish.com.</string>
     <string name="phone_number_invalid">Invalid phone number</string>
-    <string name="apk_signature_check">APK signature check</string>
     <string name="indicator_debug_signature">Signed with a debug key</string>
     <string name="indicator_weak_signature">Weak signature algorithm</string>
     <string name="indicator_expired_certificate">Signing certificate expired</string>
     <string name="indicator_modified_after_install">APK modified after install</string>
     <string name="new_app_channel_name">New apps</string>
-    <string name="new_app_installed_title">New app installed</string>
     <string name="new_app_suspicious_title">Suspicious app signature</string>
     <string name="new_app_suspicious_text">%1$s: signed with a debug key or a weak algorithm</string>
     <string name="scan_report_title">Scan report</string>
@@ -423,7 +345,6 @@
     <string name="shoulder_surfer_alert_channel_desc">Notifications when someone else is detected looking at the screen</string>
     <string name="shoulder_surfer_active_title">Shoulder surfing protection is active</string>
     <string name="shoulder_surfer_active_text">The camera is analysing the surroundings…</string>
-    <string name="intrusion_notification_text">Handling threat</string>
     <string name="unknown_location">unknown location</string>
     <string name="sim_swap_sms_message">The SIM card of your phone was changed on %1$s at %2$s. Confirm it with the emergency link/code, otherwise the app will lock in 5 minutes.</string>
     <string name="intrusion_sms_suspicious_activity">An intrusion attempt was detected</string>
