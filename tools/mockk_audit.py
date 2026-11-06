@@ -35,7 +35,7 @@ TEST_ROOT = ROOT / "app/src/test"
 
 # Текущее состояние. Понижать можно свободно (это и есть цель), повышать — только осознанно:
 # например, когда тест на ViewModel невозможно написать без MockK.
-BUDGET_FILES = 20
+BUDGET_FILES = 18
 BUDGET_RELAXED = 33
 
 MOCKK_IMPORT = re.compile(r"^import\s+io\.mockk", re.M)

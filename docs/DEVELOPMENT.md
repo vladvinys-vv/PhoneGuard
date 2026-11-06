@@ -34,7 +34,8 @@
 
 Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
 `ci_check.py`, `docs_check.py`, `unused_strings.py`, `unused_resources.py`, `docs_links.py`,
-`mockk_audit.py`, `manual_check.py --self-test`, `junit_gate.py`, `release_check.py`,
+`hilt_check.py`, `mockk_audit.py`, `manual_check.py --self-test`, `junit_gate.py`,
+`release_check.py`,
 проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
 `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
@@ -394,7 +395,7 @@ python3 tools/test_coverage_map.py --self-test  # все пропуски раз
 ```
 
 Сейчас: 267 классов, 198 упомянуты в тестах (75%), **из них в выполняемых тестах: 150** (55%).
-Офлайн не выполняются 22 тест-файла (MockK 20, Robolectric 2): в CI
+Офлайн не выполняются 20 тест-файлов (MockK 18, Robolectric 2): в CI
 (`./gradlew testProductionDebugUnitTest`) они выполняются, поэтому это список «что проверить на
 машине с Maven Central», а не приговор покрытию. `--skipped` печатает его из тех же причин, что и
 раннер, а `--self-test` падает, если хоть один пропуск не попал в известную группу.
@@ -532,14 +533,63 @@ python3 tools/docs_links.py --verbose  # перечень проверенных
 python3 tools/docs_links.py --self-test
 ```
 
+### Что делать с «логикой без тестов»
+
+`tools/test_coverage_map.py` печатает список классов, которые не упомянуты ни в одном тесте.
+Список не равен долгу: разбор всех 39 классов показал, что почти все они — **склейка**, а
+решения уже лежат в политиках с тестами. Правило, по которому раскладывается список:
+
+| Группа | Сколько | Примеры | Что делать |
+| --- | --- | --- | --- |
+| Нужен Android-рантайм (сервис, приёмник, активити, системный API) | 13 | `AlarmHoldService`, `SmsCommandReceiver`, `CallScreeningServiceImpl`, `SimSwapDetector`, `LocationProvider`, `DatabaseKeyManager` | Robolectric в CI или ручной сценарий из `docs/MANUAL_TESTING.md`; переносить в JVM-тест нечего |
+| Склейка над проверенной политикой | 20 | `NetworkTypeResolver` → `NetworkTransportPolicy`; `HiddenAppsCheck` → `HiddenAppHeuristics`; `FileSystemScanCheck` → `MediaStoreFilePolicy`; `NotificationChannelInstaller` → `NotificationChannels`; `IntentUtils`, `SystemSettingsIntents` | Оставить: тест на склейку проверял бы вызов одной функции. Если внутри появляется **решение** — вынести его в политику и покрыть тестом |
+| Контракт или данные без поведения | 6 | `IntrusionResponseExecutor` (интерфейс), `IntrusionEventDao` (Room), `SpywareApp` (модель UI с `Drawable`), `SimSwapUiEvent` | Тестировать нечего: контракт проверяется компилятором, данные — конвертерами (`ConvertersTest`) |
+
+Именно по этому правилу в батче 63 появились `BootResumePolicy` и `AlarmHoldPolicy`: в
+`BootAlarmReceiver` и `AlarmHoldService` решение было **внутри** Android-кода, и оно оттуда
+выносится. Обратный пример — `VaultRepository.allItems`: там стояло
+`.map { entities -> entities.map { it } }`, тождественное преобразование, и тест на него
+(`VaultRepositoryTest`) проверял пустую операцию. Преобразование удалено, тест тоже — вместо
+него ничего не появилось, потому что проверять по-прежнему нечего.
+
+### `tools/hilt_check.py`
+
+Граф зависимостей Hilt, проверенный статически. Причина существования инструмента в том, что
+**разрыв в графе не является ошибкой компиляции**: проект собирается, `assemble` зелёный, а
+падает это на генерации кода («dependencies of … cannot be provided») или в рантайме при первом
+создании экземпляра. Уже дважды: `IntrusionRepository` требовал `IntrusionDetector`,
+`IntrusionResponseOrchestrator`, `HoneypotManager` и интерфейс `IntrusionResponseExecutor` без
+единого биндинга, а `ShoulderSurferUseCase` — интерфейс `ShoulderSurferController`.
+
+Правила:
+
+1. параметр `@Inject constructor` или поле `@Inject lateinit var` проектного интерфейса/абстрактного
+   класса обязан иметь биндинг (`@Provides`, возвращающий тип, или `@Binds`, возвращающий его же);
+   параметры с квалификатором пропускаются — там биндинг может быть другим;
+2. тип, привязанный дважды, — Hilt падает с «bound multiple times»;
+3. `@Binds` обязан привязывать реализацию к абстракции: параметр — существующий класс, результат —
+   интерфейс;
+4. `@Module` без `@InstallIn` не устанавливается ни в один компонент.
+
+```bash
+python3 tools/hilt_check.py            # 0 ошибок: 267 типов, 69 инъецируемых, 16 @Provides, 3 @Binds
+python3 tools/hilt_check.py --verbose  # какие абстракции привязаны, а какие нет
+python3 tools/hilt_check.py --self-test
+```
+
+Проверено живьём: если убрать `ShoulderSurferModule`, инструмент называет
+`ShoulderSurferUseCase` и отсутствующий биндинг `ShoulderSurferController`. Комментарии
+вырезаются перед разбором — иначе `@Binds`, упомянутый в KDoc `IntrusionModule`, считался
+настоящей привязкой.
+
 ### `tools/mockk_audit.py`
 
 Держит долг перед MockK под потолком. Файл, импортирующий `io.mockk`, не выполняется в офлайн-
 прогоне (библиотеки нет), то есть существует только для Gradle и Codemagic. Это нормально —
 пока таких файлов немного. Заглушка пишется быстрее фейка, и без счётчика MockK расползается:
-сейчас это **20 файлов и 33 `relaxed`-мока**.
+сейчас это **18 файлов и 33 `relaxed`-мока**.
 
-Проверка — не вкус, а бюджет: `BUDGET_FILES = 20`, `BUDGET_RELAXED = 33`. Понижать можно
+Проверка — не вкус, а бюджет: `BUDGET_FILES = 18`, `BUDGET_RELAXED = 33`. Понижать можно
 свободно, повышать — отдельным коммитом с объяснением. `relaxed`-мок опаснее обычного: он
 возвращает пустые значения вместо поведения, поэтому неожидаемый вызов не роняет тест.
 
@@ -661,7 +711,7 @@ python3 tools/junit_gate.py --self-test
 
 ### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
 
-Запускает **настоящий компилятор Kotlin** на всех 382 файлах. Без Android SDK он не может
+Запускает **настоящий компилятор Kotlin** на всех 380 файлах. Без Android SDK он не может
 разрешить `android.*`, `androidx.*`, Hilt и mockk, но полностью проверяет синтаксис, объявления,
 вывод типов там, где типы известны, и правила языка. Ошибки, заведомо вызванные
 отсутствующими библиотеками, отфильтрованы по внутренним именам диагностик

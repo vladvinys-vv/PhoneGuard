@@ -6,7 +6,6 @@ import com.phoneguard.model.VaultItem
 import com.phoneguard.vault.EncryptionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -17,8 +16,10 @@ class VaultRepository @Inject constructor(
     private val vaultDao: VaultDao,
     private val encryptionManager: EncryptionManager
 ) {
+    // Раньше здесь стоял `.map { entities -> entities.map { it } }` — тождественное
+    // преобразование: DAO уже отдаёт `VaultItem`, и «конвертация» ничего не конвертировала.
+    // Из-за неё тест «allItems возвращает пустой список» проверял именно эту пустую операцию.
     val allItems: Flow<List<VaultItem>> = vaultDao.getAllItems()
-        .map { entities -> entities.map { it } }
 
     suspend fun importFile(uri: Uri, deleteOriginal: Boolean): Long =
         importFromGallery(uri, deleteOriginal)

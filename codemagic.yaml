@@ -61,6 +61,8 @@ workflows:
         script: python3 tools/unused_resources.py
       - name: Docs links and paths exist
         script: python3 tools/docs_links.py
+      - name: Hilt dependency graph
+        script: python3 tools/hilt_check.py
       - name: MockK budget
         script: python3 tools/mockk_audit.py
       - name: Manual checklist rules
