@@ -739,4 +739,11 @@
     <string name="intrusion_warning_channel_description">Alerts about suspicious activity on the device</string>
     <string name="alarm_hold_title">Alarm is active</string>
     <string name="alarm_hold_text">PhoneGuard keeps the siren running and waits for your command</string>
+    <string name="neighbour_channel_name">App protection</string>
+    <string name="neighbour_alert_title">Dangerous app next to your data</string>
+    <string name="neighbour_alert_text">%1$s is installed next to your protected apps (%2$d). Permissions: %3$s</string>
+    <string name="neighbour_capability_overlay">draw over other apps</string>
+    <string name="neighbour_capability_accessibility">accessibility service</string>
+    <string name="neighbour_capability_notification_access">notification access</string>
+    <string name="neighbour_capability_device_admin">device administrator</string>
 </resources>

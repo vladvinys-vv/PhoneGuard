@@ -63,7 +63,16 @@ object NotificationChannels {
         SIM_SWAP("sim_swap_channel", Importance.HIGH),
 
         /** Подозрительная подпись только что установленного приложения. */
-        NEW_APP("package_added_channel", Importance.DEFAULT);
+        NEW_APP("package_added_channel", Importance.DEFAULT),
+
+        /**
+         * Новое приложение с правами оверлея/доступности рядом с защищёнными.
+         *
+         * Отдельный канал, а не [NEW_APP]: подпись APK и «опасный сосед» — разные события с
+         * разной срочностью, и пользователь должен иметь возможность отключить одно, не
+         * отключая другое.
+         */
+        NEIGHBOUR("protect_neighbour_channel", Importance.HIGH);
 
         companion object {
             fun byChannelId(channelId: String): Spec? =

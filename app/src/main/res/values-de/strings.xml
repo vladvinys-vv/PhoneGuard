@@ -732,4 +732,11 @@
     <string name="intrusion_warning_channel_description">Hinweise auf verdächtige Aktivität auf dem Gerät</string>
     <string name="alarm_hold_title">Alarm ist aktiv</string>
     <string name="alarm_hold_text">PhoneGuard hält die Sirene aktiv und wartet auf Ihre Eingabe</string>
+    <string name="neighbour_channel_name">App-Schutz</string>
+    <string name="neighbour_alert_title">Gefährliche App neben Ihren Daten</string>
+    <string name="neighbour_alert_text">%1$s wurde neben Ihren geschützten Apps installiert (%2$d). Rechte: %3$s</string>
+    <string name="neighbour_capability_overlay">über anderen Apps zeichnen</string>
+    <string name="neighbour_capability_accessibility">Bedienungshilfen</string>
+    <string name="neighbour_capability_notification_access">Zugriff auf Benachrichtigungen</string>
+    <string name="neighbour_capability_device_admin">Geräteadministrator</string>
 </resources>

@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.phoneguard.protect.NeighbourAlertPolicy
 import com.phoneguard.util.PinAttemptLimiter
 import com.phoneguard.util.SecurityUtils
 import kotlinx.coroutines.flow.Flow
@@ -143,6 +144,16 @@ class PreferencesManager(private val context: Context) {
          * попадает — в формате обмена нет типа «набор» (см. [exportableSettings]).
          */
         private val KEY_PROTECTED_APPS = stringSetPreferencesKey("protected_apps")
+
+        /**
+         * Когда о каком пакете уже предупреждали как об «опасном соседе».
+         *
+         * Формат `пакет=время` и правила (окно суток, предел записей) — в
+         * [com.phoneguard.protect.NeighbourAlertPolicy]: там они проверяются тестом, а здесь
+         * только хранение. В перенос настроек не попадает: время уведомления — свойство
+         * этого телефона, а не настройка пользователя.
+         */
+        private val KEY_NEIGHBOUR_ALERTS = stringSetPreferencesKey("neighbour_alerts")
 
         // SimSwap
         private val KEY_LAST_KNOWN_IMSI = stringPreferencesKey("last_known_imsi")
@@ -297,6 +308,28 @@ class PreferencesManager(private val context: Context) {
     // Защита чувствительных приложений
     val protectedApps: Flow<Set<String>> =
         context.dataStore.data.map { it[KEY_PROTECTED_APPS] ?: emptySet() }
+
+    /** Отметки о уже показанных предупреждениях «опасный сосед» (пакет → время). */
+    suspend fun neighbourAlerts(nowMillis: Long): Map<String, Long> =
+        NeighbourAlertPolicy.parse(
+            context.dataStore.data.first()[KEY_NEIGHBOUR_ALERTS].orEmpty(),
+            nowMillis
+        )
+
+    /**
+     * Запоминает, что о пакете предупредили.
+     *
+     * Просроченные и лишние записи выбрасываются здесь же: иначе ключ рос бы с каждой
+     * установкой и никогда не чистился.
+     */
+    suspend fun recordNeighbourAlert(packageName: String, atMillis: Long) {
+        val current = neighbourAlerts(atMillis)
+        val next = NeighbourAlertPolicy.remember(current, packageName, atMillis)
+        context.dataStore.edit { edit ->
+            val formatted = NeighbourAlertPolicy.format(next)
+            if (formatted.isEmpty()) edit.remove(KEY_NEIGHBOUR_ALERTS) else edit[KEY_NEIGHBOUR_ALERTS] = formatted
+        }
+    }
 
     /** Заменяет набор целиком: правила «что можно» живут в `protect/SensitiveAppPolicy`. */
     suspend fun setProtectedApps(packages: Set<String>) {

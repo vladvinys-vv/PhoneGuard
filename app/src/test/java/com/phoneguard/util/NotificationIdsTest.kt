@@ -75,6 +75,45 @@ class NotificationIdsTest {
     }
 
     @Test
+    fun neighbourRangeDoesNotOverlapAnythingElse() {
+        // У одного пакета два разных события — «плохая подпись» и «опасные права». Раньше
+        // пересечение диапазонов уже дважды приводило к тихой потере уведомления.
+        assertTrue(
+            "NEIGHBOUR_RANGE пересекается с PACKAGE_ADDED_RANGE",
+            NotificationIds.NEIGHBOUR_RANGE.intersect(NotificationIds.PACKAGE_ADDED_RANGE).isEmpty()
+        )
+        fixedIds.forEach { (name, id) ->
+            assertTrue(
+                "$name=$id попадает в диапазон «опасный сосед» ${NotificationIds.NEIGHBOUR_RANGE}",
+                id !in NotificationIds.NEIGHBOUR_RANGE
+            )
+        }
+    }
+
+    @Test
+    fun neighbourIdsStayInsideTheirRange() {
+        listOf(
+            "com.example.app",
+            "org.vendor.translator",
+            "a",
+            "com.example.with.a.very.long.package.name.for.testing",
+            "падение.кириллицей"
+        ).forEach { name ->
+            assertTrue(
+                "$name → ${NotificationIds.neighbour(name)}",
+                NotificationIds.neighbour(name) in NotificationIds.NEIGHBOUR_RANGE
+            )
+        }
+    }
+
+    @Test
+    fun neighbourIdDiffersFromSignatureIdForSamePackage() {
+        // Иначе предупреждение об опасных правах затрёт предупреждение о подписи того же APK.
+        val name = "com.example.app"
+        assertTrue(NotificationIds.neighbour(name) != NotificationIds.packageAdded(name))
+    }
+
+    @Test
     fun negativeHashCodesStillLandInsideRange() {
         // hashCode() может быть отрицательным — маска обязана это выдержать.
         val negative = generateSequence(0) { it + 1 }

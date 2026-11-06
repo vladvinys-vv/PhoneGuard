@@ -82,6 +82,30 @@ class SensitiveAppGuard @Inject constructor(
     /** Сколько список уже занимает — для подсказки о пределе. */
     suspend fun protectedCount(): Int = preferencesManager.protectedApps.first().size
 
+    /**
+     * Факты об одном пакете — для реакции на установку (`PackageAddedReceiver`).
+     *
+     * Отдельный путь, а не поиск в `installedApps()`: там перечисление всех приложений с
+     * `getLaunchIntentForPackage` (секунды на большом телефоне), а ресивер живёт под
+     * `goAsync()` с жёстким лимитом времени. Права всё равно собираются теми же функциями,
+     * поэтому «опасный сосед» и экран показывают одинаковый набор прав.
+     *
+     * @return `null`, если приложение уже удалили или пакет недоступен
+     */
+    suspend fun factsFor(packageName: String): SensitiveAppPolicy.AppFacts? =
+        withContext(Dispatchers.IO) {
+            val info = runCatching {
+                context.packageManager.getApplicationInfo(packageName, 0)
+            }.getOrNull() ?: return@withContext null
+            facts(
+                info = info,
+                overlay = overlayPackages(),
+                accessibility = enabledComponents(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+                notificationAccess = enabledComponents(Settings.Secure.ENABLED_NOTIFICATION_LISTENERS),
+                admins = activeAdminPackages()
+            )
+        }
+
     private fun installedApps(): List<SensitiveAppPolicy.AppFacts> {
         val packageManager = context.packageManager
         val overlay = overlayPackages()

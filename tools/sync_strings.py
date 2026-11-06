@@ -2258,6 +2258,49 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Списки доменов и IP сохраняются, но без upstream-форвардинга VPN они не блокируются. Полная блокировка приложения работает всегда.",
         "de": "Domain- und IP-Listen werden gespeichert, ohne VPN-Weiterleitung aber nicht durchgesetzt. Die vollständige App-Blockierung funktioniert immer.",
     },
+    # Предупреждение о новом «опасном соседе» (protect/NeighbourAlertPolicy).
+    "neighbour_channel_name": {
+        "default": "Защита приложений",
+        "en": "App protection",
+        "ru": "Защита приложений",
+        "de": "App-Schutz",
+    },
+    "neighbour_alert_title": {
+        "default": "Опасное приложение рядом с вашими данными",
+        "en": "Dangerous app next to your data",
+        "ru": "Опасное приложение рядом с вашими данными",
+        "de": "Gefährliche App neben Ihren Daten",
+    },
+    "neighbour_alert_text": {
+        "default": "%1$s установлено рядом с приложениями под защитой (%2$d). Права: %3$s",
+        "en": "%1$s is installed next to your protected apps (%2$d). Permissions: %3$s",
+        "ru": "%1$s установлено рядом с приложениями под защитой (%2$d). Права: %3$s",
+        "de": "%1$s wurde neben Ihren geschützten Apps installiert (%2$d). Rechte: %3$s",
+    },
+    "neighbour_capability_overlay": {
+        "default": "рисовать поверх окон",
+        "en": "draw over other apps",
+        "ru": "рисовать поверх окон",
+        "de": "über anderen Apps zeichnen",
+    },
+    "neighbour_capability_accessibility": {
+        "default": "служба доступности",
+        "en": "accessibility service",
+        "ru": "служба доступности",
+        "de": "Bedienungshilfen",
+    },
+    "neighbour_capability_notification_access": {
+        "default": "доступ к уведомлениям",
+        "en": "notification access",
+        "ru": "доступ к уведомлениям",
+        "de": "Zugriff auf Benachrichtigungen",
+    },
+    "neighbour_capability_device_admin": {
+        "default": "администратор устройства",
+        "en": "device administrator",
+        "ru": "администратор устройства",
+        "de": "Geräteadministrator",
+    },
 }
 
 LOCALES = {
