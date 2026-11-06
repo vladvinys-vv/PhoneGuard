@@ -205,7 +205,17 @@
 python3 tools/manual_check.py                        # артефакты: 16 КБ, подпись, mapping
 python3 tools/manual_check.py --device emulator-5554 # плюс разрешения и каналы уведомлений
 python3 tools/manual_check.py --device --revoke android.permission.CAMERA  # сценарий 13.4
+python3 tools/manual_check.py --device --logcat /tmp/pg.log     # сценарий 13.3: лог + поиск утечки номера
+python3 tools/manual_check.py --device --neighbour              # сценарий 13.5: уведомление соседа
+python3 tools/manual_check.py --device --logcat /tmp/pg.log --neighbour \
+    --report /tmp/manual-report.md                              # markdown-отчёт о прогоне
 ```
+
+`--logcat` снимает `adb logcat -d -s Bnetza:V PhoneGuardEvents:V SmsSpamReceiver:V` и **проверяет,
+что в логе нет полного номера**: приложение маскирует его как `+49170123••••`, поэтому цифровой
+хвост E.164 в логе — ошибка, а не «просто лог». `--neighbour` ищет уведомление в канале
+`protect_neighbour_channel` через `dumpsys notification --noredact`. `--report` записывает
+`docs/MANUAL_REPORT.md` — заготовку отчёта о прогоне (её и прикладывают к issue).
 
 Пропуск (`skip`) — не ошибка: без `zipalign`, `apksigner` или `adb` скрипт честно пишет, что
 проверка не выполнялась, и выходит с кодом 0. Красным он становится только на настоящем провале.

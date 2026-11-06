@@ -41,6 +41,7 @@ REQUIRED_CHECKS = (
     "unused_strings.py",
     "unused_resources.py",
     "docs_links.py",
+    "hilt_check.py",
     "mockk_audit.py",
     "manual_check.py",
     "junit_gate.py",
@@ -298,6 +299,7 @@ jobs:
           python3 tools/unused_strings.py
           python3 tools/unused_resources.py
           python3 tools/docs_links.py
+          python3 tools/hilt_check.py
           python3 tools/mockk_audit.py
           python3 tools/manual_check.py --self-test
           python3 tools/release_check.py

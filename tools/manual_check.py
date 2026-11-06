@@ -47,6 +47,17 @@ DEFAULT_PACKAGE = "com.phoneguard"
 PERMISSION_LINE = re.compile(r"^\s+(android\.permission\.[\w.]+):\s+granted=(true|false)")
 CHANNEL_LINE = re.compile(r"NotificationChannel\{[^}]*mId='([^']+)'")
 
+# Теги, по которым видно работу жалобы в BNetzA и блокировки SMS (раздел 13.3).
+LOG_TAGS = ("Bnetza:V", "PhoneGuardEvents:V", "SmsSpamReceiver:V")
+
+# Канал «опасного соседа» (раздел 13.5). Значение из `NotificationChannels.Spec.NEIGHBOUR`;
+# менять его нельзя: вместе с id теряются пользовательские настройки канала.
+NEIGHBOUR_CHANNEL = "protect_neighbour_channel"
+
+# Полный номер в формате E.164. Приложение маскирует его как `+49170123••••`, поэтому цифровой
+# хвост длиной 10+ символов в логе означает, что маска не применилась.
+FULL_NUMBER = re.compile(r"\+\d{10,15}")
+
 OK, SKIP, FAIL = "ok", "skip", "fail"
 
 
@@ -142,6 +153,58 @@ def parse_channels(dumpsys_notification: str, package: str) -> list[str]:
     return channels
 
 
+def unmasked_numbers(log_text: str, limit: int = 3) -> list[str]:
+    """Строки лога, где номер не замаскирован (полный E.164 вместо `+4917…••••`)."""
+    leaks = []
+    for line in log_text.splitlines():
+        match = FULL_NUMBER.search(line)
+        if match:
+            leaks.append(f"{match.group(0)} в строке: {line.strip()[:120]}")
+            if len(leaks) >= limit:
+                break
+    return leaks
+
+
+def neighbour_notifications(dumpsys_notification: str, package: str) -> list[str]:
+    """Уведомления приложения в канале «опасного соседа» (их текст).
+
+    `dumpsys notification --noredact` печатает записи блоками; канал указан в строке
+    `channel=NotificationChannel{…mId='protect_neighbour_channel'}`. Строка без нужного
+    канала к «соседу» не относится, даже если пакет в ней есть.
+    """
+    found: list[str] = []
+    for line in dumpsys_notification.splitlines():
+        if package not in line or NEIGHBOUR_CHANNEL not in line:
+            continue
+        text = re.sub(r"\s+", " ", line).strip()
+        found.append(text[:200])
+    return found
+
+
+def render_report(results: list[Result]) -> str:
+    """Markdown-отчёт: что проверено, чем и с каким итогом."""
+    code, passed, skipped, failed = summarize(results)
+    lines = [
+        "# Отчёт ручной проверки",
+        "",
+        f"Итог: {passed} ok, {skipped} skipped, {failed} failed.",
+        "",
+        "| Проверка | Итог | Подробности | Команда |",
+        "| --- | --- | --- | --- |",
+    ]
+    for result in results:
+        detail = result.detail.replace("|", "\\|").replace("\n", " ")[:200]
+        command = result.command.replace("|", "\\|")
+        lines.append(f"| {result.name} | {result.status} | {detail} | `{command}` |")
+    lines.append("")
+    lines.append(
+        "Проверки со статусом `skip` не выполнялись (нет APK, SDK, `adb` или нужен "
+        "интерфейс приложения) — это не провал, но и не подтверждение."
+    )
+    del code
+    return "\n".join(lines) + "\n"
+
+
 def verdict_of_zipalign(returncode: int, output: str) -> str:
     """`-c` не меняет APK: 0 и слово `Verification succesful` (так печатает zipalign)."""
     if returncode == 0 and "Verification succesful" in output:
@@ -217,7 +280,13 @@ def adb_command(device: str | None, *args: str) -> list[str]:
     return ["adb"] + (["-s", device] if device else []) + list(args)
 
 
-def check_device(device: str | None, package: str, revoke: str | None) -> list[Result]:
+def check_device(
+    device: str | None,
+    package: str,
+    revoke: str | None,
+    logcat: Path | None = None,
+    neighbour: bool = False,
+) -> list[Result]:
     results: list[Result] = []
     if shutil.which("adb") is None:
         results.append(Result("Устройство", SKIP, "adb не найден (нужен Android platform-tools)"))
@@ -291,11 +360,67 @@ def check_device(device: str | None, package: str, revoke: str | None) -> list[R
             f"выполняется явно: python3 tools/manual_check.py --device {chosen} --revoke "
             f"android.permission.CAMERA",
         ))
-    results.append(Result(
-        "Сценарии 13.3/13.5 (жалоба BNetzA, опасный сосед)",
-        SKIP,
-        "требуют действий в интерфейсе; лог: adb logcat -s Bnetza:V PhoneGuardEvents:V",
-    ))
+    if logcat is not None:
+        command = adb_command(chosen, "shell", "logcat", "-d", "-s", *LOG_TAGS)
+        code, output = run_command(command, timeout=180)
+        try:
+            logcat.write_text(output, encoding="utf-8")
+            note = f"лог записан в {logcat}"
+        except OSError as error:
+            results.append(Result("Жалоба BNetzA (лог)", FAIL, f"не удалось записать {logcat}: {error}"))
+            return results
+        leaks = unmasked_numbers(output)
+        if code != 0 and not output.strip():
+            results.append(Result("Жалоба BNetzA (лог)", SKIP, f"{note}, но logcat вернул пусто"))
+        elif leaks:
+            results.append(Result(
+                "Жалоба BNetzA (лог)",
+                FAIL,
+                f"{note}; номер не замаскирован: " + leaks[0],
+                " ".join(command),
+            ))
+        else:
+            results.append(Result(
+                "Жалоба BNetzA (лог)",
+                OK,
+                f"{note}; полных номеров в логе нет (только маска)",
+                " ".join(command),
+            ))
+    else:
+        results.append(Result(
+            "Жалоба BNetzA (лог)",
+            SKIP,
+            f"сбор лога не запрошен: --logcat /tmp/phoneguard.log "
+            f"(adb logcat -s {' '.join(LOG_TAGS)})",
+        ))
+
+    if neighbour:
+        code, output = run_command(
+            adb_command(chosen, "shell", "dumpsys", "notification", "--noredact")
+        )
+        # Свежий dumpsys уже есть выше, но канал «соседа» мог появиться после установки
+        # тестового пакета — читаем заново, чтобы результат не зависел от порядка проверок.
+        found = neighbour_notifications(output, package)
+        if found:
+            results.append(Result(
+                "Опасный сосед (уведомление)",
+                OK,
+                f"{len(found)}: {found[0]}",
+                f"adb shell dumpsys notification --noredact | grep {NEIGHBOUR_CHANNEL}",
+            ))
+        else:
+            results.append(Result(
+                "Опасный сосед (уведомление)",
+                SKIP,
+                f"в канале {NEIGHBOUR_CHANNEL} уведомлений нет — установите тестовый пакет "
+                "с правом оверлея и повторите",
+            ))
+    else:
+        results.append(Result(
+            "Опасный сосед (уведомление)",
+            SKIP,
+            "не запрошено: --neighbour (нужно установить тестовый пакет с оверлеем)",
+        ))
     return results
 
 
@@ -377,6 +502,38 @@ def self_test() -> int:
         (mapping_dir / "mapping.txt").write_text("com.phoneguard.Main -> a:\n", encoding="utf-8")
         check("mapping флейвора найден", find_mapping(root) is not None)
 
+    masked_log = (
+        "D/BnetzaReport: жалоба для +49170123•••• отправлена\n"
+        "D/PhoneGuardEvents: blocked call from +49170123••••\n"
+    )
+    check("маскированный номер не считается утечкой", unmasked_numbers(masked_log) == [])
+    leaked_log = "D/BnetzaReport: complaint for +491701234567 prepared\n"
+    check("полный номер в логе найден", len(unmasked_numbers(leaked_log)) == 1)
+    check("в описании утечки видно сам номер",
+          any("+491701234567" in line for line in unmasked_numbers(leaked_log)))
+    check("несколько утечек ограничены лимитом",
+          len(unmasked_numbers("\n".join(["+49170123456"] * 10), limit=3)) == 3)
+
+    notification_dump = (
+        "  NotificationRecord{1 a=com.phoneguard} channel=NotificationChannel{a "
+        "mId='protect_neighbour_channel'}\n"
+        "  NotificationRecord{2 a=com.phoneguard} channel=NotificationChannel{b "
+        "mId='call_blocker_channel'}\n"
+        "  NotificationRecord{3 a=com.other} channel=NotificationChannel{c "
+        "mId='protect_neighbour_channel'}\n"
+    )
+    found = neighbour_notifications(notification_dump, "com.phoneguard")
+    check("уведомление соседа найдено", len(found) == 1)
+    check("чужой пакет не приписан", all("com.other" not in line for line in found))
+    check("другой канал не считается соседом",
+          len(neighbour_notifications("a=com.phoneguard mId='call_blocker_channel'", "com.phoneguard")) == 0)
+
+    report = render_report([Result("Проверка", OK, "всё хорошо", "adb devices"),
+                            Result("Другая", SKIP, "нет устройства")])
+    check("в отчёте есть заголовок", report.startswith("# Отчёт ручной проверки"))
+    check("в отчёте есть строки проверок", "| Проверка | ok |" in report and "| Другая | skip |" in report)
+    check("в отчёте есть итог", "1 ok, 1 skipped, 0 failed" in report)
+
     results = [
         Result("a", OK, ""),
         Result("b", SKIP, ""),
@@ -395,7 +552,8 @@ def self_test() -> int:
         return 1
     print(
         "manual_check --self-test: ok (разрешения, версия API, zipalign, adb devices, "
-        "каналы уведомлений, выбор свежего APK и mapping, итоговая сводка)"
+        "каналы уведомлений, выбор свежего APK и mapping, утечка номера в логе, "
+        "уведомление соседа, markdown-отчёт, итоговая сводка)"
     )
     return 0
 
@@ -407,6 +565,12 @@ def main() -> int:
     parser.add_argument("--package", default=DEFAULT_PACKAGE, help="applicationId приложения")
     parser.add_argument("--revoke", default=None,
                         help="отозвать разрешение через adb (единственная изменяющая операция)")
+    parser.add_argument("--logcat", type=Path, default=None,
+                        help="снять logcat по тегам Bnetza/PhoneGuardEvents/SmsSpamReceiver в файл")
+    parser.add_argument("--neighbour", action="store_true",
+                        help="проверить уведомление об опасном соседе в dumpsys notification")
+    parser.add_argument("--report", type=Path, default=None,
+                        help="записать markdown-отчёт о проверках")
     parser.add_argument("--verbose", action="store_true", help="показать выполненные команды")
     parser.add_argument("--self-test", action="store_true", help="проверить правила на синтетике")
     args = parser.parse_args()
@@ -416,7 +580,9 @@ def main() -> int:
 
     results = check_artifacts(ROOT)
     if args.device is not None:
-        results += check_device(args.device or None, args.package, args.revoke)
+        results += check_device(
+            args.device or None, args.package, args.revoke, args.logcat, args.neighbour
+        )
     else:
         results.append(Result(
             "Устройство",
@@ -425,6 +591,13 @@ def main() -> int:
         ))
 
     print_results(results, args.verbose)
+    if args.report is not None:
+        try:
+            args.report.write_text(render_report(results), encoding="utf-8")
+            print(f"отчёт: {args.report}")
+        except OSError as error:
+            print(f"error: не удалось записать отчёт {args.report}: {error}")
+            return 1
     code, passed, skipped, failed = summarize(results)
     print(
         f"\n{passed} ok, {skipped} skipped, {failed} failed: артефакты сборки"

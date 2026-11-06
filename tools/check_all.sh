@@ -61,6 +61,12 @@ step "docs_links.py"
 python3 tools/docs_links.py || failed=1
 python3 tools/docs_links.py --self-test || failed=1
 
+step "hilt_check.py"
+# Разрыв в графе Hilt — не ошибка компиляции: сборка зелёная, падение на генерации кода.
+# Так уже дважды терялись биндинги (`IntrusionResponseExecutor`, `ShoulderSurferController`).
+python3 tools/hilt_check.py || failed=1
+python3 tools/hilt_check.py --self-test || failed=1
+
 step "mockk_audit.py"
 # MockK-файл не выполняется в офлайн-прогоне, поэтому их число — долг, а не стиль. Бюджет
 # падает, когда тест написан без заглушек, и не даёт вырасти «по привычке».

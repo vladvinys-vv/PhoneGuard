@@ -56,6 +56,10 @@ jobs:
       - name: Docs links and paths exist
         run: python3 tools/docs_links.py
 
+      # Разрыв в графе Hilt компилятор не видит: сборка зелёная, падение — на генерации кода.
+      - name: Hilt dependency graph
+        run: python3 tools/hilt_check.py
+
       # Долг перед MockK: файл с заглушками не выполняется в офлайн-прогоне, поэтому число
       # таких файлов под бюджетом, а не «как получится».
       - name: MockK budget
