@@ -61,7 +61,11 @@ class SensitiveAppGuard @Inject constructor(
         SensitiveAppsSnapshot(
             protectedApps = SensitiveAppPolicy.protectedApps(protected, apps),
             suggestions = SensitiveAppPolicy.suggestions(apps, protected),
-            exposures = SensitiveAppPolicy.exposures(protected, apps)
+            exposures = SensitiveAppPolicy.exposures(
+                protected = protected,
+                apps = apps,
+                hidden = preferencesManager.hiddenNeighbours.first()
+            )
         )
     }
 
@@ -77,6 +81,17 @@ class SensitiveAppGuard @Inject constructor(
         if (next == current && isProtected && packageName !in current) return null
         preferencesManager.setProtectedApps(next)
         return next
+    }
+
+    /**
+     * «Больше не предупреждать» про конкретное приложение.
+     *
+     * Скрытие — не то же самое, что «не опасно»: приложение остаётся в списке найденного при
+     * следующем открытии экрана, но перестаёт туда попадать. Переустановка приложения вернёт
+     * предупреждение (см. `PreferencesManager.showNeighbour`).
+     */
+    suspend fun dismissExposure(packageName: String) {
+        preferencesManager.hideNeighbour(packageName)
     }
 
     /** Сколько список уже занимает — для подсказки о пределе. */

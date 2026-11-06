@@ -13,10 +13,18 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,7 +36,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.phoneguard.R
+import com.phoneguard.perm.ProtectionActionPolicy
 import com.phoneguard.perm.ProtectionCapabilityPolicy
+import com.phoneguard.util.SystemSettingsIntents
+import com.phoneguard.util.findActivity
 import com.phoneguard.ui.screens.dashboard.DashboardViewModel.FullScanSummary
 import com.phoneguard.ui.theme.*
 
@@ -48,6 +59,14 @@ fun DashboardScreen(
     val fullScanSummary by viewModel.fullScanSummary.collectAsState()
     val phoneCheckSummary by viewModel.phoneCheckSummary.collectAsState()
     val degradedCapabilities by viewModel.degradedCapabilities.collectAsState()
+    val askedPermissions by viewModel.askedPermissions.collectAsState()
+    val context = LocalContext.current
+
+    // Вызывается всегда, а не только при наличии проблем: у Compose порядок вызовов
+    // фиксирован, и launcher внутри `if` ломал композицию при первом же исправлении.
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { viewModel.recalculateScore() }
 
     // Сводка последнего сканирования читалась только в init: после возврата с
     // экрана сканирования дашборд продолжал показывать старую дату и оценку.
@@ -76,7 +95,36 @@ fun DashboardScreen(
         )
 
         if (degradedCapabilities.isNotEmpty()) {
-            DegradedProtectionCard(capabilities = degradedCapabilities)
+            DegradedProtectionCard(
+                rows = degradedCapabilities.map { capability ->
+                    DegradedProtectionRow(
+                        capability = capability,
+                        action = resolveAction(
+                            capability = capability,
+                            context = context,
+                            askedBefore = capability.requiredPermission() in askedPermissions
+                        )
+                    )
+                },
+                onAction = { capability ->
+                    val permission = capability.requiredPermission()
+                        ?: return@DegradedProtectionCard
+                    when (
+                        val action = resolveAction(
+                            capability = capability,
+                            context = context,
+                            askedBefore = permission in askedPermissions
+                        )
+                    ) {
+                        null -> viewModel.recalculateScore()
+                        ProtectionActionPolicy.Action.REQUEST_PERMISSION -> {
+                            viewModel.rememberPermissionAsked(permission)
+                            permissionLauncher.launch(permission)
+                        }
+                        else -> SystemSettingsIntents.open(context, action, context.packageName)
+                    }
+                }
+            )
         }
 
         SecurityScoreCard(score = score.total)
@@ -150,6 +198,12 @@ fun SensitiveAppsCard(onClick: () -> Unit) {
     }
 }
 
+/** Строка карточки: что ослаблено и что произойдёт по нажатию (`null` — предложить нечего). */
+data class DegradedProtectionRow(
+    val capability: ProtectionCapabilityPolicy.Capability,
+    val action: ProtectionActionPolicy.Action?
+)
+
 /**
  * Предупреждение «защита работает не полностью».
  *
@@ -160,7 +214,8 @@ fun SensitiveAppsCard(onClick: () -> Unit) {
  */
 @Composable
 fun DegradedProtectionCard(
-    capabilities: List<ProtectionCapabilityPolicy.Capability>
+    rows: List<DegradedProtectionRow>,
+    onAction: (ProtectionCapabilityPolicy.Capability) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -186,14 +241,88 @@ fun DegradedProtectionCard(
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
-            capabilities.forEach { capability ->
-                Text(
-                    text = stringResource(capability.rationaleRes()),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
+            rows.forEach { row ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(row.capability.rationaleRes()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    val action = row.action
+                    if (action != null) {
+                        TextButton(onClick = { onAction(row.capability) }) {
+                            Text(
+                                text = stringResource(
+                                    if (action == ProtectionActionPolicy.Action.REQUEST_PERMISSION) {
+                                        R.string.protection_action_grant
+                                    } else {
+                                        R.string.protection_action_open_settings
+                                    }
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+/**
+ * Имя разрешения для запроса — единственное место, где enum превращается в строку Android.
+ *
+ * Таблица «возможность → разрешение» живёт в [ProtectionCapabilityPolicy]; здесь только
+ * соответствие enum и константы `Manifest.permission`.
+ */
+private fun ProtectionCapabilityPolicy.CapabilityPermission.permissionName(): String = when (this) {
+    ProtectionCapabilityPolicy.CapabilityPermission.PHONE_STATE -> Manifest.permission.READ_PHONE_STATE
+    ProtectionCapabilityPolicy.CapabilityPermission.CAMERA -> Manifest.permission.CAMERA
+    ProtectionCapabilityPolicy.CapabilityPermission.SEND_SMS -> Manifest.permission.SEND_SMS
+    ProtectionCapabilityPolicy.CapabilityPermission.FINE_LOCATION -> Manifest.permission.ACCESS_FINE_LOCATION
+    ProtectionCapabilityPolicy.CapabilityPermission.POST_NOTIFICATIONS ->
+        Manifest.permission.POST_NOTIFICATIONS
+}
+
+/**
+ * Какое разрешение относится к возможности (по таблице политики, без своей копии).
+ *
+ * `null` — в таблице для этой версии Android разрешения нет (POST_NOTIFICATIONS до API 33),
+ * значит и предлагать нечего: уведомления там выдаются при установке.
+ */
+private fun ProtectionCapabilityPolicy.Capability.requiredPermission(): String? =
+    ProtectionCapabilityPolicy.permissionOf(this, android.os.Build.VERSION.SDK_INT)?.permissionName()
+
+/**
+ * Что предложить для ослабленной возможности прямо сейчас.
+ *
+ * Считается на месте и без Android-состояния в политике: решение зависит от того, выдано ли
+ * разрешение, покажет ли система диалог ещё раз и включён ли показ уведомлений.
+ */
+private fun resolveAction(
+    capability: ProtectionCapabilityPolicy.Capability,
+    context: android.content.Context,
+    askedBefore: Boolean
+): ProtectionActionPolicy.Action? {
+    val permission = capability.requiredPermission() ?: return null
+    val granted = ContextCompat.checkSelfPermission(context, permission) ==
+        PackageManager.PERMISSION_GRANTED
+    val canAskAgain = context.findActivity()?.let { activity ->
+        ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)
+    } ?: false
+    return if (capability == ProtectionCapabilityPolicy.Capability.INTRUSION_WARNING) {
+        ProtectionActionPolicy.notificationAction(
+            permissionGranted = granted,
+            appNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled(),
+            askedBefore = askedBefore,
+            canAskAgain = canAskAgain
+        )
+    } else {
+        ProtectionActionPolicy.permissionAction(
+            granted = granted,
+            askedBefore = askedBefore,
+            canAskAgain = canAskAgain
+        )
     }
 }
 

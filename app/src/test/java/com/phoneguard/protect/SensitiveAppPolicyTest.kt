@@ -197,6 +197,39 @@ class SensitiveAppPolicyTest {
     }
 
     @Test
+    fun `hidden exposures are not shown`() {
+        // «Больше не предупреждать» — не «не опасно»: приложение остаётся в найденном, но
+        // перестаёт занимать экран. Иначе список находок превращается в навязчивый.
+        val apps = listOf(
+            SensitiveAppPolicy.AppFacts("spy.app", "Spy", isSystem = false, capabilities = setOf(SensitiveAppPolicy.Capability.OVERLAY)),
+            SensitiveAppPolicy.AppFacts("tool.app", "Tool", isSystem = false, capabilities = setOf(SensitiveAppPolicy.Capability.ACCESSIBILITY))
+        )
+        val protected = setOf("bank.app")
+        val shown = SensitiveAppPolicy.exposures(protected, apps, hidden = setOf("spy.app"))
+        assertEquals(listOf("tool.app"), shown.map { it.packageName })
+        assertEquals(2, SensitiveAppPolicy.exposures(protected, apps).size)
+    }
+
+    @Test
+    fun `hiding everything gives an empty list, not a broken one`() {
+        val apps = listOf(
+            SensitiveAppPolicy.AppFacts("spy.app", "Spy", isSystem = false, capabilities = setOf(SensitiveAppPolicy.Capability.OVERLAY))
+        )
+        assertTrue(SensitiveAppPolicy.exposures(setOf("bank.app"), apps, hidden = setOf("spy.app")).isEmpty())
+    }
+
+    @Test
+    fun `hidden app stays in suggestions if it looks sensitive`() {
+        // Скрытие касается только списка опасных соседей: предложение «добавить в защиту»
+        // от него не зависит, иначе банк, скрытый как сосед, выпал бы из предложений.
+        val apps = listOf(
+            SensitiveAppPolicy.AppFacts("com.bank.app", "Bank", isSystem = false, capabilities = setOf(SensitiveAppPolicy.Capability.OVERLAY))
+        )
+        val suggestions = SensitiveAppPolicy.suggestions(apps, protected = emptySet())
+        assertEquals(listOf("com.bank.app"), suggestions.map { it.packageName })
+    }
+
+    @Test
     fun `limit stops adding but never blocks removing`() {
         val full = (1..SensitiveAppPolicy.MAX_PROTECTED).map { "pkg$it" }.toSet()
         assertTrue(SensitiveAppPolicy.isAtLimit(full))

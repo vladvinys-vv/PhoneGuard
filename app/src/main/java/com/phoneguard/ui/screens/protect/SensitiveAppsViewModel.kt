@@ -76,6 +76,19 @@ class SensitiveAppsViewModel @Inject constructor(
         }
     }
 
+    /** «Больше не предупреждать» про конкретное приложение. */
+    fun dismissExposure(packageName: String) {
+        viewModelScope.launch {
+            try {
+                sensitiveAppGuard.dismissExposure(packageName)
+            } catch (e: Exception) {
+                // Не смогли сохранить — список останется прежним; врать об успехе нельзя,
+                // поэтому просто перечитываем состояние.
+            }
+            refresh()
+        }
+    }
+
     fun consumeLimitReached() {
         _limitReached.value = false
     }

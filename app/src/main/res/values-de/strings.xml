@@ -660,4 +660,8 @@
     <string name="neighbour_capability_accessibility">Bedienungshilfen</string>
     <string name="neighbour_capability_notification_access">Zugriff auf Benachrichtigungen</string>
     <string name="neighbour_capability_device_admin">Geräteadministrator</string>
+    <string name="protection_action_grant">Zulassen</string>
+    <string name="protection_action_open_settings">Einstellungen öffnen</string>
+    <string name="exposure_dismiss">Nicht mehr warnen</string>
+    <string name="exposure_revoke">Recht entziehen</string>
 </resources>

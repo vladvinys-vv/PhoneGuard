@@ -667,4 +667,8 @@
     <string name="neighbour_capability_accessibility">служба доступности</string>
     <string name="neighbour_capability_notification_access">доступ к уведомлениям</string>
     <string name="neighbour_capability_device_admin">администратор устройства</string>
+    <string name="protection_action_grant">Разрешить</string>
+    <string name="protection_action_open_settings">Открыть настройки</string>
+    <string name="exposure_dismiss">Больше не предупреждать</string>
+    <string name="exposure_revoke">Отозвать право</string>
 </resources>

@@ -118,10 +118,18 @@ object SensitiveAppPolicy {
      *
      * @param protected пакеты, которые пользователь отметил как ценные
      */
-    fun exposures(protected: Set<String>, apps: List<AppFacts>): List<Exposure> = apps
+    fun exposures(
+        protected: Set<String>,
+        apps: List<AppFacts>,
+        hidden: Set<String> = emptySet()
+    ): List<Exposure> = apps
         .asSequence()
         .filter { !it.isSystem }
         .filter { it.packageName !in protected }
+        // Скрытые остаются в БД и в фактах — их просто не показываем: пользователь уже
+        // посмотрел и решил. Список защищённых и скрытых ведётся отдельно, поэтому снятие
+        // галочки не возвращает надоевшее предупреждение.
+        .filter { it.packageName !in hidden }
         .filter { it.capabilities.isNotEmpty() }
         .mapNotNull { app ->
             val severity = severityOf(app.capabilities) ?: return@mapNotNull null

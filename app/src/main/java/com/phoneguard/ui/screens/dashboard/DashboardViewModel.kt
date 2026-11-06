@@ -68,6 +68,29 @@ class DashboardViewModel @Inject constructor(
     val degradedCapabilities: StateFlow<List<ProtectionCapabilityPolicy.Capability>> =
         _degradedCapabilities.asStateFlow()
 
+    /**
+     * Разрешения, которые приложение уже запрашивало.
+     *
+     * Без этого «отказано навсегда» неотличимо от «ещё не спрашивали»
+     * (`shouldShowRequestPermissionRationale` в обоих случаях `false`), и кнопка «Разрешить»
+     * молча ничего бы не делала: Android второй диалог не показывает.
+     */
+    val askedPermissions: StateFlow<Set<String>> = preferencesManager.askedPermissions.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptySet()
+    )
+
+    /**
+     * Запоминает, что системный диалог для разрешения уже показывали.
+     *
+     * Имя отличается от `PreferencesManager.markPermissionAsked`: здесь вызов не suspend, а
+     * запуск в `viewModelScope` — UI не должен ждать записи в DataStore.
+     */
+    fun rememberPermissionAsked(permission: String) {
+        viewModelScope.launch { preferencesManager.markPermissionAsked(permission) }
+    }
+
     private val _fullScanSummary = MutableStateFlow(FullScanSummary(null, null))
     val fullScanSummary: StateFlow<FullScanSummary> = _fullScanSummary.asStateFlow()
 

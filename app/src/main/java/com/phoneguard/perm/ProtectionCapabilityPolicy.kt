@@ -77,6 +77,15 @@ object ProtectionCapabilityPolicy {
         return Capability.values().filter { it in missing }
     }
 
+    /**
+     * Какое разрешение относится к возможности — обратная сторона [requirements].
+     *
+     * Нужно интерфейсу: карточка ослабленной защиты показывает возможность, а запрашивать и
+     * открывать настройки приходится для конкретного разрешения.
+     */
+    fun permissionOf(capability: Capability, sdkInt: Int): CapabilityPermission? =
+        requirements(sdkInt).firstOrNull { it.capability == capability }?.permission
+
     /** Все ли возможности в порядке. */
     fun isFullyProtected(granted: Set<CapabilityPermission>, sdkInt: Int): Boolean =
         degraded(granted, sdkInt).isEmpty()

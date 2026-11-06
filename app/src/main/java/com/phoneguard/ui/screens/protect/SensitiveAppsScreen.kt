@@ -21,18 +21,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
+import com.phoneguard.perm.ProtectionActionPolicy
 import com.phoneguard.protect.SensitiveAppGuard
 import com.phoneguard.protect.SensitiveAppPolicy
+import com.phoneguard.util.SystemSettingsIntents
 
 /**
  * «Защита приложений»: что пользователь считает ценным и кто рядом умеет подглядывать.
@@ -54,6 +58,7 @@ fun SensitiveAppsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val limitReached by viewModel.limitReached.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -82,7 +87,15 @@ fun SensitiveAppsScreen(
                         limitReached = limitReached,
                         maxProtected = viewModel.maxProtected,
                         onToggle = viewModel::setProtected,
-                        onLimitConsumed = viewModel::consumeLimitReached
+                        onLimitConsumed = viewModel::consumeLimitReached,
+                        onDismiss = viewModel::dismissExposure,
+                        onRevoke = { exposure ->
+                            // Отозвать чужое право приложение не может — только показать
+                            // системный экран, где это делается одним нажатием.
+                            ProtectionActionPolicy.exposureAction(exposure.capabilities)?.let { action ->
+                                SystemSettingsIntents.open(context, action, exposure.packageName)
+                            }
+                        }
                     )
             }
         }
@@ -95,7 +108,9 @@ private fun SensitiveAppsContent(
     limitReached: Boolean,
     maxProtected: Int,
     onToggle: (String, Boolean) -> Unit,
-    onLimitConsumed: () -> Unit
+    onLimitConsumed: () -> Unit,
+    onDismiss: (String) -> Unit,
+    onRevoke: (SensitiveAppPolicy.Exposure) -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         if (limitReached) {
@@ -169,7 +184,11 @@ private fun SensitiveAppsContent(
             item { Hint(stringResource(R.string.sensitive_apps_no_exposures)) }
         } else {
             items(snapshot.exposures, key = { "exposure-${it.packageName}" }) { exposure ->
-                ExposureRow(exposure)
+                ExposureRow(
+                    exposure = exposure,
+                    onRevoke = { onRevoke(exposure) },
+                    onDismiss = { onDismiss(exposure.packageName) }
+                )
                 Divider()
             }
         }
@@ -185,29 +204,49 @@ private fun SensitiveAppsContent(
 }
 
 @Composable
-private fun ExposureRow(exposure: SensitiveAppPolicy.Exposure) {
+private fun ExposureRow(
+    exposure: SensitiveAppPolicy.Exposure,
+    onRevoke: () -> Unit,
+    onDismiss: () -> Unit
+) {
     val severityColor = when (exposure.severity) {
         SensitiveAppPolicy.Severity.HIGH -> MaterialTheme.colorScheme.error
         SensitiveAppPolicy.Severity.MEDIUM -> MaterialTheme.colorScheme.tertiary
         SensitiveAppPolicy.Severity.LOW -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.padding(end = 12.dp)) {
-            Text(exposure.displayName, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = exposure.capabilities.joinToString(" • ") { capabilityLabel(it) },
-                style = MaterialTheme.typography.bodySmall,
-                color = severityColor
-            )
-            Text(
-                text = severityLabel(exposure.severity),
-                style = MaterialTheme.typography.labelSmall,
-                color = severityColor
-            )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.padding(end = 12.dp)) {
+                Text(exposure.displayName, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = exposure.capabilities.joinToString(" • ") { capabilityLabel(it) },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = severityColor
+                )
+                Text(
+                    text = severityLabel(exposure.severity),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = severityColor
+                )
+            }
+        }
+        // Два действия вместо текста «что с этим делать»: отозвать право (системный экран) и
+        // убрать предупреждение из списка. Без второго список находок превращается в
+        // навязчивый, и его перестают читать — тот же урок, что с безусловными уведомлениями.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.exposure_dismiss))
+            }
+            TextButton(onClick = onRevoke) {
+                Text(stringResource(R.string.exposure_revoke))
+            }
         }
     }
 }
