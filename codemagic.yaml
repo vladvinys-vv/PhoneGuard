@@ -61,6 +61,10 @@ workflows:
         script: python3 tools/unused_resources.py
       - name: Docs links and paths exist
         script: python3 tools/docs_links.py
+      - name: MockK budget
+        script: python3 tools/mockk_audit.py
+      - name: Manual checklist rules
+        script: python3 tools/manual_check.py --self-test
       - name: Release path (signing, R8, mapping, 16 KB)
         script: python3 tools/release_check.py
       - name: Kotlin frontend check
@@ -110,7 +114,7 @@ workflows:
       - name: Unit tests
         script: ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
       - name: Test classes actually ran
-        script: python3 tools/junit_gate.py --require-report
+        script: python3 tools/junit_gate.py --require-report --min-cases 1000
       - name: Build production debug APK
         script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
       # versionCode/versionName: из тега `v1.2.3` → code 10203, иначе — build number.

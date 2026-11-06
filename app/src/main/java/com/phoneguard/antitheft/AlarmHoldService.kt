@@ -60,7 +60,7 @@ class AlarmHoldService : Service() {
         // `START_STICKY` перезапускает сервис с `null`-интентом после убийства процесса.
         // Плеера в новом процессе нет, поэтому тревогу нужно поднять заново по сохранённому
         // состоянию — иначе останется только уведомление «сирена звучит» без звука.
-        if (intent == null || intent.action == ACTION_RESTORE) {
+        if (AlarmHoldPolicy.shouldRestoreAlarm(intent == null, intent?.action, ACTION_RESTORE)) {
             restoreAlarmIfLost()
         }
         return START_STICKY

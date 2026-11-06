@@ -4,7 +4,6 @@ import app.cash.turbine.test
 import com.phoneguard.data.local.VaultDao
 import com.phoneguard.model.VaultItem
 import com.phoneguard.vault.EncryptionManager
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,17 +28,10 @@ class VaultRepositoryTest {
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        // Только то, что нужно тесту: единственная проверка читает поток элементов. Заглушки
+        // insertItem/deleteItem/encryptFileToVault/deleteVaultFile здесь ничего не проверяли —
+        // ни один тест эти методы не вызывал, но выглядели как покрытие записи в сейф.
         every { vaultDao.getAllItems() } returns flowOf(emptyList())
-        coEvery { vaultDao.insertItem(any()) } returns 1L
-        coEvery { vaultDao.deleteItem(any()) } returns Unit
-        coEvery { encryptionManager.encryptFileToVault(any(), any()) } returns VaultItem(
-            fileName = "test.jpg",
-            fileSize = 1024,
-            mimeType = "image/jpeg",
-            encryptionKeyAlias = "key",
-            category = com.phoneguard.model.VaultItemCategory.IMAGE
-        )
-        coEvery { encryptionManager.deleteVaultFile(any()) } returns Unit
         repository = VaultRepository(vaultDao, encryptionManager)
     }
 

@@ -88,6 +88,36 @@ object IntegrityPolicy {
         return ((nowMs - buildTimeMs) / (365L * 24L * 60L * 60L * 1000L)).toInt()
     }
 
+    /**
+     * Файлы, которые появляются в системе только после её перезаписи.
+     *
+     * `/system/bin/debuggerd` здесь намеренно **нет**: он есть на каждом устройстве, и раньше
+     * из-за него отчёт по целостности кричал «найден подозрительный файл» на стоковой прошивке.
+     *
+     * Список публичный, потому что это данные, а не решение: тест проверяет, что проверяются
+     * именно эти пути, а не «сколько-то путей».
+     */
+    val ROOT_INDICATOR_PATHS: List<String> = listOf(
+        "/system/bin/su",
+        "/system/xbin/su",
+        "/system/xbin/daemonsu",
+        "/system/app/Superuser.apk",
+        "/data/local.prop"
+    )
+
+    /** Какие из [ROOT_INDICATOR_PATHS] действительно есть. Порядок списка сохраняется. */
+    fun foundRootIndicators(exists: (String) -> Boolean): List<String> =
+        ROOT_INDICATOR_PATHS.filter(exists)
+
+    /**
+     * Значение системного свойства из вывода `getprop`.
+     *
+     * `getprop` печатает перевод строки даже для установленного свойства, а для отсутствующего —
+     * пустую строку. Без `trim` свойство `ro.boot.flash.locked` сравнивалось с `"1"` как
+     * `"1\n"`, то есть «загрузчик разблокирован» на заблокированном устройстве.
+     */
+    fun propertyValue(raw: String?): String? = raw?.trim()?.ifBlank { null }
+
     /** Компрометация: любой сильный признак или хотя бы два слабых. */
     fun isCompromised(signals: Set<Signal>): Boolean =
         signals.any { it in STRONG } || signals.count { it !in STRONG } >= 2

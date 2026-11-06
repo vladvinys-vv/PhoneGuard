@@ -31,12 +31,10 @@ class BootAlarmReceiver : BroadcastReceiver() {
     lateinit var securityService: SecurityService
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            // После обновления приложения процесс тоже перезапускается — сирена пропадала так же.
-            Intent.ACTION_MY_PACKAGE_REPLACED -> Unit
-            else -> return
-        }
+        // Какие действия считаются «процесс начался заново» — решает политика, у которой
+        // есть тесты: забытый `ACTION_MY_PACKAGE_REPLACED` стоит пользователю сирены после
+        // каждого обновления приложения.
+        if (!BootResumePolicy.shouldResume(intent.action)) return
 
         val pendingResult = goAsync()
         // Область уровня процесса, а не приёмника: приёмник создаётся заново на каждый broadcast,

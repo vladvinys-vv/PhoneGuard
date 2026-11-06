@@ -34,7 +34,7 @@
 
 Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
 `ci_check.py`, `docs_check.py`, `unused_strings.py`, `unused_resources.py`, `docs_links.py`,
-`junit_gate.py`, `release_check.py`,
+`mockk_audit.py`, `manual_check.py --self-test`, `junit_gate.py`, `release_check.py`,
 проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
 `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
@@ -367,7 +367,7 @@ python3 tools/jvm_unit_test.py --self-test # проверить сам ранн�
 Room, `androidx.annotation`, `javax.inject`, `android.util.Log`, `android.os.Build` (SDK_INT = 35),
 `android.text.TextUtils`, `android.util.Base64` и минимального `android.content.Context`
 подставляются заглушки, а `R.<тип>.<имя>` генерируется по фактическим ссылкам в коде — поэтому под прогон попадают
-модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 991 тест в 98 файлах.
+модели, DAO-независимые репозитории и конвертеры. Сейчас так выполняется 1007 тестов в 101 файле.
 
 Чтобы под прогон попадало больше настоящей логики, часть кода специально освобождена от Android-типов:
 `NetworkAvailabilityTracker` параметризован ключом сети (`NetworkAvailabilityTracker<Network>` в
@@ -393,8 +393,8 @@ python3 tools/test_coverage_map.py --skipped  # что офлайн не исп�
 python3 tools/test_coverage_map.py --self-test  # все пропуски разобраны по причинам?
 ```
 
-Сейчас: 263 класса, 196 упомянуты в тестах (75%), **из них в выполняемых тестах: 146** (55%).
-Офлайн не выполняются 23 тест-файла (MockK 22, Robolectric 2): в CI
+Сейчас: 267 классов, 198 упомянуты в тестах (75%), **из них в выполняемых тестах: 150** (55%).
+Офлайн не выполняются 22 тест-файла (MockK 20, Robolectric 2): в CI
 (`./gradlew testProductionDebugUnitTest`) они выполняются, поэтому это список «что проверить на
 машине с Maven Central», а не приговор покрытию. `--skipped` печатает его из тех же причин, что и
 раннер, а `--self-test` падает, если хоть один пропуск не попал в известную группу.
@@ -442,7 +442,7 @@ SQL** через встроенный в Python `sqlite3`:
 которую никто не замечает. Проверка считает по репозиторию:
 
 * сколько Kotlin-файлов видят компиляторные проверки (сейчас 374);
-* числа карты покрытия (сейчас 263 класса, 196 упомянуты в тестах) — считает
+* числа карты покрытия (сейчас 267 классов, 198 упомянуты в тестах) — считает
   `test_coverage_map.py`, чтобы источник был один;
 * совпадают ли утверждения «N тестов в M файлах» между документами (сам прогон делает
   `jvm_unit_test.py`, здесь ловится расхождение текстов).
@@ -532,6 +532,51 @@ python3 tools/docs_links.py --verbose  # перечень проверенных
 python3 tools/docs_links.py --self-test
 ```
 
+### `tools/mockk_audit.py`
+
+Держит долг перед MockK под потолком. Файл, импортирующий `io.mockk`, не выполняется в офлайн-
+прогоне (библиотеки нет), то есть существует только для Gradle и Codemagic. Это нормально —
+пока таких файлов немного. Заглушка пишется быстрее фейка, и без счётчика MockK расползается:
+сейчас это **20 файлов и 33 `relaxed`-мока**.
+
+Проверка — не вкус, а бюджет: `BUDGET_FILES = 20`, `BUDGET_RELAXED = 33`. Понижать можно
+свободно, повышать — отдельным коммитом с объяснением. `relaxed`-мок опаснее обычного: он
+возвращает пустые значения вместо поведения, поэтому неожидаемый вызов не роняет тест.
+
+```bash
+python3 tools/mockk_audit.py            # 0 ошибок: бюджет не превышен
+python3 tools/mockk_audit.py --verbose  # моков и relaxed по файлам
+python3 tools/mockk_audit.py --self-test
+```
+
+Уменьшить бюджет можно, убрав MockK из теста совсем. Первый такой случай —
+`ShoulderSurferUseCaseTest`: use case теперь зависит от интерфейса
+`ShoulderSurferController`, а не от класса репозитория, поэтому хватает десятистрочного фейка, и
+тест выполняется в обычном JVM-прогоне. Так же убираются заглушки, которые ничего не проверяют:
+в `VaultRepositoryTest` четыре заглушки (`insertItem`, `deleteItem`, `encryptFileToVault`,
+`deleteVaultFile`) оставались при единственном тесте на пустой список.
+
+### `tools/manual_check.py`
+
+Выполняет механическую часть раздела 13 `docs/MANUAL_TESTING.md` и **печатает каждую команду**,
+которую запустил, — чтобы результат можно было повторить руками.
+
+* артефакты (без устройства): `zipalign -c -P 16 -v 4` (16 КБ страницы памяти),
+  `apksigner verify --print-certs` (подпись), `mapping.txt` нужного флейвора и правила R8 по нему;
+* устройство (`--device [серийный номер]`): подключено ли оно, версия Android, установлено ли
+  приложение, какие разрешения выданы и какие каналы уведомлений существуют.
+
+Ничего не меняется без явного флага: `--revoke ПРАВО` — единственная операция, которая трогает
+состояние телефона. Отсутствие `zipalign`/`apksigner`/`adb` — **пропуск**, а не ошибка: скрипт
+должен работать и на машине без Android SDK.
+
+```bash
+python3 tools/manual_check.py                            # только артефакты
+python3 tools/manual_check.py --device emulator-5554     # плюс проверки устройства
+python3 tools/manual_check.py --device --revoke android.permission.CAMERA
+python3 tools/manual_check.py --self-test
+```
+
 ### `tools/ci_health.py`
 
 Отвечает на вопрос, который обычно задают неправильно: **падал ли CI на самом деле?** Красный
@@ -616,7 +661,7 @@ python3 tools/junit_gate.py --self-test
 
 ### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
 
-Запускает **настоящий компилятор Kotlin** на всех 376 файлах. Без Android SDK он не может
+Запускает **настоящий компилятор Kotlin** на всех 382 файлах. Без Android SDK он не может
 разрешить `android.*`, `androidx.*`, Hilt и mockk, но полностью проверяет синтаксис, объявления,
 вывод типов там, где типы известны, и правила языка. Ошибки, заведомо вызванные
 отсутствующими библиотеками, отфильтрованы по внутренним именам диагностик

@@ -41,6 +41,8 @@ REQUIRED_CHECKS = (
     "unused_strings.py",
     "unused_resources.py",
     "docs_links.py",
+    "mockk_audit.py",
+    "manual_check.py",
     "junit_gate.py",
     "release_check.py",
 )
@@ -208,6 +210,20 @@ def check_text(label: str, text: str, project_flavors: set[str], github: bool) -
                 f"{label}: запускается Gradle, но нет `{UNIT_TEST_TASK}` — "
                 "тесты в этом CI не выполняются"
             )
+        if has_sdk:
+            # В GitLab не было ни lint, ни aapt2: единственный CI, который собирает проект на
+            # образе с Android SDK, проверял только unit-тесты. `abortOnError = true` в
+            # app/build.gradle означает, что lint — не украшение, а такая же проверка.
+            if "lint" not in body:
+                errors.append(
+                    f"{label}: Gradle запускается, но lint не выполняется — "
+                    "`lintProductionDebug` (abortOnError = true) в этом CI не проверяется"
+                )
+            if "aapt2_check.py" not in body:
+                errors.append(
+                    f"{label}: Gradle запускается, но `tools/aapt2_check.py` не запускается — "
+                    "ресурсы и манифест проверяются только самой сборкой"
+                )
 
     release_tasks = [
         task for task in tasks if (parsed := variant_of(task)) and parsed[2] == "Release"
@@ -224,6 +240,11 @@ def check_text(label: str, text: str, project_flavors: set[str], github: bool) -
         errors.append(
             f"{label}: `tools/junit_gate.py` без `--require-report` — без отчёта проверка "
             "пропускается молча"
+        )
+    if "junit_gate.py" in body and "--min-cases" not in body:
+        errors.append(
+            f"{label}: `tools/junit_gate.py` без `--min-cases` — порога по числу тестов нет, "
+            "и прогон, потерявший сотню кейсов, останется зелёным"
         )
 
     mentioned = set(TOOL_MENTION.findall(body))
@@ -277,9 +298,13 @@ jobs:
           python3 tools/unused_strings.py
           python3 tools/unused_resources.py
           python3 tools/docs_links.py
+          python3 tools/mockk_audit.py
+          python3 tools/manual_check.py --self-test
           python3 tools/release_check.py
+          python3 tools/aapt2_check.py
       - run: ./gradlew testProductionDebugUnitTest --no-daemon
-      - run: python3 tools/junit_gate.py --require-report
+      - run: ./gradlew lintProductionDebug --no-daemon
+      - run: python3 tools/junit_gate.py --require-report --min-cases 30
       - run: ./gradlew assembleProductionRelease --no-daemon
       - run: python3 tools/proguard_check.py --mapping app/build/outputs/mapping/productionRelease/mapping.txt
 """
@@ -323,6 +348,34 @@ jobs:
     )):
         problems.append("junit_gate.py без --require-report не пойман")
 
+    if not any("lint" in problem for problem in check_text(
+        "bad.yml",
+        "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest\n"
+        "python3 tools/aapt2_check.py\npython3 tools/junit_gate.py --require-report --min-cases 1",
+        project,
+        True,
+    )):
+        problems.append("CI с Android SDK без lint не пойман")
+
+    if not any("aapt2_check.py" in problem for problem in check_text(
+        "bad.yml",
+        "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest "
+        "lintProductionDebug\npython3 tools/junit_gate.py --require-report --min-cases 1",
+        project,
+        True,
+    )):
+        problems.append("CI с Android SDK без aapt2 не пойман")
+
+    if not any("--min-cases" in problem for problem in check_text(
+        "bad.yml",
+        "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest "
+        "lintProductionDebug\npython3 tools/aapt2_check.py\n"
+        "python3 tools/junit_gate.py --require-report",
+        project,
+        True,
+    )):
+        problems.append("junit_gate.py без --min-cases не пойман")
+
     if not any("mapping.txt" in problem for problem in check_text(
         "bad.yml",
         "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest "
@@ -336,8 +389,8 @@ jobs:
         for problem in problems:
             print(f"error: ci_check --self-test: {problem}")
         return 1
-    print("ci_check --self-test: ok (7 правил: || true, флейвор, SDK, обязательные проверки, "
-          "unit-тесты, junit_gate --require-report, mapping.txt)")
+    print("ci_check --self-test: ok (9 правил: || true, флейвор, SDK, обязательные проверки, "
+          "unit-тесты, lint, aapt2, junit_gate --require-report и --min-cases, mapping.txt)")
     return 0
 
 

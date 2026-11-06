@@ -61,6 +61,17 @@ step "docs_links.py"
 python3 tools/docs_links.py || failed=1
 python3 tools/docs_links.py --self-test || failed=1
 
+step "mockk_audit.py"
+# MockK-файл не выполняется в офлайн-прогоне, поэтому их число — долг, а не стиль. Бюджет
+# падает, когда тест написан без заглушек, и не даёт вырасти «по привычке».
+python3 tools/mockk_audit.py || failed=1
+python3 tools/mockk_audit.py --self-test || failed=1
+
+step "manual_check.py --self-test"
+# Раздел 13 ручного чек-листа: правила проверяются на синтетике, живые проверки требуют
+# APK и устройства (python3 tools/manual_check.py --device).
+python3 tools/manual_check.py --self-test || failed=1
+
 step "release_check.py"
 # Связка «CI пишет keystore сюда → Gradle ищет там», «CI проверяет mapping/*Release», «док
 # велит открыть mapping/release» ломается только на реальной релизной сборке.
