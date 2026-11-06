@@ -49,6 +49,13 @@ step "unused_strings.py"
 python3 tools/unused_strings.py || failed=1
 python3 tools/unused_strings.py --self-test || failed=1
 
+step "junit_gate.py"
+# Gradle возвращает 0, даже если тест-класс не попал в прогон: отчёт зелёный, а класса в нём нет.
+# Локально отчёта нет — сверка пропускается с сообщением, в CI она обязательна
+# (`--require-report`). Здесь проверяются сами правила на синтетике.
+python3 tools/junit_gate.py || failed=1
+python3 tools/junit_gate.py --self-test || failed=1
+
 step "sync_strings.py --check"
 # Сравнение с git ломается при незакоммиченных правках строк, поэтому спрашиваем сам скрипт.
 python3 tools/sync_strings.py --check || failed=1

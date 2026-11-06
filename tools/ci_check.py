@@ -39,6 +39,7 @@ REQUIRED_CHECKS = (
     "docs_check.py",
     "sync_strings.py",
     "unused_strings.py",
+    "junit_gate.py",
 )
 
 UNIT_TEST_TASK = "testProductionDebugUnitTest"
@@ -214,6 +215,14 @@ def check_text(label: str, text: str, project_flavors: set[str], github: bool) -
             "`mapping.txt` не проверяется — обфускация останется непроверенной"
         )
 
+    # Без `--require-report` сверка молча пропускается при отсутствии отчёта — то есть ровно
+    # в том случае, ради которого она нужна.
+    if "junit_gate.py" in body and "--require-report" not in body:
+        errors.append(
+            f"{label}: `tools/junit_gate.py` без `--require-report` — без отчёта проверка "
+            "пропускается молча"
+        )
+
     mentioned = set(TOOL_MENTION.findall(body))
     if mentioned:
         missing = [name for name in REQUIRED_CHECKS if name not in mentioned]
@@ -264,6 +273,7 @@ jobs:
           python3 tools/sync_strings.py --check
           python3 tools/unused_strings.py
       - run: ./gradlew testProductionDebugUnitTest --no-daemon
+      - run: python3 tools/junit_gate.py --require-report
       - run: ./gradlew assembleProductionRelease --no-daemon
       - run: python3 tools/proguard_check.py --mapping app/build/outputs/mapping/productionRelease/mapping.txt
 """
@@ -298,6 +308,15 @@ jobs:
     )):
         problems.append("несуществующий флейвор не пойман")
 
+    if not any("--require-report" in problem for problem in check_text(
+        "bad.yml",
+        "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest\n"
+        "python3 tools/junit_gate.py",
+        project,
+        True,
+    )):
+        problems.append("junit_gate.py без --require-report не пойман")
+
     if not any("mapping.txt" in problem for problem in check_text(
         "bad.yml",
         "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest "
@@ -311,8 +330,8 @@ jobs:
         for problem in problems:
             print(f"error: ci_check --self-test: {problem}")
         return 1
-    print("ci_check --self-test: ok (6 правил: || true, флейвор, SDK, обязательные проверки, "
-          "unit-тесты, mapping.txt)")
+    print("ci_check --self-test: ok (7 правил: || true, флейвор, SDK, обязательные проверки, "
+          "unit-тесты, junit_gate --require-report, mapping.txt)")
     return 0
 
 
