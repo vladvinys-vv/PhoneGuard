@@ -32,11 +32,18 @@
 ./tools/check_all.sh
 ```
 
-Она запускает `gradle_check.py`, `migration_check.py`, `static_audit.py`, `docs_check.py`, проверяет
+Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
+`ci_check.py`, `docs_check.py`, проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
 `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
-(`gradle_check.py`, `migration_check.py`, `static_audit.py` и строки) прогоняются в CI-job `static-checks`, компиляторная проверка — в `kotlin-frontend`; сборка и тесты — в `lint`,
-`unit-test`, `build-debug`, `build-release`.
+(`gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`, `ci_check.py`
+и строки) прогоняются в CI-job `static-checks`, компиляторная проверка — в `kotlin-frontend`;
+сборка и тесты — в `lint`, `unit-test`, `build-debug`, `build-release`.
+
+CI-конфигураций три: `.github/workflows/android-ci.yml`, `codemagic.yaml` и `.gitlab-ci.yml`.
+Они не переписываются вручную «по памяти»: `tools/ci_check.py` требует, чтобы каждая, которая
+запускает хоть одну проверку из `tools/`, запускала весь обязательный набор, а каждая, которая
+запускает Gradle, — задачу `testProductionDebugUnitTest` с настроенным Android SDK.
 
 Если job'ы падают за 1–2 секунды **без запущенных шагов**, это не YAML: GitHub в этом случае
 пишет в аннотации check-run «The job was not started because your account is locked due to a
@@ -530,6 +537,29 @@ python3 tools/kotlin_analysis.py
 **Ограничение грамматики:** метод с аннотацией `@Test` и `try/finally` в теле не разбирается —
 tree-sitter помечает `ERROR`-ом весь файл. Это дефект грамматики, а не кода: в тестах уборку делайте
 в `@After` (идиоматично для JUnit), а не в `try/finally`.
+
+### `tools/ci_check.py`
+
+Проверяет сами конфигурации CI — то, что иначе видно только по «вечнозелёному» пайплайну.
+Так выглядел `.gitlab-ci.yml` из внешнего PR: запуск `./gradlew` с тестовой задачей без флейвора,
+дописанный `|| true`, в образе `gradle:8.7-jdk17` без Android SDK. Job не мог упасть ни при
+падении тестов, ни при падении сборки, ни при отсутствии такой задачи Gradle (флейворы проекта —
+`staging`/`production`, поэтому тесты называются `testProductionDebugUnitTest`).
+
+Что ловится:
+
+* `|| true` (и `set +e`, `continue-on-error: true`) после запуска сборки или проверки;
+* задача Gradle без флейвора (`testDebugUnitTest`, `assembleDebug`) или с несуществующим
+  флейвором (`testBetaDebugUnitTest`) — сверяется с `productFlavors` в `app/build.gradle`;
+* Gradle запускается, а Android SDK не настроен (`setup-android`, `sdkmanager`, `ANDROID_HOME`);
+* нет `testProductionDebugUnitTest` — тесты в этом CI просто не выполняются;
+* запущена часть проверок из `tools/`, а остальные забыты: конфигурации расходятся, и ошибку
+  ловит только другой CI.
+
+```bash
+python3 tools/ci_check.py
+python3 tools/ci_check.py --self-test   # правила на синтетических конфигурациях
+```
 
 ### `tools/webhook_notify.py` / `tools/webhook_listen.py`
 

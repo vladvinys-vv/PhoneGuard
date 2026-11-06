@@ -1,35 +1,80 @@
 stages:
+  - static
   - test
   - build
 
 variables:
   GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  # SDK ставится в кэшируемый каталог проекта: без него AGP падает на конфигурации
+  # («SDK location not found»), и job не доходит даже до компиляции.
+  ANDROID_HOME: "$CI_PROJECT_DIR/.android-sdk"
+  ANDROID_SDK_ROOT: "$CI_PROJECT_DIR/.android-sdk"
+  ANDROID_CMDLINE_TOOLS: "commandlinetools-linux-11076708_latest"
 
 cache:
   key:
     files:
       - gradle/wrapper/gradle-wrapper.properties
+      - build.gradle
+      - app/build.gradle
   paths:
     - .gradle/wrapper
     - .gradle/caches
+    - .android-sdk
 
-before_script:
-  - export GRADLE_USER_HOME="$CI_PROJECT_DIR/.gradle"
-  - chmod +x ./gradlew
-
-test:
-  stage: test
-  image: gradle:8.7-jdk17
+# Static checks need neither Android SDK nor network: the cheapest "no" for a bad commit.
+# Набор тот же, что в .github/workflows/android-ci.yml и codemagic.yaml — расхождения ловит
+# tools/ci_check.py.
+static-checks:
+  stage: static
+  image: python:3.11
   script:
-    - ./gradlew testDebugUnitTest --no-daemon || true
+    - python3 tools/gradle_check.py
+    - python3 tools/proguard_check.py
+    - python3 tools/migration_check.py
+    - python3 tools/static_audit.py
+    - python3 tools/docs_check.py
+    - python3 tools/sync_strings.py --check
+
+.android:
+  image: eclipse-temurin:17-jdk
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq curl unzip > /dev/null
+    - chmod +x ./gradlew
+    - |
+      if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+        mkdir -p "$ANDROID_HOME/cmdline-tools"
+        curl -sSL -o /tmp/cmdline-tools.zip \
+          "https://dl.google.com/android/repository/${ANDROID_CMDLINE_TOOLS}.zip"
+        unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+        mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+      fi
+    - yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+    - >
+      "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+      "platforms;android-35" "build-tools;35.0.0" > /dev/null
+
+unit-test:
+  extends: .android
+  stage: test
+  script:
+    - ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
+  artifacts:
+    when: always
+    name: "phoneguard-unit-tests-$CI_COMMIT_SHORT_SHA"
+    expire_in: 7 days
+    paths:
+      - app/build/reports/tests/
 
 build-debug:
+  extends: .android
   stage: build
-  image: gradle:8.7-jdk17
+  needs: [unit-test]
   script:
-    - ./gradlew assembleDebug --no-daemon || true
+    - ./gradlew assembleProductionDebug --no-daemon --stacktrace
   artifacts:
     name: "phoneguard-debug-$CI_COMMIT_SHORT_SHA"
     expire_in: 7 days
     paths:
-      - app/build/outputs/apk/debug/
+      - app/build/outputs/apk/production/debug/
