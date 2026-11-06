@@ -664,4 +664,8 @@
     <string name="protection_action_open_settings">Einstellungen öffnen</string>
     <string name="exposure_dismiss">Nicht mehr warnen</string>
     <string name="exposure_revoke">Recht entziehen</string>
+    <string name="consent_declined_can_retry">Abgelehnt – erneute Abfrage möglich</string>
+    <string name="consent_declined_forever">Im System deaktiviert: in den App-Einstellungen aktivieren</string>
+    <string name="consent_pending_hint">Verbleibende Berechtigungen: %1$d</string>
+    <string name="consent_disabled_hint">Ohne diese Berechtigungen bleibt ein Teil des Schutzes aus – sie lassen sich später erteilen.</string>
 </resources>

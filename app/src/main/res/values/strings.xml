@@ -671,4 +671,8 @@
     <string name="protection_action_open_settings">Открыть настройки</string>
     <string name="exposure_dismiss">Больше не предупреждать</string>
     <string name="exposure_revoke">Отозвать право</string>
+    <string name="consent_declined_can_retry">Отказано — можно спросить ещё раз</string>
+    <string name="consent_declined_forever">Отключено в системе: включите в настройках приложения</string>
+    <string name="consent_pending_hint">Осталось разрешений: %1$d</string>
+    <string name="consent_disabled_hint">Без этих разрешений часть защиты останется выключенной — их можно выдать позже.</string>
 </resources>
