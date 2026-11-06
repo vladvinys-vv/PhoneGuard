@@ -19,6 +19,12 @@
     `pgVersionCode`/`pgVersionName` с проверкой на число, отсутствие паролей в `build.gradle`,
     `.gitignore` для `keystore.properties`/`*.jks`/`*.keystore`, порядок шагов Codemagic
     (keystore **до** сборки, mapping и 16 КБ **после**), артефакты `mapping/**` и `.aab`.
+  - **Тот же инструмент нашёл красный job в GitHub Actions:** `build-release` собирал
+    `assembleProductionRelease` без keystore и без `-PallowUnsignedRelease=true`, то есть падал на
+    guard'е `app/build.gradle` при каждом запуске — и это не было видно, потому что основной CI
+    проекта Codemagic. Теперь флаг передан (это проверочная сборка, публикационная — в Codemagic),
+    а правило проверяет **любой** CI, собирающий `*Release`: либо подпись, либо явный флаг, плюс
+    обязательная проверка `mapping.txt`.
   - Подключено в `check_all.sh`, все три CI и в обязательный набор `tools/ci_check.py`.
 
 - **Правила телефонных номеров впервые стали проверяемыми — и в них нашлась ошибка**

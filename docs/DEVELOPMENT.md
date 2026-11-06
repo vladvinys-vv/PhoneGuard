@@ -514,6 +514,13 @@ python3 tools/unused_strings.py --self-test
 16 КБ после), артефакты `mapping/**` и `.aab`, а также число строк в инструкции против
 `strings.xml`.
 
+Отдельное правило — для **любого** CI (`codemagic.yaml`, `.github/workflows/*.yml`,
+`.gitlab-ci.yml`): если он собирает задачу `*Release`, то либо подписывает сборку, либо явно
+передаёт `-PallowUnsignedRelease=true`. Guard в `app/build.gradle` падает на неподписанный релиз,
+поэтому job без keystore и без флага красный при каждом запуске — и заметить это можно только в
+логе того CI, который не основной. Ровно так и оказалось: `build-release` в GitHub Actions
+собирал `assembleProductionRelease` без флага и падал на guard'е.
+
 ```bash
 python3 tools/release_check.py
 python3 tools/release_check.py --self-test
