@@ -637,6 +637,36 @@ annotation class Inject
     "kotlinx/coroutines/flow/Flow.kt": '''package kotlinx.coroutines.flow
 
 interface Flow<out T>
+
+interface SharedFlow<out T> : Flow<T>
+
+interface StateFlow<out T> : SharedFlow<T> {
+    val value: T
+}
+
+interface MutableSharedFlow<T> : SharedFlow<T>
+
+interface MutableStateFlow<T> : StateFlow<T>, MutableSharedFlow<T> {
+    override var value: T
+}
+
+/**
+ * Минимальная реализация: для чистых классов поведение `StateFlow` — это `value` и его
+ * изменение. Буферы, повторы и планировщик настоящих корутин тестам не нужны; если класс
+ * начнёт полагаться на них, он перестанет компилироваться здесь — и это честный пропуск,
+ * а не тихо зелёный тест.
+ */
+private class StateFlowImpl<T>(initial: T) : MutableStateFlow<T> {
+    override var value: T = initial
+}
+
+fun <T> MutableStateFlow(value: T): MutableStateFlow<T> = StateFlowImpl(value)
+
+fun <T> MutableStateFlow<T>.asStateFlow(): StateFlow<T> = this
+
+fun <T> MutableStateFlow<T>.update(transform: (T) -> T) {
+    value = transform(value)
+}
 ''',
 }
 
