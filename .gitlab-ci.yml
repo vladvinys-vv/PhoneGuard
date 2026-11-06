@@ -36,6 +36,8 @@ static-checks:
     - python3 tools/docs_check.py
     - python3 tools/sync_strings.py --check
     - python3 tools/unused_strings.py
+    - python3 tools/unused_resources.py
+    - python3 tools/docs_links.py
     - python3 tools/release_check.py
 
 .android:

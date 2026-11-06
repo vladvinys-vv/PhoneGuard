@@ -39,6 +39,8 @@ REQUIRED_CHECKS = (
     "docs_check.py",
     "sync_strings.py",
     "unused_strings.py",
+    "unused_resources.py",
+    "docs_links.py",
     "junit_gate.py",
     "release_check.py",
 )
@@ -273,6 +275,8 @@ jobs:
           python3 tools/docs_check.py
           python3 tools/sync_strings.py --check
           python3 tools/unused_strings.py
+          python3 tools/unused_resources.py
+          python3 tools/docs_links.py
           python3 tools/release_check.py
       - run: ./gradlew testProductionDebugUnitTest --no-daemon
       - run: python3 tools/junit_gate.py --require-report

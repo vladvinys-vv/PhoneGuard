@@ -48,6 +48,14 @@ jobs:
       - name: No unused string resources
         run: python3 tools/unused_strings.py
 
+      # Цвет, стиль или drawable без ссылок компилятор не замечает — они просто едут в APK.
+      - name: No unused resources
+        run: python3 tools/unused_resources.py
+
+      # Путь или ссылка в документации, ведущие в никуда, ломают релизную инструкцию.
+      - name: Docs links and paths exist
+        run: python3 tools/docs_links.py
+
       # Подпись, R8, версия и mapping проверяются только релизной сборкой; связка между
       # CI и Gradle (куда пишется keystore, где ищется mapping) проверяется здесь.
       - name: Release path (signing, R8, mapping, 16 KB)

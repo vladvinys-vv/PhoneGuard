@@ -49,6 +49,18 @@ step "unused_strings.py"
 python3 tools/unused_strings.py || failed=1
 python3 tools/unused_strings.py --self-test || failed=1
 
+step "unused_resources.py"
+# Ресурс, на который никто не ссылается, попадает в APK: 21 цвет Material-палитры и стиль
+# прозрачной темы ехали в каждой сборке. Строки проверяет unused_strings.py, здесь — остальное.
+python3 tools/unused_resources.py || failed=1
+python3 tools/unused_resources.py --self-test || failed=1
+
+step "docs_links.py"
+# Ссылка и путь в документации ломаются молча: инструкция «открой mapping/release» уводит
+# в несуществующий каталог, и релиз выглядит несобранным.
+python3 tools/docs_links.py || failed=1
+python3 tools/docs_links.py --self-test || failed=1
+
 step "release_check.py"
 # Связка «CI пишет keystore сюда → Gradle ищет там», «CI проверяет mapping/*Release», «док
 # велит открыть mapping/release» ломается только на реальной релизной сборке.

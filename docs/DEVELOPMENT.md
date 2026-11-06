@@ -33,7 +33,8 @@
 ```
 
 Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
-`ci_check.py`, `docs_check.py`, `unused_strings.py`, `junit_gate.py`, `release_check.py`,
+`ci_check.py`, `docs_check.py`, `unused_strings.py`, `unused_resources.py`, `docs_links.py`,
+`junit_gate.py`, `release_check.py`,
 проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
 `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
@@ -392,8 +393,8 @@ python3 tools/test_coverage_map.py --skipped  # что офлайн не исп�
 python3 tools/test_coverage_map.py --self-test  # все пропуски разобраны по причинам?
 ```
 
-Сейчас: 263 класса, 197 упомянуты в тестах (75%), **из них в выполняемых тестах: 146** (55%).
-Офлайн не выполняются 24 тест-файла (MockK 22, Robolectric 2): в CI
+Сейчас: 263 класса, 196 упомянуты в тестах (75%), **из них в выполняемых тестах: 146** (55%).
+Офлайн не выполняются 23 тест-файла (MockK 22, Robolectric 2): в CI
 (`./gradlew testProductionDebugUnitTest`) они выполняются, поэтому это список «что проверить на
 машине с Maven Central», а не приговор покрытию. `--skipped` печатает его из тех же причин, что и
 раннер, а `--self-test` падает, если хоть один пропуск не попал в известную группу.
@@ -441,7 +442,7 @@ SQL** через встроенный в Python `sqlite3`:
 которую никто не замечает. Проверка считает по репозиторию:
 
 * сколько Kotlin-файлов видят компиляторные проверки (сейчас 374);
-* числа карты покрытия (сейчас 263 класса, 197 упомянуты в тестах) — считает
+* числа карты покрытия (сейчас 263 класса, 196 упомянуты в тестах) — считает
   `test_coverage_map.py`, чтобы источник был один;
 * совпадают ли утверждения «N тестов в M файлах» между документами (сам прогон делает
   `jvm_unit_test.py`, здесь ловится расхождение текстов).
@@ -493,6 +494,43 @@ python3 tools/unused_strings.py --self-test
 список исключений не чистится никогда. Удалять строку нужно сначала из словаря
 `tools/sync_strings.py`, потом из четырёх `strings.xml`: иначе `sync_strings.py` вернёт её
 обратно при следующем запуске.
+
+### `tools/unused_resources.py`
+
+Ресурсы, на которые никто не ссылается: цвета, размеры, стили, drawable, layout, меню, шрифты.
+Такой ресурс молча едет в APK — компилятор и lint о нём не говорят ничего. В проекте нашлось
+**21 мёртвый цвет** (остатки Material-палитры `purple_200`/`teal_700`, `brand`, `text_*`,
+`background_*`, `score_*`) и стиль `Theme.PhoneGuard.Transparent`, который не использовала ни одна
+активность: 12 ресурсов вместо 34.
+
+Ссылкой считается `R.<type>.<name>` в Kotlin/Java и `@<type>/<name>` в XML (у `.9.png` суффикс
+отбрасывается). Строки намеренно не проверяются — у них свой инструмент и собственный словарь.
+Исключения — `tools/unused_resources_allow.txt` строкой `тип/имя — причина`; запись без причины и
+устаревшая запись (ресурса уже нет) считаются ошибками.
+
+```bash
+python3 tools/unused_resources.py            # 0 ошибок: все ресурсы используются
+python3 tools/unused_resources.py --verbose  # плюс разрешённые записи
+python3 tools/unused_resources.py --self-test
+```
+
+### `tools/docs_links.py`
+
+Ссылки и пути в документации. Инструкция, ведущая в несуществующий каталог, не ломает сборку и
+поэтому живёт месяцами: `docs/RELEASE.md` предлагал проверить `mapping/release/mapping.txt`, а у
+проекта с флейворами каталог — `mapping/productionRelease/`.
+
+Проверяются markdown-ссылки на файлы и каталоги (квадратные скобки + круглая пара) и пути в обратных кавычках, которые выглядят как путь
+репозитория (`app/…`, `tools/…`, `docs/…`, `.github/…`, корневые файлы сборки). Шаблоны (`*`,
+`$VAR`, `{…}`), внешние URL и файлы, появляющиеся только при сборке (`keystore.properties`,
+`app/release.keystore`, `app/build/…`), пропускаются. `docs/CHANGELOG.md` не проверяется: это
+история, и путь в нём может быть путём того времени.
+
+```bash
+python3 tools/docs_links.py            # 0 ошибок
+python3 tools/docs_links.py --verbose  # перечень проверенных документов
+python3 tools/docs_links.py --self-test
+```
 
 ### `tools/ci_health.py`
 
@@ -578,7 +616,7 @@ python3 tools/junit_gate.py --self-test
 
 ### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
 
-Запускает **настоящий компилятор Kotlin** на всех 377 файлах. Без Android SDK он не может
+Запускает **настоящий компилятор Kotlin** на всех 376 файлах. Без Android SDK он не может
 разрешить `android.*`, `androidx.*`, Hilt и mockk, но полностью проверяет синтаксис, объявления,
 вывод типов там, где типы известны, и правила языка. Ошибки, заведомо вызванные
 отсутствующими библиотеками, отфильтрованы по внутренним именам диагностик
