@@ -85,6 +85,73 @@ def runnable_test_files() -> tuple[list[Path], list[tuple[Path, str]]]:
     return runnable, skipped
 
 
+# Почему тест-файл не исполняется офлайн. Названия — для человека: «пропущено 24» без
+# причины выглядит как забытая работа, хотя часть из них в песочнице не запустить физически.
+SKIP_BUCKETS = (
+    ("импорт io.mockk", "MockK (нет библиотеки: Maven Central из песочницы недоступен)"),
+    ("импорт org.robolectric", "Robolectric (нет Android-рантайма)"),
+    ("импорт androidx.", "AndroidX (нужен рантайм, а не только android.jar)"),
+    ("импорт android.", "Android SDK (методы android.jar бросают Stub!)"),
+)
+
+
+def classify_skip(reason: str) -> str:
+    """Причина пропуска → группа. Неизвестная причина не прячется в «прочее» молча."""
+    for prefix, bucket in SKIP_BUCKETS:
+        if reason.startswith(prefix):
+            return bucket
+    return f"прочее: {reason}"
+
+
+def skipped_report() -> int:
+    """`--skipped`: какие тест-файлы не выполняются офлайн и почему."""
+    importable, skipped = runnable_test_files()
+    print(f"тест-файлов выполняется офлайн: {len(importable)}")
+    print(f"офлайн не выполняются: {len(skipped)} тест-файлов")
+    grouped: dict[str, list[Path]] = {}
+    for path, reason in skipped:
+        grouped.setdefault(classify_skip(reason), []).append(path)
+    for bucket in sorted(grouped, key=lambda name: (-len(grouped[name]), name)):
+        paths = grouped[bucket]
+        print(f"\n  {bucket} — {len(paths)}:")
+        for path in sorted(paths):
+            print(f"    {path.relative_to(ROOT)}")
+    if any(bucket.startswith("прочее") for bucket in grouped):
+        print("\nwarning: есть причина пропуска, для которой нет группы — классификатор надо дополнить")
+        return 1
+    return 0
+
+
+def self_test() -> int:
+    """Проверка классификатора: каждая известная причина попадает в свою группу."""
+    problems: list[str] = []
+    cases = {
+        "импорт io.mockk.coEvery": "MockK",
+        "импорт org.robolectric.RobolectricTestRunner": "Robolectric",
+        "импорт androidx.work.WorkManager": "AndroidX",
+        "импорт android.content.Intent": "Android SDK",
+    }
+    for reason, expected in cases.items():
+        actual = classify_skip(reason)
+        if not actual.startswith(expected):
+            problems.append(f"{reason} → {actual}, ожидалось {expected}")
+    unknown = classify_skip("импорт com.example.magic")
+    if not unknown.startswith("прочее"):
+        problems.append(f"неизвестная причина должна попадать в «прочее», получено {unknown}")
+
+    _, skipped = runnable_test_files()
+    unclassified = [reason for _, reason in skipped if classify_skip(reason).startswith("прочее")]
+    if unclassified:
+        problems.append(f"в проекте есть неклассифицированные причины: {sorted(set(unclassified))}")
+
+    if problems:
+        for problem in problems:
+            print(f"error: test_coverage_map --self-test: {problem}")
+        return 1
+    print(f"test_coverage_map --self-test: ok (4 группы, {len(skipped)} пропущенных файлов разобраны)")
+    return 0
+
+
 def test_sources() -> str:
     return "\n".join(path.read_text(encoding="utf-8") for root in TESTS if root.exists() for path in root.rglob("*.kt"))
 
@@ -92,7 +159,15 @@ def test_sources() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--detail", action="store_true", help="показать все классы без тестов")
+    parser.add_argument("--skipped", action="store_true",
+                        help="какие тест-файлы не выполняются офлайн и почему")
+    parser.add_argument("--self-test", action="store_true", help="проверить классификатор причин")
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
+    if args.skipped:
+        return skipped_report()
 
     sources = test_sources()
     packages = classes_by_package()

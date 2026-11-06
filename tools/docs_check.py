@@ -34,7 +34,13 @@ KT_FILES_IN_LINE = re.compile(r"(\d+)\s+файл(?:ах|ов|а)?")
 COVERAGE_CLAIM = re.compile(r"(\d+)\s+класс(?:ов|а)?,\s*(\d+)\s+упомянут")
 COVERAGE_SHORT = re.compile(r"(\d+)\s+из\s+(\d+)")
 COVERAGE_RUNNING = re.compile(r"из них в выполняемых тестах:\s*(\d+)")
-TESTS_CLAIM = re.compile(r"(\d+)\s+тестов в\s+(\d+)\s+файлах")
+# «924 теста в 94 файлах» и «917 тестов в 92 файлах» — одна и та же фраза, разные падежи.
+TESTS_CLAIM = re.compile(r"(\d+)\s+тест(?:ов|а)\s+в\s+(\d+)\s+файл(?:ах|е)")
+# Сколько тест-файлов офлайн-прогон не исполняет (MockK/Robolectric/Android SDK). Число
+# растёт само по себе, когда добавляют тест на ViewModel, — поэтому оно тоже провер
+# яется, а не живёт в тексте на честном слове.
+# Предложение может начинаться с «Офлайн…», поэтому регистр не важен.
+SKIPPED_CLAIM = re.compile(r"офлайн не выполняются\s+(\d+)\s+тест-файл", re.IGNORECASE)
 
 
 def docs() -> dict[Path, str]:
@@ -45,7 +51,7 @@ def kotlin_files() -> int:
     return len(list((ROOT / "app/src").rglob("*.kt")))
 
 
-def coverage() -> tuple[int, int, int] | None:
+def coverage() -> tuple[int, int, int, int] | None:
     try:
         out = subprocess.run(
             [sys.executable, str(ROOT / "tools/test_coverage_map.py")],
@@ -60,7 +66,11 @@ def coverage() -> tuple[int, int, int] | None:
     # Если карта не смогла посчитать выполняемые тесты, второе число считаем равным первому
     # и проверяем только первое утверждение (см. notes).
     running_value = int(running.group(1)) if running else int(match.group(2))
-    return (int(match.group(1)), int(match.group(2)), running_value)
+    # Карта печатает «пропущено 24» без двоеточия: первая версия проверки искала
+    # «пропущено: » и потому всегда получала 0 — то есть не проверяла ничего.
+    skipped = re.search(r"пропущено:?\s+(\d+)", out)
+    skipped_value = int(skipped.group(1)) if skipped else 0
+    return (int(match.group(1)), int(match.group(2)), running_value, skipped_value)
 
 
 def check() -> tuple[list[str], list[str]]:
@@ -88,7 +98,23 @@ def check() -> tuple[list[str], list[str]]:
     if map_numbers is None:
         notes.append("карта покрытия недоступна — числа «N классов» не проверялись")
     else:
-        classes, mentioned, running = map_numbers
+        classes, mentioned, running, skipped = map_numbers
+        skip_claims = 0
+        for path, text in texts.items():
+            for match in SKIPPED_CLAIM.finditer(text):
+                skip_claims += 1
+                got = int(match.group(1))
+                line = text[:match.start()].count("\n") + 1
+                if got != skipped:
+                    errors.append(
+                        f"{path.name}:{line}: указано {got} неисполняемых офлайн тест-файлов, "
+                        f"фактически {skipped}"
+                    )
+        if skip_claims == 0:
+            errors.append(
+                "в документации нет фразы «офлайн не выполняются N тест-файла»: "
+                f"фактически их {skipped}, проверить это нечем"
+            )
         for path, text in texts.items():
             for match in COVERAGE_CLAIM.finditer(text):
                 got_classes, got_mentioned = int(match.group(1)), int(match.group(2))
