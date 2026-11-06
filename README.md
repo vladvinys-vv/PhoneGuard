@@ -136,6 +136,8 @@ python3 tools/docs_check.py              # обязательно: числа в
 python3 tools/ci_check.py                # обязательно: конфигурации CI не «вечнозелёные»
 python3 tools/sync_strings.py            # идемпотентная синхронизация строк в 4 локалях
 python3 tools/unused_strings.py          # обязательно: строк без единой ссылки нет
+python3 tools/unused_resources.py        # обязательно: цветов/стилей/drawable без ссылок нет
+python3 tools/docs_links.py              # обязательно: ссылки и пути в документации существуют
 python3 tools/junit_gate.py --self-test  # обязательно: сверка тест-классов с JUnit-XML (в CI — --require-report)
 python3 tools/release_check.py           # обязательно: подпись, R8, версия, mapping, 16 КБ — до релизной сборки
 python3 tools/ci_health.py               # вручную: запускались ли прогоны CI вообще (нужен gh)
@@ -152,11 +154,11 @@ python3 tools/webhook_notify.py --dry-run # опционально: payload ув
 ещё до компиляции. `static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
 миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_frontend_check.py` прогоняет все
-377 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
+376 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
 `tools/fetch_android_jar.sh`) и отсекает ошибки, вызванные
 отсутствующими библиотеками — на его счету десять реальных ошибок сборки, в том числе в тестах. Покрытие считается двумя
 числами — «упомянуты в тестах» и «из них в выполняемых тестах: 146»: тест-файл на MockK/Robolectric
-в офлайне не исполняется и покрытием не считается. Офлайн не выполняются 24 тест-файла
+в офлайне не исполняется и покрытием не считается. Офлайн не выполняются 23 тест-файла
 (MockK 22, Robolectric 2) — но это ограничение прогона, а не проекта:
 `./gradlew testProductionDebugUnitTest` в CI и Codemagic выполняет их все, а
 `test_coverage_map.py --skipped` печатает ту же разбивку по причинам и валит `--self-test`,
@@ -179,7 +181,7 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 
 | Job | Что делает |
 |---|---|
-| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` + `unused_strings.py` (нет строк без ссылок) | `unit-test` | `testProductionDebugUnitTest` + `junit_gate.py --require-report` (тест-класс, не попавший в прогон, валит сборку) |
+| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` + `unused_strings.py` (нет строк без ссылок) + `unused_resources.py` (нет ресурсов без ссылок) + `docs_links.py` (ссылки и пути в документации) | `unit-test` | `testProductionDebugUnitTest` + `junit_gate.py --require-report` (тест-класс, не попавший в прогон, валит сборку) |
 
 > **Состояние GitHub Actions (6 ноября 2026):** прогоны создаются, но job'ы не запускаются —
 > GitHub отвечает «The job was not started because your account is locked due to a billing

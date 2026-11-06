@@ -1,7 +1,6 @@
 package com.phoneguard.intrusion
 
 import com.phoneguard.data.local.IntrusionEventDao
-import com.phoneguard.data.local.IntrusionEventEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -42,10 +41,8 @@ class IntrusionRepository @Inject constructor(
     }
 
     suspend fun recordEvent(event: IntrusionEvent) = withContext(Dispatchers.IO) {
-        intrusionEventDao.insert(toEntity(event))
+        intrusionEventDao.insert(event.toEntity())
         val actions = intrusionResponseOrchestrator.plan(event)
         intrusionResponseExecutor.execute(event, actions)
     }
-
-    fun toEntity(event: IntrusionEvent): IntrusionEventEntity = event.toEntity()
 }
