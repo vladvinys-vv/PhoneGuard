@@ -204,6 +204,15 @@ def check_text(label: str, text: str, project_flavors: set[str], github: bool) -
                 "тесты в этом CI не выполняются"
             )
 
+    release_tasks = [
+        task for task in tasks if (parsed := variant_of(task)) and parsed[2] == "Release"
+    ]
+    if release_tasks and "--mapping" not in body:
+        errors.append(
+            f"{label}: собирается release ({', '.join(sorted(set(release_tasks)))}), но "
+            "`mapping.txt` не проверяется — обфускация останется непроверенной"
+        )
+
     mentioned = set(TOOL_MENTION.findall(body))
     if mentioned:
         missing = [name for name in REQUIRED_CHECKS if name not in mentioned]
@@ -253,6 +262,8 @@ jobs:
           python3 tools/docs_check.py
           python3 tools/sync_strings.py --check
       - run: ./gradlew testProductionDebugUnitTest --no-daemon
+      - run: ./gradlew assembleProductionRelease --no-daemon
+      - run: python3 tools/proguard_check.py --mapping app/build/outputs/mapping/productionRelease/mapping.txt
 """
     if check_text("good.yml", good, project, True):
         problems.append(f"правильная конфигурация не должна ругаться: {check_text('good.yml', good, project, True)}")
@@ -285,11 +296,21 @@ jobs:
     )):
         problems.append("несуществующий флейвор не пойман")
 
+    if not any("mapping.txt" in problem for problem in check_text(
+        "bad.yml",
+        "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest "
+        "assembleProductionRelease",
+        project,
+        True,
+    )):
+        problems.append("release-сборка без проверки mapping.txt не поймана")
+
     if problems:
         for problem in problems:
             print(f"error: ci_check --self-test: {problem}")
         return 1
-    print("ci_check --self-test: ok (5 правил: || true, флейвор, SDK, обязательные проверки, unit-тесты)")
+    print("ci_check --self-test: ok (6 правил: || true, флейвор, SDK, обязательные проверки, "
+          "unit-тесты, mapping.txt)")
     return 0
 
 

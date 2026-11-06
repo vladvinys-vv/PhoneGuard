@@ -622,6 +622,47 @@ def self_test() -> int:
         check("mapping: метрика переименования печатается",
               any("переименовано 2 из 2" in w for w in m_warnings))
 
+        # mapping.txt: настоящий формат R8 — заголовок, строки номеров строк, служебные
+        # `# {...}`-строки внутри блока класса. Фикстуры выше были «идеальными»: реальный
+        # файл короче не бывает, и именно на нём проверка должна молчать.
+        realistic = (
+            "# compiler: R8\n"
+            "# compiler_version: 8.5.2\n"
+            "# min_api: 26\n"
+            "com.phoneguard.worker.SyncWorker -> a.a:\n"
+            '    # {"id":"sourceFile","fileName":"SyncWorker.kt"}\n'
+            "    void run() -> a\n"
+            "    1:1:void <init>(android.content.Context):26:26 -> <init>\n"
+            "com.phoneguard.data.local.FileKind -> a.b:\n"
+            '    # {"id":"com.android.tools.r8.synthesized"}\n'
+            "    com.phoneguard.data.local.FileKind UNKNOWN -> UNKNOWN\n"
+            "    com.phoneguard.data.local.FileKind SECRET -> SECRET\n"
+        )
+        mapping.write_text(realistic, encoding="utf-8")
+        m_errors, m_warnings = analyze_mapping(mapping.read_text(), enum_rules, sources)
+        check("mapping: настоящий формат R8 разбирается без ложных ошибок", not m_errors)
+        check("mapping: номера строк и `# {...}` не считаются переименованием",
+              any("переименовано 2 из 2" in w for w in m_warnings))
+
+        # mapping.txt: переименованная константа enum в реальном формате.
+        mapping.write_text(
+            realistic.replace(
+                "com.phoneguard.data.local.FileKind SECRET -> SECRET",
+                "com.phoneguard.data.local.FileKind SECRET -> a",
+            ),
+            encoding="utf-8",
+        )
+        m_errors, _ = analyze_mapping(mapping.read_text(), enum_rules, sources)
+        check("mapping: переименованная константа в реальном формате найдена",
+              any(".SECRET -> a" in e for e in m_errors))
+
+        # mapping.txt от другого модуля/пустая сборка — иначе проверка «всё
+        # переименовано» молча проходит на чужом файле.
+        mapping.write_text("androidx.core.app.CoreComponentFactory -> a.a:\n", encoding="utf-8")
+        m_errors, _ = analyze_mapping(mapping.read_text(), enum_rules, sources)
+        check("mapping: чужой маппинг без собственных классов найден",
+              any("нет собственных классов" in e for e in m_errors))
+
         # Существующий, но пустой файл правил не должен падать.
         # Ошибка про enum-имена тут ожидаема (в фикстуре есть `enumValueOf`), важно, что
         # разбор не падает и остальные проверки не выдумывают проблем.
