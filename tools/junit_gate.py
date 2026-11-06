@@ -24,6 +24,12 @@
     python3 tools/junit_gate.py --require-report  # в CI: отчёта нет — ошибка
     python3 tools/junit_gate.py --verbose
     python3 tools/junit_gate.py --self-test
+
+Порог `--min-cases N` отвечает на вопрос, который сверка по классам не закрывает: **сколько
+тестов выполнилось всего**. Сверка по классам пропускает то, что внесено в allow-файл, а фильтр
+Gradle (`--tests`, `unitTests.all { filter { ... } }`) может оставить от каждого класса по одному
+кейсу, и все классы при этом «есть в отчёте». Порог в CI задаётся числом ниже текущего дерева
+(сейчас 1085 `@Test`): он не мешает добавлять тесты, но падает, когда прогон потерял сотню.
 """
 
 from __future__ import annotations
@@ -161,6 +167,12 @@ def main() -> int:
         action="store_true",
         help="отчёт обязателен (CI): без него проверка падает, а не пропускается",
     )
+    parser.add_argument(
+        "--min-cases",
+        type=int,
+        default=0,
+        help="минимальное число тестов в отчёте (0 — порога нет)",
+    )
     parser.add_argument("--verbose", action="store_true", help="показать сверенные классы")
     parser.add_argument("--self-test", action="store_true", help="проверить правила на синтетике")
     args = parser.parse_args()
@@ -195,6 +207,11 @@ def main() -> int:
         return 1
     allowed = read_allowlist(ALLOWLIST)
     errors, checked, cases = compare(sources, report, allowed, args.test_dir)
+    if args.min_cases and cases < args.min_cases:
+        errors.append(
+            f"в отчёте {cases} тестов при пороге {args.min_cases} — прогон потерял тесты "
+            "(--tests, filter, отключённый source set), хотя классы формально на месте"
+        )
 
     for problem in errors:
         print(f"error: {problem}")
@@ -206,6 +223,7 @@ def main() -> int:
         f"\n{len(errors)} error(s), 0 warning(s): {checked} тест-классов сверено, "
         f"{cases} тестов в отчёте"
         + (f" (разрешено {len(allowed)})" if allowed else "")
+        + (f", порог {args.min_cases}" if args.min_cases else "")
     )
     return 1 if errors else 0
 
@@ -357,6 +375,23 @@ def self_test() -> int:
             lenient.returncode == 0 and "пропущена" in lenient.stdout,
         )
 
+        # Порог по общему числу тестов: классы на месте, но прогон потерял кейсы.
+        lost = subprocess.run(
+            base + ["--report-dir", str(report_dir), "--min-cases", "5"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        check("порог по числу тестов ловится", lost.returncode == 1)
+        check("в ошибке порога видно число тестов", "пороге 5" in lost.stdout)
+        kept = subprocess.run(
+            base + ["--report-dir", str(report_dir), "--min-cases", "3"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        check("выполненный порог не мешает", kept.returncode == 0)
+
         allow.write_text("GhostTest — удалённый класс\n", encoding="utf-8")
         errors, _, _ = compare(sources, {"GoodTest": 2}, read_allowlist(allow), root / "app/src/test")
         check("устаревшая запись — ошибка", any("устарела" in error for error in errors))
@@ -367,7 +402,7 @@ def self_test() -> int:
         return 1
     print(
         "junit_gate --self-test: ok (полный отчёт, недостача кейсов, отсутствующий класс, "
-        "вложенные и абстрактные классы, allow-файл)"
+        "вложенные и абстрактные классы, allow-файл, порог по числу тестов)"
     )
     return 0
 

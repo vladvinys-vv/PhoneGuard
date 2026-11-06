@@ -2,6 +2,7 @@ package com.phoneguard.fullscan.checks
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -108,6 +109,34 @@ class IntegrityPolicyTest {
         assertFalse(IntegrityPolicy.isStaleBuild(0L, now))
         assertEquals(0, IntegrityPolicy.buildAgeYears(now + yearMs, now))
         assertEquals(3, IntegrityPolicy.buildAgeYears(now - 3 * yearMs - 1000, now))
+    }
+
+    @Test
+    fun `индикаторы root ищутся по списку путей, а не по количеству`() {
+        val found = IntegrityPolicy.foundRootIndicators { path -> path == "/system/xbin/su" }
+        assertEquals(listOf("/system/xbin/su"), found)
+        assertTrue(IntegrityPolicy.foundRootIndicators { false }.isEmpty())
+        assertEquals(
+            listOf("/system/bin/su", "/data/local.prop"),
+            IntegrityPolicy.foundRootIndicators { it in setOf("/system/bin/su", "/data/local.prop") }
+        )
+    }
+
+    @Test
+    fun `debuggerd не считается признаком перезаписи системы`() {
+        // Он есть на каждом устройстве: раньше из-за него стоковая прошивка получала
+        // «найден подозрительный файл».
+        assertFalse(IntegrityPolicy.ROOT_INDICATOR_PATHS.contains("/system/bin/debuggerd"))
+        assertTrue(IntegrityPolicy.foundRootIndicators { it == "/system/bin/debuggerd" }.isEmpty())
+    }
+
+    @Test
+    fun `значение getprop обрезается, пустое становится null`() {
+        assertEquals("orange", IntegrityPolicy.propertyValue("orange\n"))
+        assertEquals("1", IntegrityPolicy.propertyValue("  1  "))
+        assertNull(IntegrityPolicy.propertyValue(""))
+        assertNull(IntegrityPolicy.propertyValue("   \n"))
+        assertNull(IntegrityPolicy.propertyValue(null))
     }
 
     @Test

@@ -56,6 +56,15 @@ jobs:
       - name: Docs links and paths exist
         run: python3 tools/docs_links.py
 
+      # Долг перед MockK: файл с заглушками не выполняется в офлайн-прогоне, поэтому число
+      # таких файлов под бюджетом, а не «как получится».
+      - name: MockK budget
+        run: python3 tools/mockk_audit.py
+
+      # Правила ручного чек-листа (docs/MANUAL_TESTING.md, раздел 13) на синтетике.
+      - name: Manual checklist rules
+        run: python3 tools/manual_check.py --self-test
+
       # Подпись, R8, версия и mapping проверяются только релизной сборкой; связка между
       # CI и Gradle (куда пишется keystore, где ищется mapping) проверяется здесь.
       - name: Release path (signing, R8, mapping, 16 KB)
@@ -130,7 +139,9 @@ jobs:
       # Gradle вернёт 0 и с зелёным отчётом, даже если тест-класс в прогон не попал.
       # Сверяем дерево тестов с JUnit-XML: молча не запустившиеся тесты — это не «зелено».
       - name: Test classes actually ran
-        run: python3 tools/junit_gate.py --require-report
+        # --min-cases: сверка по классам не видит потерю кейсов внутри классов. Порог ниже
+        # дерева тестов (сейчас 1085 @Test) — он не мешает добавлять тесты.
+        run: python3 tools/junit_gate.py --require-report --min-cases 1000
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

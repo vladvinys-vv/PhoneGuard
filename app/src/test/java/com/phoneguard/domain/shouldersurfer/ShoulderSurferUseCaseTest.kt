@@ -1,40 +1,58 @@
 package com.phoneguard.domain.shouldersurfer
 
-import com.phoneguard.data.shouldersurfer.ShoulderSurferRepository
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
+import com.phoneguard.data.shouldersurfer.ShoulderSurferController
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Use case только пробрасывает результат репозитория: важно, что `Boolean`
- * (разрешила ли система запуск foreground-сервиса) не теряется по дороге —
- * на нём держится сообщение «не удалось запустить детектор» в UI.
+ * Use case только пробрасывает результат контроллера: важно, что `Boolean`
+ * (разрешила ли система запуск foreground-сервиса) не теряется по дороге — на нём держится
+ * сообщение «не удалось запустить детектор» в UI.
+ *
+ * Фейк написан руками вместо MockK: во-первых, контракт из двух методов дешевле заглушки,
+ * во-вторых, тест не тянет MockK и выполняется в обычном JVM-прогоне без Android SDK.
  */
 class ShoulderSurferUseCaseTest {
 
-    private val repository: ShoulderSurferRepository = mockk()
-    private val useCase = ShoulderSurferUseCase(repository)
+    private class FakeController(
+        private val startResult: Boolean,
+        private val stopResult: Boolean
+    ) : ShoulderSurferController {
+        var startCalls = 0
+        var stopCalls = 0
+
+        override fun startService(): Boolean {
+            startCalls++
+            return startResult
+        }
+
+        override fun stopService(): Boolean {
+            stopCalls++
+            return stopResult
+        }
+    }
 
     @Test
-    fun startReturnsRepositoryResult() {
-        every { repository.startService() } returns true
-        assertTrue(useCase.start())
-        verify(exactly = 1) { repository.startService() }
+    fun startReturnsControllerResult() {
+        val controller = FakeController(startResult = true, stopResult = true)
+        assertTrue(ShoulderSurferUseCase(controller).start())
+        assertEquals(1, controller.startCalls)
     }
 
     @Test
     fun startReportsFailureWhenSystemBlocksService() {
-        every { repository.startService() } returns false
-        assertFalse(useCase.start())
+        val controller = FakeController(startResult = false, stopResult = false)
+        assertFalse(ShoulderSurferUseCase(controller).start())
+        assertEquals(1, controller.startCalls)
     }
 
     @Test
-    fun stopReturnsRepositoryResult() {
-        every { repository.stopService() } returns false
-        assertFalse(useCase.stop())
-        verify(exactly = 1) { repository.stopService() }
+    fun stopReturnsControllerResult() {
+        val controller = FakeController(startResult = true, stopResult = false)
+        assertFalse(ShoulderSurferUseCase(controller).stop())
+        assertEquals(1, controller.stopCalls)
+        assertEquals(0, controller.startCalls)
     }
 }

@@ -38,6 +38,8 @@ static-checks:
     - python3 tools/unused_strings.py
     - python3 tools/unused_resources.py
     - python3 tools/docs_links.py
+    - python3 tools/mockk_audit.py
+    - python3 tools/manual_check.py --self-test
     - python3 tools/release_check.py
 
 .android:
@@ -64,13 +66,31 @@ unit-test:
   stage: test
   script:
     - ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
-    - python3 tools/junit_gate.py --require-report
+    # --min-cases: сверка по классам не видит потерю кейсов внутри классов.
+    - python3 tools/junit_gate.py --require-report --min-cases 1000
+    # Ресурсы и манифест тем же aapt2, которым их обрабатывает AGP: платформа и build-tools
+    # уже стоят в .android, поэтому проверка не пропускается, а действительно выполняется.
+    - python3 tools/aapt2_check.py
   artifacts:
     when: always
     name: "phoneguard-unit-tests-$CI_COMMIT_SHORT_SHA"
     expire_in: 7 days
     paths:
       - app/build/reports/tests/
+
+lint:
+  extends: .android
+  stage: test
+  script:
+    # abortOnError = true в app/build.gradle: lint здесь — такая же проверка, как тесты.
+    # До этого GitLab был единственным CI с Android SDK, который не запускал ни lint, ни aapt2.
+    - ./gradlew lintProductionDebug --no-daemon --stacktrace
+  artifacts:
+    when: always
+    name: "phoneguard-lint-$CI_COMMIT_SHORT_SHA"
+    expire_in: 7 days
+    paths:
+      - app/build/reports/lint-results-debug.html
 
 build-debug:
   extends: .android

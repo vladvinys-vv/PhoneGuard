@@ -82,13 +82,8 @@ class SystemIntegrityCheck @Inject constructor(
         }
 
         // 3. Известные индикаторы перезаписанного системного раздела.
-        val suspiciousSystemFiles = listOf(
-            "/system/bin/su",
-            "/system/xbin/su",
-            "/system/xbin/daemonsu",
-            "/system/app/Superuser.apk",
-            "/data/local.prop"
-        ).filter { File(it).exists() }
+        val suspiciousSystemFiles =
+            IntegrityPolicy.foundRootIndicators { path -> File(path).exists() }
         if (suspiciousSystemFiles.isNotEmpty()) {
             details.add(
                 context.getString(
@@ -145,10 +140,10 @@ class SystemIntegrityCheck @Inject constructor(
             val process = ProcessBuilder("getprop", name)
                 .redirectErrorStream(true)
                 .start()
-            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
             process.waitFor()
             process.destroy()
-            output.ifBlank { null }
+            IntegrityPolicy.propertyValue(output)
         }.getOrNull()
     }
 }
