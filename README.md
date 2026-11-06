@@ -138,6 +138,7 @@ python3 tools/sync_strings.py            # идемпотентная синхр
 python3 tools/unused_strings.py          # обязательно: строк без единой ссылки нет
 python3 tools/junit_gate.py --self-test  # обязательно: сверка тест-классов с JUnit-XML (в CI — --require-report)
 python3 tools/release_check.py           # обязательно: подпись, R8, версия, mapping, 16 КБ — до релизной сборки
+python3 tools/ci_health.py               # вручную: запускались ли прогоны CI вообще (нужен gh)
 python3 tools/kotlin_frontend_check.py   # опционально: настоящий компилятор (с android.jar — строже)
 python3 tools/aapt2_check.py             # опционально: ресурсы и манифест через aapt2 (как Gradle)
 python3 tools/kotlin_analysis.py         # опционально: парсер Kotlin (нужен tree-sitter)
@@ -179,6 +180,13 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 | Job | Что делает |
 |---|---|
 | `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` + `unused_strings.py` (нет строк без ссылок) | `unit-test` | `testProductionDebugUnitTest` + `junit_gate.py --require-report` (тест-класс, не попавший в прогон, валит сборку) |
+
+> **Состояние GitHub Actions (6 ноября 2026):** прогоны создаются, но job'ы не запускаются —
+> GitHub отвечает «The job was not started because your account is locked due to a billing
+> issue» (у всех job'ов `steps: 0`, падение за 2–6 секунд). Это не код: чинится в
+> Settings → Billing → Actions. Пока блокировка не снята, единственный CI, который
+> действительно что-то проверяет, — Codemagic. Отличить одно от другого:
+> `python3 tools/ci_health.py`.
 | `kotlin-frontend` | ставит Kotlin 2.1.0 + `platforms;android-35`/`build-tools`, прогоняет `kotlin_frontend_check.py` (с настоящим `android.jar`) и `aapt2_check.py` (ресурсы + манифест) |
 | `lint`, `unit-test` | `lintProductionDebug`, `testProductionDebugUnitTest` (отчёты тестов выгружаются при падении) |
 | `build-debug`, `build-release` | `assembleProductionDebug`, `assembleProductionRelease` (APK как артефакт) |
