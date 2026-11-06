@@ -2302,6 +2302,31 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Больше не предупреждать",
         "de": "Nicht mehr warnen",
     },
+    # Экран согласия: что стало с разрешением (perm/ConsentPolicy).
+    "consent_declined_can_retry": {
+        "default": "Отказано — можно спросить ещё раз",
+        "en": "Denied — the system will ask again",
+        "ru": "Отказано — можно спросить ещё раз",
+        "de": "Abgelehnt – erneute Abfrage möglich",
+    },
+    "consent_declined_forever": {
+        "default": "Отключено в системе: включите в настройках приложения",
+        "en": "Turned off in the system: enable it in app settings",
+        "ru": "Отключено в системе: включите в настройках приложения",
+        "de": "Im System deaktiviert: in den App-Einstellungen aktivieren",
+    },
+    "consent_pending_hint": {
+        "default": "Осталось разрешений: %1$d",
+        "en": "Permissions left: %1$d",
+        "ru": "Осталось разрешений: %1$d",
+        "de": "Verbleibende Berechtigungen: %1$d",
+    },
+    "consent_disabled_hint": {
+        "default": "Без этих разрешений часть защиты останется выключенной — их можно выдать позже.",
+        "en": "Without these permissions part of the protection stays off — you can grant them later.",
+        "ru": "Без этих разрешений часть защиты останется выключенной — их можно выдать позже.",
+        "de": "Ohne diese Berechtigungen bleibt ein Teil des Schutzes aus – sie lassen sich später erteilen.",
+    },
     "exposure_revoke": {
         "default": "Отозвать право",
         "en": "Revoke permission",

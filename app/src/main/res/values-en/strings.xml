@@ -671,4 +671,8 @@
     <string name="protection_action_open_settings">Open settings</string>
     <string name="exposure_dismiss">Don\'t warn again</string>
     <string name="exposure_revoke">Revoke permission</string>
+    <string name="consent_declined_can_retry">Denied — the system will ask again</string>
+    <string name="consent_declined_forever">Turned off in the system: enable it in app settings</string>
+    <string name="consent_pending_hint">Permissions left: %1$d</string>
+    <string name="consent_disabled_hint">Without these permissions part of the protection stays off — you can grant them later.</string>
 </resources>
