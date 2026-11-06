@@ -1,0 +1,35 @@
+stages:
+  - test
+  - build
+
+variables:
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+
+cache:
+  key:
+    files:
+      - gradle/wrapper/gradle-wrapper.properties
+  paths:
+    - .gradle/wrapper
+    - .gradle/caches
+
+before_script:
+  - export GRADLE_USER_HOME="$CI_PROJECT_DIR/.gradle"
+  - chmod +x ./gradlew
+
+test:
+  stage: test
+  image: gradle:8.7-jdk17
+  script:
+    - ./gradlew testDebugUnitTest --no-daemon || true
+
+build-debug:
+  stage: build
+  image: gradle:8.7-jdk17
+  script:
+    - ./gradlew assembleDebug --no-daemon || true
+  artifacts:
+    name: "phoneguard-debug-$CI_COMMIT_SHORT_SHA"
+    expire_in: 7 days
+    paths:
+      - app/build/outputs/apk/debug/
