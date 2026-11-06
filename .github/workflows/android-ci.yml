@@ -114,6 +114,10 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: chmod +x gradlew
       - run: ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
+      # Gradle вернёт 0 и с зелёным отчётом, даже если тест-класс в прогон не попал.
+      # Сверяем дерево тестов с JUnit-XML: молча не запустившиеся тесты — это не «зелено».
+      - name: Test classes actually ran
+        run: python3 tools/junit_gate.py --require-report
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

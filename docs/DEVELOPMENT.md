@@ -33,7 +33,7 @@
 ```
 
 Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
-`ci_check.py`, `docs_check.py`, `unused_strings.py`, проверяет
+`ci_check.py`, `docs_check.py`, `unused_strings.py`, `junit_gate.py`, проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
 `aapt2_check.py` (aapt2) и `kotlin_analysis.py` (tree-sitter). Обязательные проверки
 (`gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`, `ci_check.py`
@@ -489,6 +489,33 @@ python3 tools/unused_strings.py --self-test
 список исключений не чистится никогда. Удалять строку нужно сначала из словаря
 `tools/sync_strings.py`, потом из четырёх `strings.xml`: иначе `sync_strings.py` вернёт её
 обратно при следующем запуске.
+
+### `tools/junit_gate.py`
+
+Сверяет **дерево тестов с JUnit-отчётом реального прогона**. Молча не запустившийся тест-файл —
+самый неприятный вид поломки: Gradle возвращает 0, отчёт зелёный, а класса в нём просто нет.
+Причины бытовые — файл уехал в другой source set, класс стал `abstract`, появился
+`testOptions.unitTests.all { filter { … } }`, тест-класс переименовали в `Check` (Gradle ищет
+`*Test`). Замечают такое через месяцы, когда тест уже давно ничего не проверяет.
+
+```bash
+python3 tools/junit_gate.py                   # локально: отчёта нет — явный пропуск
+python3 tools/junit_gate.py --require-report   # в CI: отчёта нет — ошибка
+python3 tools/junit_gate.py --verbose
+python3 tools/junit_gate.py --self-test
+```
+
+Два независимых источника: `@Test`-функции по классам в `app/src/test` и `<testcase>` в
+`app/build/test-results/testProductionDebugUnitTest/TEST-*.xml`. Класс из дерева, которого нет в
+отчёте, и класс, у которого в отчёте меньше кейсов, чем `@Test` в исходнике, — ошибки; лишние
+кейсы (параметризованные, унаследованные) ошибкой не считаются. Вложенные вспомогательные классы
+(`private class RecordingDb` с отступом) и `abstract`-базы в тест-классы не попадают — иначе
+проверка требовала бы их в отчёте. Исключения — только через `tools/junit_gate_allow.txt`
+строкой `Класс — причина`; запись без причины и запись про класс, которого больше нет, — ошибки.
+
+Все три CI запускают гейт с `--require-report`, и `tools/ci_check.py` отдельным правилом следит,
+чтобы флаг не потерялся: без него при отсутствии отчёта проверка молча пропускается — ровно в том
+случае, ради которого она и нужна.
 
 ### `tools/kotlin_frontend_check.py` (опционально, самый строгий)
 

@@ -61,6 +61,7 @@ unit-test:
   stage: test
   script:
     - ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
+    - python3 tools/junit_gate.py --require-report
   artifacts:
     when: always
     name: "phoneguard-unit-tests-$CI_COMMIT_SHORT_SHA"

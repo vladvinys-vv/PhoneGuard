@@ -103,6 +103,8 @@ workflows:
         script: ./gradlew lintProductionDebug --no-daemon --stacktrace
       - name: Unit tests
         script: ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
+      - name: Test classes actually ran
+        script: python3 tools/junit_gate.py --require-report
       - name: Build production debug APK
         script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
       # versionCode/versionName: из тега `v1.2.3` → code 10203, иначе — build number.
