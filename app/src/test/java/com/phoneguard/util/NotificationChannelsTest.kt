@@ -39,6 +39,7 @@ class NotificationChannelsTest {
         assertEquals("sms_command_channel", Spec.SMS_COMMANDS.channelId)
         assertEquals("sim_swap_channel", Spec.SIM_SWAP.channelId)
         assertEquals("package_added_channel", Spec.NEW_APP.channelId)
+        assertEquals("protect_neighbour_channel", Spec.NEIGHBOUR.channelId)
     }
 
     @Test
@@ -51,7 +52,13 @@ class NotificationChannelsTest {
 
     @Test
     fun `warning channels are loud`() {
-        listOf(Spec.INTRUSION_WARNING, Spec.SHOULDER_SURFER_ALERT, Spec.SIM_SWAP, Spec.SMS_COMMANDS)
+        listOf(
+            Spec.INTRUSION_WARNING,
+            Spec.SHOULDER_SURFER_ALERT,
+            Spec.SIM_SWAP,
+            Spec.SMS_COMMANDS,
+            Spec.NEIGHBOUR
+        )
             .forEach { assertEquals("${it.channelId} должен быть громким", Importance.HIGH, it.importance) }
     }
 

@@ -735,4 +735,11 @@
     <string name="intrusion_warning_channel_description">Уведомления о подозрительной активности на устройстве</string>
     <string name="alarm_hold_title">Тревога активна</string>
     <string name="alarm_hold_text">PhoneGuard держит сирену включённой и ждёт вашей команды</string>
+    <string name="neighbour_channel_name">Защита приложений</string>
+    <string name="neighbour_alert_title">Опасное приложение рядом с вашими данными</string>
+    <string name="neighbour_alert_text">%1$s установлено рядом с приложениями под защитой (%2$d). Права: %3$s</string>
+    <string name="neighbour_capability_overlay">рисовать поверх окон</string>
+    <string name="neighbour_capability_accessibility">служба доступности</string>
+    <string name="neighbour_capability_notification_access">доступ к уведомлениям</string>
+    <string name="neighbour_capability_device_admin">администратор устройства</string>
 </resources>

@@ -87,4 +87,22 @@ object NotificationIds {
     /** Отдельный id на пакет, чтобы новые установки не затирали друг друга. */
     fun packageAdded(packageName: String): Int =
         PACKAGE_ADDED_BASE + (packageName.hashCode() and PACKAGE_ADDED_MASK)
+
+    /**
+     * База для уведомлений «опасный сосед» — отдельный диапазон от [PACKAGE_ADDED_BASE].
+     *
+     * У одного пакета может быть два разных события (плохая подпись и опасные права), и они
+     * не должны затирать друг друга: диапазоны нарочно не пересекаются.
+     */
+    const val NEIGHBOUR_BASE = 30_000
+
+    /** Маска: 4096 значений на пакет. */
+    private const val NEIGHBOUR_MASK = 0x0FFF
+
+    /** Допустимый диапазон id для уведомлений об опасном соседе. */
+    val NEIGHBOUR_RANGE: IntRange = NEIGHBOUR_BASE..(NEIGHBOUR_BASE + NEIGHBOUR_MASK)
+
+    /** Отдельный id на пакет: уведомление о втором приложении не затирает первое. */
+    fun neighbour(packageName: String): Int =
+        NEIGHBOUR_BASE + (packageName.hashCode() and NEIGHBOUR_MASK)
 }
