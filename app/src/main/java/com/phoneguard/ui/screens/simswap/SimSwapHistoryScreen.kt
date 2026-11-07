@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -32,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.phoneguard.R
 import com.phoneguard.model.SimSwapEvent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileWriter
 
@@ -43,6 +47,7 @@ fun SimSwapHistoryScreen(
 ) {
     val history by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -60,15 +65,23 @@ fun SimSwapHistoryScreen(
                 )
             }
             Button(onClick = {
-                // Раньше сообщение об успехе показывалось всегда, даже если файл
-                // не записался (например, внешнее хранилище отмонтировано).
-                val path = exportCsv(context, history.history)
-                val message = if (path != null) {
-                    context.getString(R.string.export_logs_saved, path)
-                } else {
-                    context.getString(R.string.export_logs_failed)
+                // Раньше CSV писался прямо здесь, на главном потоке: `FileWriter` в
+                // `onClick` — это блокировка UI на всё время записи внешнего хранилища
+                // (вплоть до ANR на большой истории). Теперь запись в IO, а Toast — обратно
+                // на главный поток.
+                scope.launch {
+                    // Раньше сообщение об успехе показывалось всегда, даже если файл
+                    // не записался (например, внешнее хранилище отмонтировано).
+                    val path = withContext(Dispatchers.IO) { exportCsv(context, history.history) }
+                    val message = if (path != null) {
+                        context.getString(R.string.export_logs_saved, path)
+                    } else {
+                        context.getString(R.string.export_logs_failed)
+                    }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
                 }
-                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
             }) {
                 Icon(imageVector = Icons.Default.Download, contentDescription = null)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -114,9 +127,15 @@ private fun SimSwapEventCard(event: SimSwapEvent) {
 /**
  * Пишет историю подмен SIM в CSV рядом с приложением.
  *
+ * `suspend`, а не просто функция: запись файла обязана идти с IO-диспетчера. Так это
+ * проверяет компилятор — вызвать её случайно из `onClick` уже не получится.
+ *
  * @return путь к файлу либо `null`, если записать не удалось
  */
-private fun exportCsv(context: android.content.Context, history: List<SimSwapEvent>): String? {
+private suspend fun exportCsv(
+    context: android.content.Context,
+    history: List<SimSwapEvent>
+): String? {
     val externalDir = context.getExternalFilesDir(null) ?: return null
     val file = File(externalDir, "sim_swap_history.csv")
     return runCatching {

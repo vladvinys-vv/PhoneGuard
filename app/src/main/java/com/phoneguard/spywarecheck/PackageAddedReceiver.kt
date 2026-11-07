@@ -16,6 +16,7 @@ import com.phoneguard.protect.NeighbourAlertPolicy
 import com.phoneguard.protect.SensitiveAppGuard
 import com.phoneguard.protect.SensitiveAppPolicy
 import com.phoneguard.ui.MainActivity
+import com.phoneguard.util.InstalledAppsCache
 import com.phoneguard.util.NotificationChannelInstaller
 import com.phoneguard.util.NotificationChannels
 import com.phoneguard.util.NotificationIds
@@ -55,8 +56,20 @@ class PackageAddedReceiver : BroadcastReceiver() {
     @Inject
     lateinit var preferencesManager: PreferencesManager
 
+    @Inject
+    lateinit var installedAppsCache: InstalledAppsCache
+
     override fun onReceive(context: Context, intent: Intent) {
+        // Кэш списка приложений живёт 24 часа и используется экраном фаервола. Без сброса
+        // установленное приложение не появлялось в списке до суток (а удалённое оставалось),
+        // и правило для него создать было нельзя. Сброс делается до всех ранних выходов:
+        // список изменился независимо от того, интересен ли нам этот пакет.
+        if (intent.action == Intent.ACTION_PACKAGE_REMOVED) {
+            installedAppsCache.invalidateCache()
+            return
+        }
         if (intent.action != Intent.ACTION_PACKAGE_ADDED) return
+        installedAppsCache.invalidateCache()
         val packageName = intent.data?.schemeSpecificPart ?: return
         Log.d(TAG, "New package installed: $packageName")
 

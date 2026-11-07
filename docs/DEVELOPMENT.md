@@ -34,7 +34,7 @@
 
 Она запускает `gradle_check.py`, `proguard_check.py`, `migration_check.py`, `static_audit.py`,
 `ci_check.py`, `docs_check.py`, `unused_strings.py`, `unused_resources.py`, `docs_links.py`,
-`hilt_check.py`, `mockk_audit.py`, `manual_check.py --self-test`, `junit_gate.py`,
+`power_audit.py`, `hilt_check.py`, `mockk_audit.py`, `manual_check.py --self-test`, `junit_gate.py`,
 `release_check.py`,
 проверяет
 `sync_strings.py --check` и, если установлены, `kotlin_frontend_check.py` (kotlinc),
@@ -551,6 +551,32 @@ python3 tools/docs_links.py --self-test
 `.map { entities -> entities.map { it } }`, тождественное преобразование, и тест на него
 (`VaultRepositoryTest`) проверял пустую операцию. Преобразование удалено, тест тоже — вместо
 него ничего не появилось, потому что проверять по-прежнему нечего.
+
+### `tools/power_audit.py`
+
+Тихие расходы батареи — то, что не ломает ни сборку, ни тесты и не видно рядом в коде.
+
+| Правило | Почему это ошибка |
+| --- | --- |
+| `periodic` | `PeriodicWorkRequestBuilder(5, MINUTES)` — это не «каждые 5 минут»: WorkManager молча поднимает интервал до 15 минут, и настройка в интерфейсе врёт пользователю |
+| `exact-alarm` | `setExact`, `setExactAndAllowWhileIdle`, `setAlarmClock`, `setRepeating` будят телефон в обход энергосбережения — только с записанной причиной |
+| `wakelock` | `acquire()` без таймаута: падение между `acquire()` и `release()` не даёт телефону уснуть до перезагрузки, а виноватым будет «PhoneGuard жрёт батарею» |
+| `receiver-leak` | `registerReceiver` без `unregisterReceiver` держит контекст (активность — целиком). `registerReceiver(null, filter)` — синхронное чтение sticky-интента, а не регистрация, и не считается |
+
+```bash
+python3 tools/power_audit.py            # 0 ошибок: 242 файлов, 18 перечислений пакетов
+python3 tools/power_audit.py --verbose  # перечисления пакетов по файлам
+python3 tools/power_audit.py --self-test
+```
+
+Сейчас в проекте нет ни точных будильников, ни wake-lock'ов, ни незакрытых приёмников —
+`tools/power_audit_allow.txt` пуст, и это проверяется: запись в нём без причины или без живого
+срабатывания — ошибка.
+
+Отдельно `static_audit.py` следит за главным потоком: **функция в `com/phoneguard/ui`, которая
+читает или пишет файл, обязана быть `suspend`**. Правило появилось после реального бага —
+`exportCsv` писала CSV через `FileWriter` и вызывалась прямо из `Button(onClick = …)`: блокировка
+UI на всё время записи внешнего хранилища, вплоть до ANR на длинной истории подмен SIM.
 
 ### `tools/hilt_check.py`
 

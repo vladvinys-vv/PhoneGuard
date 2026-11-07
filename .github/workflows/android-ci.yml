@@ -56,6 +56,10 @@ jobs:
       - name: Docs links and paths exist
         run: python3 tools/docs_links.py
 
+      # Батарея: интервал периодической работы, точные будильники, wake-lock без таймаута.
+      - name: Battery and alarms
+        run: python3 tools/power_audit.py
+
       # Разрыв в графе Hilt компилятор не видит: сборка зелёная, падение — на генерации кода.
       - name: Hilt dependency graph
         run: python3 tools/hilt_check.py

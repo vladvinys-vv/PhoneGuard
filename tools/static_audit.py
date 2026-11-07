@@ -1019,6 +1019,69 @@ def check_start_activity() -> None:
 
 
 
+BLOCKING_UI_CALL = re.compile(
+    r"\b(?:FileWriter|FileOutputStream|FileInputStream|RandomAccessFile|FileReader)\s*\("
+    r"|\.(?:readText|writeText|readBytes|writeBytes)\s*\("
+)
+
+
+def enclosing_block(code: str, opening: int) -> str:
+    """Содержимое фигурных скобок, открывающихся на `opening` (вложенность учитывается)."""
+    depth = 0
+    for index in range(opening, len(code)):
+        if code[index] == "{":
+            depth += 1
+        elif code[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return code[opening + 1 : index]
+    return code[opening + 1 :]
+
+
+FUNCTION_DECL = re.compile(
+    r"^(?P<mods>(?:(?:private|internal|public|override|inline|operator|tailrec)\s+)*)"
+    r"(?P<suspend>suspend\s+)?fun\s+(?P<name>\w+)",
+    re.M,
+)
+
+
+def blocking_io_non_suspend(code: str) -> list[tuple[int, str]]:
+    """Не-suspend функции в UI-коде, которые пишут или читают файл.
+
+    Так выглядел баг экспорта истории подмен SIM: `onClick` вызывал `exportCsv(...)`, а та
+    делала `FileWriter(...)` — запись внешнего хранилища на главном потоке, вплоть до ANR.
+    Лямбда `onClick` сама по себе безобидна, поэтому проверять надо **объявление функции**:
+    если файловый ввод-вывод внутри, функция обязана быть `suspend` — тогда компилятор не
+    даст вызвать её вне корутины, и главный поток защищён по построению.
+    """
+    found: list[tuple[int, str]] = []
+    for match in FUNCTION_DECL.finditer(code):
+        if match.group("suspend"):
+            continue
+        opening = code.find("{", match.end())
+        if opening < 0:
+            continue
+        # Функция без тела (интерфейс, `)` до `{`) не проверяется.
+        between = code[match.end() : opening]
+        if ")" not in between and "=" in between:
+            continue
+        body = enclosing_block(code, opening)
+        if BLOCKING_UI_CALL.search(body):
+            found.append((code.count("\n", 0, match.start()) + 1, match.group("name")))
+    return found
+
+
+def check_ui_blocking_io() -> None:
+    """Файловый ввод-вывод в UI-коде только из `suspend`-функции (иначе это главный поток)."""
+    for path in (ROOT / "app/src/main/java/com/phoneguard/ui").rglob("*.kt"):
+        code = strip_comments(path.read_text(encoding="utf-8"))
+        for line, name in blocking_io_non_suspend(code):
+            ERRORS.append(
+                f"{path.relative_to(ROOT)}:{line}: `{name}` читает или пишет файл, но не "
+                f"`suspend` — вызов из UI заблокирует главный поток (вплоть до ANR)"
+            )
+
+
 def check_service_start_guards() -> None:
     """startService/startForegroundService вне try: Android 12+ бросает ForegroundServiceStartNotAllowedException."""
     for path in (ROOT / 'app/src/main/java').rglob('*.kt'):
@@ -2192,6 +2255,20 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
             ERRORS.clear()
             ERRORS.extend(saved_errors)
 
+            # Файловый ввод-вывод в UI: правило проверяет объявление функции, а не лямбду.
+            blocking = (
+                "\nprivate fun exportCsv(dir: java.io.File): String? {\n"
+                '    java.io.FileWriter(dir).use { it.appendLine("x") }\n'
+                "    return dir.absolutePath\n"
+                "}\n"
+            )
+            if not blocking_io_non_suspend(blocking):
+                failures.append("не-suspend функция с файловым I/O не найдена")
+            if blocking_io_non_suspend(blocking.replace("private fun", "private suspend fun")):
+                failures.append("suspend-функция с файловым I/O признана нарушением")
+            if blocking_io_non_suspend("fun noIo() = 1\n"):
+                failures.append("функция без файлового I/O признана нарушением")
+
             arity_errors = [e for e in ERRORS if "передано 3 арг" in e]
             named_errors = [e for e in ERRORS if "таких параметров нет: c" in e]
             false_positives = [
@@ -2214,6 +2291,7 @@ object B { private const val VPN_NOTIFICATION_ID = 1001 }
         return 1
     print(
         "static_audit --self-test: ok (канал без создания, созданный канал, совпадающие id, "
+        "файловый ввод-вывод только в suspend-функциях, "
         "арность конструктора, неизвестный именованный параметр, одноимённые классы, "
         "метод экземпляра через имя класса, функция-расширение как член проекта)"
     )
@@ -2247,6 +2325,7 @@ def main() -> int:
     check_pending_intent_flags()
     check_start_activity()
     check_service_start_guards()
+    check_ui_blocking_io()
     check_dead_components()
     check_migrations_match_entities()
     check_navigation_routes()
