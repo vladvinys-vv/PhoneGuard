@@ -5,11 +5,6 @@ import android.util.Log
 import com.phoneguard.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.io.PrintWriter
-import java.io.StringWriter
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,10 +14,13 @@ import javax.inject.Singleton
  * Раньше отчёт отправлялся в Firebase Crashlytics. Для приложения, которое
  * заявляет «Zero telemetry» и работу без облака, это недопустимо: стек-трейсы
  * могут содержать пути, номера и названия пакетов. Теперь отчёт пишется в
- * `filesDir/crash-reports/` (не более [MAX_REPORTS] файлов) и остаётся на телефоне.
+ * `filesDir/crash-reports/` (не более [CrashReportStore.MAX_REPORTS] файлов) и остаётся на телефоне.
  *
  * Файлы можно посмотреть в приложении или забрать через `adb`, подключившись к
  * собственному устройству.
+ *
+ * Файловая часть — в [CrashReportStore]: сколько отчётов хранить и когда обнулять журнал
+ * сессии, проверяется JVM-тестами на настоящей файловой системе.
  */
 @Singleton
 class CrashHandler @Inject constructor(
@@ -30,6 +28,8 @@ class CrashHandler @Inject constructor(
 ) {
 
     private var previousHandler: Thread.UncaughtExceptionHandler? = null
+
+    private val store: CrashReportStore by lazy { CrashReportStore(crashReportsDir()) }
 
     @Synchronized
     fun install() {
@@ -67,63 +67,31 @@ class CrashHandler @Inject constructor(
     /** Каталог с локальными отчётами (для показа в настройках). */
     fun crashReportsDir(): File = File(context.filesDir, CRASH_DIR).apply { mkdirs() }
 
-    fun listReports(): List<File> =
-        crashReportsDir().listFiles()?.sortedByDescending { it.lastModified() }.orEmpty()
+    fun listReports(): List<File> = store.reports()
 
     fun clearReports() {
-        listReports().forEach { it.delete() }
+        store.clear()
     }
 
     private fun writeCrashReport(throwable: Throwable) {
-        try {
-            val dir = crashReportsDir()
-            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val file = File(dir, "crash_$timestamp.txt")
-            file.writeText(formatReport(throwable))
-            pruneOldReports(dir)
-        } catch (e: Exception) {
-            Log.w(TAG, "Unable to persist crash report", e)
+        if (store.writeReport(throwable) == null) {
+            Log.w(TAG, "Unable to persist crash report")
         }
     }
 
     private fun appendToSessionLog(message: String) {
-        try {
-            val file = File(crashReportsDir(), "session.log")
-            if (file.length() > MAX_SESSION_LOG_BYTES) file.delete()
-            file.appendText("${System.currentTimeMillis()} $message\n")
-        } catch (_: Exception) {
-            // Логирование не должно ломать приложение.
-        }
-    }
-
-    private fun pruneOldReports(dir: File) {
-        val reports = dir.listFiles { f -> f.name.startsWith("crash_") }
-            ?.sortedByDescending { it.lastModified() }
-            ?: return
-        reports.drop(MAX_REPORTS).forEach { it.delete() }
+        // Логирование не должно ломать приложение: отказ записи игнорируется осознанно.
+        store.appendSessionLine(message)
     }
 
     companion object {
         private const val TAG = "PhoneGuardCrash"
+
+        /** Тот же каталог, что и у [CrashReportStore]; имя нужно только здесь. */
         private const val CRASH_DIR = "crash-reports"
-        private const val MAX_REPORTS = 20
-        private const val MAX_SESSION_LOG_BYTES = 256 * 1024
 
-        /** Чистая функция форматирования — покрыта юнит-тестом. */
-        fun formatReport(throwable: Throwable, timestamp: Long = System.currentTimeMillis()): String {
-            val stackTrace = StringWriter().also { writer ->
-                PrintWriter(writer).use { throwable.printStackTrace(it) }
-            }.toString()
-
-            val header = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(timestamp))
-            return buildString {
-                appendLine("PhoneGuard crash report")
-                appendLine("time: $header")
-                appendLine("type: ${throwable.javaClass.name}")
-                appendLine("message: ${throwable.message}")
-                appendLine("---")
-                append(stackTrace)
-            }
-        }
+        /** Форматирование живёт в [CrashReportStore] — там же его тест. */
+        fun formatReport(throwable: Throwable, timestamp: Long = System.currentTimeMillis()): String =
+            CrashReportStore.formatReport(throwable, timestamp)
     }
 }

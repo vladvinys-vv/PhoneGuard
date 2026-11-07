@@ -119,6 +119,9 @@ workflows:
         script: ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
       - name: Test classes actually ran
         script: python3 tools/junit_gate.py --require-report --min-cases 1000
+      # Порог выполняемого покрытия: тест на MockK/Robolectric офлайн не исполняется.
+      - name: Executed coverage floor
+        script: python3 tools/test_coverage_map.py --min-executed 152
       - name: Build production debug APK
         script: ./gradlew assembleProductionDebug --no-daemon --stacktrace
       # versionCode/versionName: из тега `v1.2.3` → code 10203, иначе — build number.

@@ -70,6 +70,8 @@ unit-test:
     - ./gradlew testProductionDebugUnitTest --no-daemon --stacktrace
     # --min-cases: сверка по классам не видит потерю кейсов внутри классов.
     - python3 tools/junit_gate.py --require-report --min-cases 1000
+    # Порог выполняемого покрытия: тест на MockK/Robolectric офлайн не исполняется.
+    - python3 tools/test_coverage_map.py --min-executed 152
     # Ресурсы и манифест тем же aapt2, которым их обрабатывает AGP: платформа и build-tools
     # уже стоят в .android, поэтому проверка не пропускается, а действительно выполняется.
     - python3 tools/aapt2_check.py

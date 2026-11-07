@@ -15,8 +15,13 @@
 «упомянуты в тестах» и «из них в выполняемых тестах», а разницу показывает списком.
 
 Использование:
-    python3 tools/test_coverage_map.py             # сводка по пакетам + список без тестов
-    python3 tools/test_coverage_map.py --detail    # вывести все классы без упоминаний
+    python3 tools/test_coverage_map.py                       # сводка по пакетам + список без тестов
+    python3 tools/test_coverage_map.py --detail              # вывести все классы без упоминаний
+    python3 tools/test_coverage_map.py --min-executed 153    # порог для CI: меньше — ошибка
+
+Порог (`--min-executed`) закрывает конкретную дыру: без него покрытие могло тихо упасть.
+Достаточно было переписать тест на MockK — файл перестаёт исполняться офлайн, класс
+переезжает в «не выполняется», и ни одна проверка этого не замечает.
 """
 
 from __future__ import annotations
@@ -196,6 +201,8 @@ def main() -> int:
     parser.add_argument("--skipped", action="store_true",
                         help="какие тест-файлы не выполняются офлайн и почему")
     parser.add_argument("--self-test", action="store_true", help="проверить классификатор причин")
+    parser.add_argument("--min-executed", type=int, default=None,
+                        help="порог: минимум классов в выполняемых тестах (например 153)")
     args = parser.parse_args()
 
     if args.self_test:
@@ -279,6 +286,21 @@ def main() -> int:
 
     print(f"\nAndroid-связанные без тестов ({len(untested_android)}): UI, Hilt-модули, сервисы — "
           "проверяются Robolectric-тестами и вручную (docs/MANUAL_TESTING.md)")
+
+    if args.min_executed is None:
+        return 0
+    if runnable_skipped_reason:
+        # Порог без числа — хуже, чем отсутствие порога: «прошло» ничего не значит.
+        print(f"\nОШИБКА: порог --min-executed проверить нельзя — "
+              f"офлайн-раннер не отработал ({runnable_skipped_reason})")
+        return 1
+    if tested_running < args.min_executed:
+        print(f"\nОШИБКА: классов в выполняемых тестах {tested_running}, "
+              f"порог {args.min_executed} — покрытие упало. "
+              "Вероятные причины: тест переписан на MockK/Robolectric, "
+              "новый класс без теста или удалённый тест.")
+        return 1
+    print(f"\nпорог выполняемого покрытия: {tested_running} >= {args.min_executed} — ок")
     return 0
 
 

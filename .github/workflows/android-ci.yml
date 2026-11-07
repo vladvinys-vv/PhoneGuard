@@ -150,6 +150,10 @@ jobs:
         # --min-cases: сверка по классам не видит потерю кейсов внутри классов. Порог ниже
         # дерева тестов (сейчас 1085 @Test) — он не мешает добавлять тесты.
         run: python3 tools/junit_gate.py --require-report --min-cases 1000
+      # Тест на MockK/Robolectric офлайн не исполняется: класс «упомянут», но не проверен.
+      # Порог запрещает тихую потерю выполняемого покрытия.
+      - name: Executed coverage floor
+        run: python3 tools/test_coverage_map.py --min-executed 152
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
