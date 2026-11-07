@@ -288,7 +288,9 @@ dependencies {
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$rootProject.ext.coroutines_version"
     testImplementation "app.cash.turbine:turbine:1.2.0"
     testImplementation "org.robolectric:robolectric:$rootProject.ext.roboversion"
-    testImplementation "com.squareup.okhttp3:mockwebserver"
+    // `mockwebserver` был объявлен, но ни один тест его не импортировал (проверено
+    // `grep -rn "mockwebserver" app/src`): зависимость тянула лишний модуль в тестовый
+    // classpath и резолвилась на каждой сборке.
 }
 
 kapt {

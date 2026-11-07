@@ -138,6 +138,7 @@ python3 tools/sync_strings.py            # идемпотентная синхр
 python3 tools/unused_strings.py          # обязательно: строк без единой ссылки нет
 python3 tools/unused_resources.py        # обязательно: цветов/стилей/drawable без ссылок нет
 python3 tools/docs_links.py              # обязательно: ссылки и пути в документации существуют
+python3 tools/power_audit.py             # обязательно: батарея (интервалы WorkManager, будильники, wake-lock)
 python3 tools/hilt_check.py              # обязательно: граф Hilt (биндинги, двойные привязки, @InstallIn)
 python3 tools/mockk_audit.py             # обязательно: число файлов с MockK и relaxed-моков под бюджетом
 python3 tools/manual_check.py --device   # вручную: 16 КБ, подпись, mapping, разрешения, каналы (раздел 13)
@@ -184,7 +185,7 @@ suspend-контекста. Подробнее — [`docs/DEVELOPMENT.md`](docs/
 
 | Job | Что делает |
 |---|---|
-| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` + `unused_strings.py` (нет строк без ссылок) + `unused_resources.py` (нет ресурсов без ссылок) + `docs_links.py` (ссылки и пути в документации) + `hilt_check.py` (граф Hilt) + `mockk_audit.py` (долг перед MockK под бюджетом) + `manual_check.py --self-test` (правила ручного чек-листа) | `unit-test` | `testProductionDebugUnitTest` + `junit_gate.py --require-report` (тест-класс, не попавший в прогон, валит сборку) |
+| `static-checks` | `gradle_check.py` (конфигурация Gradle) + `proguard_check.py` (правила R8 против кода) + `migration_check.py` (миграции Room) + `static_audit.py` + `ci_check.py` (конфигурации CI) + `docs_check.py` (числа в документации) + проверка, что `strings.xml` совпадает со словарём `sync_strings.py` + `unused_strings.py` (нет строк без ссылок) + `unused_resources.py` (нет ресурсов без ссылок) + `docs_links.py` (ссылки и пути в документации) + `power_audit.py` (батарея: интервалы, будильники, wake-lock) + `hilt_check.py` (граф Hilt) + `mockk_audit.py` (долг перед MockK под бюджетом) + `manual_check.py --self-test` (правила ручного чек-листа) | `unit-test` | `testProductionDebugUnitTest` + `junit_gate.py --require-report` (тест-класс, не попавший в прогон, валит сборку) |
 
 > **Состояние GitHub Actions (6 ноября 2026):** прогоны создаются, но job'ы не запускаются —
 > GitHub отвечает «The job was not started because your account is locked due to a billing

@@ -114,7 +114,11 @@ class SensitiveAppGuard @Inject constructor(
             }.getOrNull() ?: return@withContext null
             facts(
                 info = info,
-                overlay = overlayPackages(),
+                // Раньше здесь вызывался `overlayPackages()`, который перечисляет ВСЕ
+                // приложения и делает AppOps-запрос на каждое: ради одного нового пакета
+                // (ресивер установки, `goAsync` с жёстким лимитом времени) выполнялась
+                // работа на секунды. Теперь AppOps спрашивается только по его uid.
+                overlay = if (hasOverlayPermission(info)) setOf(info.packageName) else emptySet(),
                 accessibility = enabledComponents(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
                 notificationAccess = enabledComponents(Settings.Secure.ENABLED_NOTIFICATION_LISTENERS),
                 admins = activeAdminPackages()
@@ -123,13 +127,17 @@ class SensitiveAppGuard @Inject constructor(
 
     private fun installedApps(): List<SensitiveAppPolicy.AppFacts> {
         val packageManager = context.packageManager
-        val overlay = overlayPackages()
         val accessibility = enabledComponents(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
         val notificationAccess = enabledComponents(Settings.Secure.ENABLED_NOTIFICATION_LISTENERS)
         val admins = activeAdminPackages()
 
         return runCatching {
-            packageManager.getInstalledApplications(0)
+            val allApps = packageManager.getInstalledApplications(0)
+            // `overlayPackages()` раньше заново перечислял все приложения: за одно открытие
+            // экрана список пакетов выгружался дважды. Теперь — один раз, и тот же список
+            // идёт в проверку оверлеев.
+            val overlay = overlayPackages(allApps)
+            allApps
                 .asSequence()
                 // Только то, что пользователь может запустить: без этого в списке
                 // оказываются десятки фоновых сервисов и системных библиотек.
@@ -169,30 +177,37 @@ class SensitiveAppGuard @Inject constructor(
         )
     }
 
-    private fun overlayPackages(): Set<String> {
+    /** Есть ли у приложения действующее право рисовать поверх других окон. */
+    private fun hasOverlayPermission(appInfo: ApplicationInfo): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
-            ?: return emptySet()
-        val packageManager = context.packageManager
+            ?: return false
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                appInfo.uid,
+                appInfo.packageName
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                appInfo.uid,
+                appInfo.packageName
+            )
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    /**
+     * Пакеты с правом оверлея среди **уже перечисленных** приложений.
+     *
+     * Список передаётся снаружи: раньше функция вызывала `getInstalledApplications(0)` сама, и
+     * одно открытие экрана выгружало список пакетов дважды.
+     */
+    private fun overlayPackages(apps: List<ApplicationInfo>): Set<String> {
         return runCatching {
-            packageManager.getInstalledApplications(0)
-                .asSequence()
-                .filter { appInfo ->
-                    val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        appOps.unsafeCheckOpNoThrow(
-                            AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
-                            appInfo.uid,
-                            appInfo.packageName
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        appOps.checkOpNoThrow(
-                            AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
-                            appInfo.uid,
-                            appInfo.packageName
-                        )
-                    }
-                    mode == AppOpsManager.MODE_ALLOWED
-                }
+            apps.asSequence()
+                .filter { appInfo -> hasOverlayPermission(appInfo) }
                 .map { it.packageName }
                 .toSet()
         }.getOrElse { error ->

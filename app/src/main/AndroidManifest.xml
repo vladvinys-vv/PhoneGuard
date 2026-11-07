@@ -295,6 +295,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <!-- Удаление не интересует уведомления, но сбрасывает кэш списка приложений. -->
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
                 <data android:scheme="package" />
             </intent-filter>
         </receiver>

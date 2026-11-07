@@ -61,6 +61,12 @@ step "docs_links.py"
 python3 tools/docs_links.py || failed=1
 python3 tools/docs_links.py --self-test || failed=1
 
+step "power_audit.py"
+# Тихие расходы батареи: периодическая работа чаще 15 минут (WorkManager молча поднимает
+# интервал), точные будильники, `acquire()` без таймаута, приёмник без unregister.
+python3 tools/power_audit.py || failed=1
+python3 tools/power_audit.py --self-test || failed=1
+
 step "hilt_check.py"
 # Разрыв в графе Hilt — не ошибка компиляции: сборка зелёная, падение на генерации кода.
 # Так уже дважды терялись биндинги (`IntrusionResponseExecutor`, `ShoulderSurferController`).
