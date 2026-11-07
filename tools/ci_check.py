@@ -46,6 +46,7 @@ REQUIRED_CHECKS = (
     "mockk_audit.py",
     "manual_check.py",
     "junit_gate.py",
+    "test_coverage_map.py",
     "release_check.py",
 )
 
@@ -243,6 +244,12 @@ def check_text(label: str, text: str, project_flavors: set[str], github: bool) -
             f"{label}: `tools/junit_gate.py` без `--require-report` — без отчёта проверка "
             "пропускается молча"
         )
+    if "test_coverage_map.py" in body and "--min-executed" not in body:
+        errors.append(
+            f"{label}: `tools/test_coverage_map.py` без `--min-executed` — карта печатается, "
+            "но порога нет: покрытие может упасть молча"
+        )
+
     if "junit_gate.py" in body and "--min-cases" not in body:
         errors.append(
             f"{label}: `tools/junit_gate.py` без `--min-cases` — порога по числу тестов нет, "
@@ -304,6 +311,7 @@ jobs:
           python3 tools/hilt_check.py
           python3 tools/mockk_audit.py
           python3 tools/manual_check.py --self-test
+          python3 tools/test_coverage_map.py --min-executed 152
           python3 tools/release_check.py
           python3 tools/aapt2_check.py
       - run: ./gradlew testProductionDebugUnitTest --no-daemon
@@ -370,6 +378,16 @@ jobs:
     )):
         problems.append("CI с Android SDK без aapt2 не пойман")
 
+    if not any("--min-executed" in problem for problem in check_text(
+        "bad.yml",
+        "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest\n"
+        "python3 tools/junit_gate.py --require-report --min-cases 1\n"
+        "python3 tools/test_coverage_map.py",
+        project,
+        True,
+    )):
+        problems.append("test_coverage_map.py без --min-executed не пойман")
+
     if not any("--min-cases" in problem for problem in check_text(
         "bad.yml",
         "android-actions/setup-android@v3\n./gradlew testProductionDebugUnitTest "
@@ -393,8 +411,9 @@ jobs:
         for problem in problems:
             print(f"error: ci_check --self-test: {problem}")
         return 1
-    print("ci_check --self-test: ok (9 правил: || true, флейвор, SDK, обязательные проверки, "
-          "unit-тесты, lint, aapt2, junit_gate --require-report и --min-cases, mapping.txt)")
+    print("ci_check --self-test: ok (10 правил: || true, флейвор, SDK, обязательные проверки, "
+          "unit-тесты, lint, aapt2, junit_gate --require-report и --min-cases, "
+          "test_coverage_map --min-executed, mapping.txt)")
     return 0
 
 

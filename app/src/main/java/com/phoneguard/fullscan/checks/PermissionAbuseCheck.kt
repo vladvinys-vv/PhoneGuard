@@ -1,6 +1,5 @@
 package com.phoneguard.fullscan.checks
 
-import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -52,37 +51,6 @@ class PermissionAbuseCheck @Inject constructor(
         STORAGE(R.string.perm_group_storage)
     }
 
-    // Опасные комбинации разрешений
-    private val dangerousPermissionGroups = mapOf(
-        PermissionGroup.CAMERA to listOf(Manifest.permission.CAMERA),
-        PermissionGroup.MICROPHONE to listOf(Manifest.permission.RECORD_AUDIO),
-        PermissionGroup.LOCATION to listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-        ),
-        PermissionGroup.CONTACTS to listOf(
-            Manifest.permission.READ_CONTACTS,
-            Manifest.permission.WRITE_CONTACTS
-        ),
-        PermissionGroup.SMS to listOf(
-            Manifest.permission.READ_SMS,
-            Manifest.permission.SEND_SMS,
-            Manifest.permission.RECEIVE_SMS
-        ),
-        PermissionGroup.PHONE to listOf(
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.READ_PHONE_NUMBERS,
-            Manifest.permission.CALL_PHONE
-        ),
-        PermissionGroup.STORAGE to listOf(
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-        )
-        // POST_NOTIFICATIONS намеренно не входит в «опасные»: это самая безобидная
-        // из runtime-разрешений, и раньше она давала ложные срабатывания.
-    )
-
     fun performCheck(): PermissionAbuseResult {
         val pm = context.packageManager
         val installedApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -96,22 +64,19 @@ class PermissionAbuseCheck @Inject constructor(
             val pkg = appInfo.packageName
             val appName = pm.getApplicationLabel(appInfo).toString()
 
-            val isSystemApp = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 ||
-                              (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-
-            if (isSystemApp) return@mapNotNull null
+            if (PermissionAbuseSweep.isSystemApp(appInfo.flags)) return@mapNotNull null
 
             // Важно проверять именно выданные разрешения: приложение может
             // запрашивать камеру и микрофон и не получить их, но раньше оно всё
             // равно попадало в отчёт как «шпионское».
-            val grantedPermissions = getGrantedPermissions(pkg)
-            val grantedGroups = dangerousPermissionGroups.filterValues { perms ->
-                perms.any { it in grantedPermissions }
+            val grantedGroups = PermissionAbuseSweep.grantedGroups(requestedPermissions(pkg)) { permission ->
+                context.packageManager.checkPermission(permission, pkg) ==
+                    PackageManager.PERMISSION_GRANTED
             }
 
             if (grantedGroups.isEmpty()) return@mapNotNull null
 
-            val (riskLevel, explanation) = assessRisk(grantedGroups.keys.toSet()) { groups ->
+            val (riskLevel, explanation) = assessRisk(grantedGroups) { groups ->
                 localizedLabels(groups)
             }
             if (riskLevel == null || explanation == null) return@mapNotNull null
@@ -119,7 +84,7 @@ class PermissionAbuseCheck @Inject constructor(
             RiskyApp(
                 packageName = pkg,
                 appName = appName,
-                riskyPermissions = grantedGroups.keys.toList(),
+                riskyPermissions = grantedGroups.toList(),
                 riskLevel = riskLevel,
                 explanation = explanation.resolve(context)
             )
@@ -129,15 +94,8 @@ class PermissionAbuseCheck @Inject constructor(
         return PermissionAbuseResult(riskyApps, criticalCount)
     }
 
-    /** Разрешения из манифеста, реально выданные приложению. */
-    private fun getGrantedPermissions(packageName: String): Set<String> {
-        return getRequestedPermissions(packageName).filterTo(mutableSetOf()) { permission ->
-            context.packageManager.checkPermission(permission, packageName) ==
-                PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    private fun getRequestedPermissions(packageName: String): Set<String> {
+    /** Разрешения, заявленные в манифесте приложения. */
+    private fun requestedPermissions(packageName: String): Set<String> {
         return try {
             val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))

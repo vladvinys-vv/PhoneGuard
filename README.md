@@ -150,6 +150,7 @@ python3 tools/aapt2_check.py             # опционально: ресурс�
 python3 tools/kotlin_analysis.py         # опционально: парсер Kotlin (нужен tree-sitter)
 python3 tools/jvm_unit_test.py           # опционально: **запуск** тестов чистой логики на JVM (kotlinc + шим JUnit)
 python3 tools/test_coverage_map.py       # опционально: карта «какой класс упомянут в тестах» (не % покрытия)
+python3 tools/test_coverage_map.py --min-executed 152   # обязательно в CI: порог выполняемого покрытия
 python3 tools/webhook_notify.py --dry-run # опционально: payload уведомления о сборке (docs/CI_WEBHOOKS.md)
 ```
 
@@ -158,10 +159,10 @@ python3 tools/webhook_notify.py --dry-run # опционально: payload ув
 ещё до компиляции. `static_audit.py` проверяет импорты и `R.*`, Room-запросы и DAO-вызовы, Hilt-привязки, манифест и
 `android:exported`, разрешения, паритет локалей, арность `getString`, `PendingIntent`-флаги,
 миграции Room против `@Entity`, маршруты навигации и Gradle-обвязку. `kotlin_frontend_check.py` прогоняет все
-380 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
+384 файлов через настоящий компилятор Kotlin (опционально — с настоящим `android.jar`,
 `tools/fetch_android_jar.sh`) и отсекает ошибки, вызванные
 отсутствующими библиотеками — на его счету десять реальных ошибок сборки, в том числе в тестах. Покрытие считается двумя
-числами — «упомянуты в тестах» и «из них в выполняемых тестах: 150»: тест-файл на MockK/Robolectric
+числами — «упомянуты в тестах» и «из них в выполняемых тестах: 152»: тест-файл на MockK/Robolectric
 в офлайне не исполняется и покрытием не считается. Офлайн не выполняются 20 тест-файлов
 (MockK 18, Robolectric 2) — но это ограничение прогона, а не проекта:
 `./gradlew testProductionDebugUnitTest` в CI и Codemagic выполняет их все, а
