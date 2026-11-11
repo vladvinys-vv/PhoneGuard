@@ -15,7 +15,6 @@ cache:
   key:
     files:
       - gradle/wrapper/gradle-wrapper.properties
-      - build.gradle
       - app/build.gradle
   paths:
     - .gradle/wrapper
